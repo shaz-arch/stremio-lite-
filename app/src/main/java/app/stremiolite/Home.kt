@@ -28,8 +28,10 @@ object Home {
         val status = Row("")
         lateinit var screen: Screen
 
+        val search = Row("Search", "☰  ►", action = { Search.start(app) })
         val tools = listOf(
             Row("────────────────────"),
+            Row("Settings", opens = { Settings.screen(app) }),
             addonsRow,
             Row("Reload my rows and add-ons", action = { if (!loading) load(app, screen) }),
             Row("Device check", opens = { DemoMenus.deviceCheck(app) }),
@@ -52,6 +54,7 @@ object Home {
                 else -> ""
             }
             if (status.label.isNotEmpty()) rows.add(0, status)
+            rows.add(0, search)
             screen.rows = rows + tools
             app.refresh(screen)
         }

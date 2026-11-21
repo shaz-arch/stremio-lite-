@@ -20,21 +20,45 @@ object Player {
         false
     }
 
-    fun play(activity: MainActivity, url: String, title: String, preferred: String = VLC) {
+    /**
+     * Plays [url] in the player chosen in Settings (or [force] if given), passing [subs] along.
+     * VLC takes one subtitle link; Just Player takes a list.
+     */
+    fun play(
+        activity: MainActivity,
+        url: String,
+        title: String,
+        subs: List<Subtitles.Sub> = emptyList(),
+        force: String? = null,
+    ) {
         val uri = Uri.parse(url)
+        val choice = force ?: Settings.player(activity).pkg
         fun viewIntent() = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, "video/*")
             putExtra("title", title)
+            if (subs.isNotEmpty()) {
+                // VLC
+                putExtra("subtitles_location", subs.first().url)
+                // Just Player
+                val subUris: Array<android.os.Parcelable> = subs.map { Uri.parse(it.url) as android.os.Parcelable }.toTypedArray()
+                putExtra("subs", subUris)
+                putExtra("subs.name", subs.map { Subtitles.languageName(it.lang) + " · " + it.addon }.toTypedArray())
+                putExtra("subs.enable", arrayOf(subUris.first()))
+            }
         }
 
         val attempts = mutableListOf<Intent>()
-        if (preferred == VLC) {
-            // VLC's documented way for other apps: open its player screen directly.
-            attempts += viewIntent().setComponent(
-                ComponentName(VLC, "org.videolan.vlc.gui.video.VideoPlayerActivity")
-            ).putExtra("from_start", true)
+        when (choice) {
+            VLC -> {
+                // VLC's documented way for other apps: open its player screen directly.
+                attempts += viewIntent().setComponent(
+                    ComponentName(VLC, "org.videolan.vlc.gui.video.VideoPlayerActivity")
+                ).putExtra("from_start", true)
+                attempts += viewIntent().setPackage(VLC)
+            }
+            null -> Unit
+            else -> attempts += viewIntent().setPackage(choice)
         }
-        attempts += viewIntent().setPackage(preferred)
 
         for (intent in attempts) {
             try {
@@ -46,7 +70,7 @@ object Player {
                 // try the next way
             }
         }
-        // Preferred player missing: let Android offer whatever can play video.
+        // "Ask each time", or the chosen player is missing: let Android offer what can play video.
         try {
             activity.startActivity(Intent.createChooser(viewIntent(), "Play with"))
         } catch (e: ActivityNotFoundException) {

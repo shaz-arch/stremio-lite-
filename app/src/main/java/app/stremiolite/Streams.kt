@@ -39,6 +39,24 @@ object Streams {
         val summary = Row("")
         lateinit var screen: Screen
 
+        // Subtitles load alongside the streams; the first in the chosen language is picked.
+        val lang = Settings.subtitleLanguage(app)
+        var subs: List<Subtitles.Sub> = emptyList()
+        var subsDone = false
+        var chosenSub: Subtitles.Sub? = null
+        var userPicked = false
+        lateinit var rebuildRef: () -> Unit
+        val subRow = Row("Subtitles", opens = {
+            val pick = mutableListOf(Row("Off", action = { chosenSub = null; userPicked = true; app.back(); rebuildRef() }))
+            val ordered = subs.sortedBy { if (Subtitles.matches(it, lang)) 0 else 1 }
+            ordered.forEach { sub ->
+                pick += Row(Subtitles.languageName(sub.lang), sub.addon + if (sub === chosenSub) "  ✓" else "", action = {
+                    chosenSub = sub; userPicked = true; app.back(); rebuildRef()
+                })
+            }
+            Screen("Subtitles", pick)
+        })
+
         fun rebuild() {
             val done = answered >= addons.size
             summary.label = when {
@@ -50,7 +68,14 @@ object Streams {
             val sorted = found.sortedWith(
                 compareBy<Stream>({ if (it.cached == false) 1 else 0 }, { -it.rank }, { it.order })
             )
-            val rows = mutableListOf(summary)
+            subRow.detail = when {
+                lang.codes.isEmpty() -> "off (change in Settings)"
+                !subsDone && subs.isEmpty() -> "looking…"
+                chosenSub != null -> Subtitles.languageName(chosenSub!!.lang) + " · " + chosenSub!!.addon + "  (${subs.size} found)  ►"
+                subs.isEmpty() -> "none found"
+                else -> "off  (${subs.size} found)  ►"
+            }
+            val rows = mutableListOf(summary, subRow)
             val hidden = mutableListOf<String>()
             if (hiddenTorrent > 0) hidden += "$hiddenTorrent torrent-only"
             if (hiddenHeaders > 0) hidden += "$hiddenHeaders need special headers"
@@ -61,7 +86,7 @@ object Streams {
                 val label = listOf(s.quality.padEnd(5), s.tags, s.size, s.provider)
                     .filter { it.isNotBlank() }.joinToString("  ")
                 val detail = (if (s.cached == false) "not cached · " else "") + s.addon
-                rows += Row(label, detail, action = { Player.play(app, s.url, title) })
+                rows += Row(label, detail, action = { Player.play(app, s.url, title, listOfNotNull(chosenSub)) })
             }
             val firstStream = rows.size - sorted.size
             val wasOnHeader = screen.position < firstStream
@@ -71,11 +96,22 @@ object Streams {
             app.refresh(screen)
         }
 
+        rebuildRef = { rebuild() }
         screen = Screen(title, listOf(summary))
         screen.onShow = {
             if (!started) {
                 started = true
                 rebuild()
+                if (lang.codes.isEmpty()) {
+                    subsDone = true
+                } else {
+                    Subtitles.fetch(type, id) { list, done ->
+                        subs = list.toList()
+                        subsDone = done
+                        if (!userPicked) chosenSub = subs.firstOrNull { Subtitles.matches(it, lang) }
+                        rebuild()
+                    }
+                }
                 addons.forEach { a ->
                     val url = a.base + "/stream/" + enc(type) + "/" + enc(id) + ".json"
                     Net.async({ JSONObject(Net.get(url, timeoutMs = TIMEOUT_MS)) }) { r ->

@@ -220,7 +220,7 @@ class MainActivity : Activity() {
                 return true
             }
             KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_SEARCH -> {
-                if (event.action == KeyEvent.ACTION_UP) toast("Search arrives in step 6")
+                if (event.action == KeyEvent.ACTION_UP && Account.authKey(this) != null) Search.start(this)
                 return true
             }
         }

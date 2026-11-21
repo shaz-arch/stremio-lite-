@@ -69,7 +69,10 @@ class Addon(
     private val resourceRules: List<Resource> = emptyList(),
     private val idPrefixes: List<String>? = null,
 ) {
-    class Catalog(val type: String, val id: String, val name: String, val required: List<String>)
+    class Catalog(val type: String, val id: String, val name: String, val required: List<String>, val extras: List<String> = emptyList()) {
+        /** A catalogue that can be searched with nothing else required. */
+        val searchable: Boolean get() = "search" in extras && required.all { it == "search" }
+    }
 
     /** A resource with its own limits; null lists mean "use the manifest's". */
     class Resource(val name: String, val types: List<String>?, val idPrefixes: List<String>?)
@@ -113,6 +116,7 @@ class Addon(
                         id = c.optString("id"),
                         name = c.optString("name").ifEmpty { c.optString("id") },
                         required = requiredExtras(c),
+                        extras = extraNames(c),
                     )
                 }
             }
@@ -126,6 +130,15 @@ class Addon(
                 resourceRules = rules,
                 idPrefixes = m.optJSONArray("idPrefixes")?.strings(),
             )
+        }
+
+        private fun extraNames(c: JSONObject): List<String> {
+            val out = mutableListOf<String>()
+            c.optJSONArray("extra")?.let { arr ->
+                for (i in 0 until arr.length()) arr.optJSONObject(i)?.optString("name")?.let { out += it }
+            }
+            c.optJSONArray("extraSupported")?.let { out += it.strings() }
+            return out.distinct()
         }
 
         /** Extras a catalogue can't be opened without (e.g. search-only catalogues). */

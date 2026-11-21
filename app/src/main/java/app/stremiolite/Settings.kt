@@ -1,0 +1,74 @@
+package app.stremiolite
+
+import android.content.Context
+
+/** The two choices people actually need: which player, and which subtitle language. */
+object Settings {
+    private const val PREFS = "settings"
+
+    class Language(val name: String, val codes: List<String>)
+
+    /** Off first, then the most likely choices. Codes cover both 3-letter and 2-letter forms. */
+    val languages = listOf(
+        Language("Off", emptyList()),
+        Language("English", listOf("eng", "en")),
+        Language("Urdu", listOf("urd", "ur")),
+        Language("Hindi", listOf("hin", "hi")),
+        Language("Punjabi", listOf("pan", "pa")),
+        Language("Arabic", listOf("ara", "ar")),
+        Language("French", listOf("fre", "fra", "fr")),
+        Language("Spanish", listOf("spa", "es")),
+        Language("German", listOf("ger", "deu", "de")),
+        Language("Italian", listOf("ita", "it")),
+        Language("Portuguese", listOf("por", "pt", "pob")),
+        Language("Polish", listOf("pol", "pl")),
+        Language("Turkish", listOf("tur", "tr")),
+        Language("Dutch", listOf("dut", "nld", "nl")),
+    )
+
+    class PlayerChoice(val name: String, val pkg: String?)
+
+    val players = listOf(
+        PlayerChoice("VLC", Player.VLC),
+        PlayerChoice("Just Player", Player.JUST_PLAYER),
+        PlayerChoice("Ask each time", null),
+    )
+
+    private fun prefs(c: Context) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    fun player(c: Context): PlayerChoice =
+        players.getOrElse(prefs(c).getInt("player", 0)) { players[0] }
+
+    fun subtitleLanguage(c: Context): Language =
+        languages.getOrElse(prefs(c).getInt("subLang", 1)) { languages[1] }
+
+    fun screen(app: MainActivity): Screen {
+        lateinit var screen: Screen
+        lateinit var playerRow: Row
+        lateinit var langRow: Row
+
+        fun show() {
+            playerRow.detail = "◄ ${player(app).name} ►"
+            langRow.detail = "◄ ${subtitleLanguage(app).name} ►"
+            app.refresh(screen)
+        }
+
+        playerRow = Row("Player", action = {
+            val next = (players.indexOf(player(app)) + 1) % players.size
+            prefs(app).edit().putInt("player", next).apply()
+            show()
+        })
+        langRow = Row("Subtitle language", action = {
+            val next = (languages.indexOf(subtitleLanguage(app)) + 1) % languages.size
+            prefs(app).edit().putInt("subLang", next).apply()
+            show()
+        })
+        screen = Screen(
+            "Settings",
+            listOf(Row("Press OK on a line to change it"), Row("────────────────────"), playerRow, langRow),
+        )
+        screen.position = 2
+        screen.onShow = { show() }
+        return screen
+    }
+}

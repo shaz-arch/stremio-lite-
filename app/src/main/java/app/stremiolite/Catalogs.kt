@@ -49,7 +49,7 @@ object Catalogs {
         return metas
     }
 
-    private fun parse(json: String): List<Meta> {
+    fun parse(json: String): List<Meta> {
         val arr = JSONObject(json).optJSONArray("metas") ?: return emptyList()
         return (0 until arr.length()).mapNotNull { i ->
             val m = arr.optJSONObject(i) ?: return@mapNotNull null
@@ -67,7 +67,7 @@ object Catalogs {
         }
     }
 
-    private fun detail(m: Meta): String {
+    fun detail(m: Meta): String {
         val kind = when (m.type) { "movie" -> "Movie"; "series" -> "Series"; else -> m.type }
         val rating = if (m.rating.isNotBlank()) "★ ${m.rating}" else ""
         return "${m.year.take(9).padEnd(9)} ${rating.padEnd(6)} ${kind.padEnd(6)}"

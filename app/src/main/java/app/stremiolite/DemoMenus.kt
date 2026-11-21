@@ -118,11 +118,11 @@ object DemoMenus {
             Row("────────────────────"),
             letsEncryptTest(app),
             Row("Test VLC: play the 20-second test clip", action = {
-                if (vlc) Player.play(app, Player.TEST_CLIP, "Stremio Lite test clip")
+                if (vlc) Player.play(app, Player.TEST_CLIP, "Stremio Lite test clip", force = Player.VLC)
                 else app.toast("VLC isn't installed. Get it from the Appstore.")
             }),
             Row("Test Just Player: play the test clip", action = {
-                if (just) Player.play(app, Player.TEST_CLIP, "Stremio Lite test clip", Player.JUST_PLAYER)
+                if (just) Player.play(app, Player.TEST_CLIP, "Stremio Lite test clip", force = Player.JUST_PLAYER)
                 else app.toast("Just Player isn't installed. That's fine: VLC is the default.")
             }),
         ))
@@ -130,8 +130,8 @@ object DemoMenus {
 
     fun about() = Screen("About", listOf(
         Row(info("Stremio Lite", BuildConfigLite.VERSION)),
-        Row("Step 5 of 6: streams, played in VLC"),
-        Row("Next: search, subtitles and player choice."),
+        Row("Version 1 complete: all six steps built."),
+        Row("Source: github.com/shaz-arch/stremio-lite-"),
     ))
 
     /** Fetches a Let's Encrypt test page: the kind of site old Android can't verify on its own. */
@@ -155,5 +155,5 @@ object DemoMenus {
 
 /** Kept by hand so the build needs no BuildConfig generation. */
 object BuildConfigLite {
-    const val VERSION = "0.5.0"
+    const val VERSION = "1.0.0"
 }
