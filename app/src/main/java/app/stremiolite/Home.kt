@@ -61,6 +61,7 @@ object Home {
                 search,
                 Row("Continue watching", if (cw.isEmpty()) "nothing yet" else "${cw.size}  ►", opens = { continueScreen(app) }),
                 Row("Library", if (lib.isEmpty()) "empty" else "${lib.size}  ►", opens = { libraryScreen(app) }),
+                Row("Watched", opens = { watchedScreen(app) }),
                 Row("────────────────────"),
             ))
             screen.rows = rows + tools
@@ -70,6 +71,7 @@ object Home {
 
         screen = Screen(title = "Stremio Lite", rows = listOf(Row("Loading your rows…")) + tools)
         screen.onShow = {
+            History.pull(app) { rebuild() }
             if (addons == null) {
                 // Show the saved list straight away, then refresh it from the account.
                 runCatching { Stremio.parseAddons(Account.addonCache(app).readText()) }
@@ -99,6 +101,7 @@ object Home {
                 checks.clear()
                 if (email.isNotEmpty()) Account.saveEmail(app, email)
                 runCatching { Account.addonCache(app).writeText(json) }
+                History.pull(app, force = true) { rebuildHome?.invoke() }
             }.onFailure { e ->
                 loadError = if (e is Stremio.ApiError) e.message else Net.describe(e)
             }
@@ -140,7 +143,10 @@ object Home {
             }
         }
         screen = Screen("Continue watching", build())
-        screen.onShow = { screen.rows = build(); app.refresh(screen) }
+        screen.onShow = {
+            screen.rows = build(); app.refresh(screen)
+            History.pull(app) { screen.rows = build(); app.refresh(screen) }
+        }
         return screen
     }
 
@@ -156,7 +162,32 @@ object Home {
             }
         }
         screen = Screen("Library", build())
-        screen.onShow = { screen.rows = build(); app.refresh(screen) }
+        screen.onShow = {
+            screen.rows = build(); app.refresh(screen)
+            History.pull(app) { screen.rows = build(); app.refresh(screen) }
+        }
+        return screen
+    }
+
+    private fun watchedScreen(app: MainActivity): Screen {
+        lateinit var screen: Screen
+        val day = java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.UK)
+        fun build(): List<Row> {
+            val list = History.watched(app)
+            if (list.isEmpty()) return listOf(Row("Nothing finished yet. Films and episodes you watch to the end appear here."))
+            return list.map { f ->
+                val detail = listOf(f.label.substringBefore(' ').takeIf { it.startsWith("S") } ?: f.label, if (f.time > 0) day.format(java.util.Date(f.time)) else "")
+                    .filter { it.isNotBlank() }.joinToString("   ")
+                Row(f.name, detail, opens = {
+                    Details.screenFor(app, f.id, f.type, f.name, f.year) ?: Screen(f.name, listOf(Row("Your add-ons are still loading. Try again in a moment.")))
+                })
+            }
+        }
+        screen = Screen("Watched", build())
+        screen.onShow = {
+            screen.rows = build(); app.refresh(screen)
+            History.pull(app) { screen.rows = build(); app.refresh(screen) }
+        }
         return screen
     }
 
@@ -238,6 +269,7 @@ object Home {
         listOf(
             Row("No, go back", action = { app.back() }),
             Row("Yes, sign out of this TV", action = {
+                History.clear(app)
                 Account.clear(app)
                 forget()
                 app.resetTo(SignIn.screen(app))

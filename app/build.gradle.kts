@@ -11,8 +11,8 @@ android {
         applicationId = "app.stremiolite"
         minSdk = 22          // Android 5.1: every Fire TV Stick that runs Stremio
         targetSdk = 35
-        versionCode = 9
-        versionName = "1.2.0"
+        versionCode = 10
+        versionName = "1.3.0"
     }
 
     buildTypes {

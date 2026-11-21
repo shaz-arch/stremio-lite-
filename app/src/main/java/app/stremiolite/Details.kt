@@ -120,6 +120,7 @@ object Details {
                 Net.async({ fetch(from, item.type, item.id) }) { r ->
                     r.onSuccess { loaded ->
                         full = loaded
+                        if (loaded.videos.isNotEmpty()) History.applyAccountWatched(app, loaded.id, stremioOrder(loaded))
                         quick.rows = rows(app, loaded)
                     }.onFailure { e ->
                         loadingRow.label = "Couldn't load full details: ${Net.describe(e).let { d -> if (d == e.javaClass.simpleName) e.message ?: d else d }}"
@@ -141,15 +142,19 @@ object Details {
 
     private fun ordered(f: Full) = f.videos.filter { it.season > 0 }.sortedWith(compareBy({ it.season }, { it.episode }))
 
+    /** Every video in Stremio's order (season, episode, release date), as its watched marks expect. */
+    private fun stremioOrder(f: Full) = f.videos.sortedWith(compareBy({ it.season }, { it.episode }, { it.released })).map { it.id }
+
     /** What to file the playback under; for an episode, also which episode comes next. */
     private fun watchFor(f: Full, v: Video?): History.Watch {
-        if (v == null) return History.Watch(f.id, f.type, f.name, f.year, f.id, "", f.runtime, null, null)
+        if (v == null) return History.Watch(f.id, f.type, f.name, f.year, f.id, "", f.runtime, null, null, emptyList())
         val list = ordered(f)
         val next = list.getOrNull(list.indexOfFirst { it.id == v.id }.let { if (it < 0) -1 else it + 1 })
             ?.takeIf { !upcoming(it.released) }
         return History.Watch(
             f.id, f.type, f.name, f.year, v.id, (epLabel(v) + " " + v.title).trim(), f.runtime,
             next?.id, next?.let { (epLabel(it) + " " + it.title).trim() },
+            stremioOrder(f),
         )
     }
 
