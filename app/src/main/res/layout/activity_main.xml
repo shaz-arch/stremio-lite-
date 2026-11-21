@@ -43,17 +43,37 @@
         android:layout_marginBottom="6dp"
         android:background="@color/dos_cyan" />
 
-    <ListView
-        android:id="@+id/list"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:divider="@null"
-        android:dividerHeight="0dp"
-        android:drawSelectorOnTop="false"
-        android:focusable="true"
-        android:listSelector="@drawable/row_highlight"
-        android:scrollbars="vertical" />
+        android:orientation="horizontal">
+
+        <ListView
+            android:id="@+id/list"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:divider="@null"
+            android:dividerHeight="0dp"
+            android:drawSelectorOnTop="false"
+            android:focusable="true"
+            android:listSelector="@drawable/row_highlight"
+            android:scrollbars="vertical" />
+
+        <!-- Only the sign-in screen uses this, for the QR code -->
+        <ImageView
+            android:id="@+id/side_image"
+            android:layout_width="260dp"
+            android:layout_height="260dp"
+            android:layout_gravity="center_vertical"
+            android:layout_marginStart="24dp"
+            android:background="@color/dos_white"
+            android:contentDescription="@null"
+            android:padding="8dp"
+            android:scaleType="fitCenter"
+            android:visibility="gone" />
+    </LinearLayout>
 
     <View
         android:layout_width="match_parent"

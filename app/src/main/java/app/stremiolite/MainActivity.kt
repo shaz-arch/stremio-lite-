@@ -1,13 +1,18 @@
 package app.stremiolite
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.os.Bundle
+import android.text.InputType
 import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.AdapterView
 import android.widget.BaseAdapter
+import android.widget.EditText
+import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.ListView
 import android.widget.TextView
 import android.widget.Toast
@@ -23,6 +28,7 @@ class MainActivity : Activity() {
     private lateinit var titleView: TextView
     private lateinit var counterView: TextView
     private lateinit var list: ListView
+    private lateinit var sideImage: ImageView
     private lateinit var adapter: RowAdapter
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -32,6 +38,7 @@ class MainActivity : Activity() {
         titleView = findViewById(R.id.title)
         counterView = findViewById(R.id.counter)
         list = findViewById(R.id.list)
+        sideImage = findViewById(R.id.side_image)
         adapter = RowAdapter(layoutInflater)
         list.adapter = adapter
 
@@ -44,19 +51,95 @@ class MainActivity : Activity() {
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
-        push(DemoMenus.home(this))
+        Net.init(this)
+        push(if (Account.authKey(this) != null) Home.screen(this) else SignIn.screen(this))
+    }
+
+    override fun onDestroy() {
+        stack.lastOrNull()?.onHide?.invoke()
+        super.onDestroy()
     }
 
     // ---- navigation -------------------------------------------------------
 
     fun push(screen: Screen) {
+        stack.lastOrNull()?.onHide?.invoke()
         stack.add(screen)
+        render()
+        screen.onShow?.invoke()
+    }
+
+    /** Go up one screen (or exit from the first screen). */
+    fun back() {
+        if (stack.size <= 1) {
+            finish()
+            return
+        }
+        stack.removeAt(stack.lastIndex).onHide?.invoke()
+        render()
+        stack.last().onShow?.invoke()
+    }
+
+    /** Throw away the whole history and start again from [screen] (after sign-in or sign-out). */
+    fun resetTo(screen: Screen) {
+        stack.lastOrNull()?.onHide?.invoke()
+        stack.clear()
+        push(screen)
+    }
+
+    /** Redraw [screen] if it's the one showing, keeping the cursor where it is. */
+    fun refresh(screen: Screen) {
+        if (stack.lastOrNull() !== screen || isFinishing) return
+        val pos = list.selectedItemPosition
+        if (pos >= 0) screen.position = pos
         render()
     }
 
-    private fun pop() {
-        stack.removeAt(stack.lastIndex)
-        render()
+    fun refreshTop() {
+        stack.lastOrNull()?.let { refresh(it) }
+    }
+
+    fun signedIn(authKey: String, email: String = "") {
+        Account.save(this, authKey, email)
+        Home.forget()
+        resetTo(Home.screen(this))
+    }
+
+    /** Fallback sign-in with the TV's on-screen keyboard. */
+    fun askEmailAndPassword() {
+        val email = EditText(this).apply {
+            hint = "Email"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+            setSingleLine()
+        }
+        val password = EditText(this).apply {
+            hint = "Password"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setSingleLine()
+        }
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(48, 24, 48, 0)
+            addView(email)
+            addView(password)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Sign in to Stremio")
+            .setView(box)
+            .setPositiveButton("Sign in") { _, _ ->
+                val e = email.text.toString().trim()
+                val p = password.text.toString()
+                if (e.isEmpty() || p.isEmpty()) return@setPositiveButton
+                toast("Signing in…")
+                Net.async({ Stremio.login(e, p) }) { r ->
+                    r.onSuccess { key -> signedIn(key, e) }
+                        .onFailure { err ->
+                            toast(if (err is Stremio.ApiError) "Sign-in failed: ${err.message}" else "Sign-in failed: ${Net.describe(err)}")
+                        }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun choose(position: Int) {
@@ -77,8 +160,16 @@ class MainActivity : Activity() {
         }
         adapter.rows = screen.rows
         adapter.notifyDataSetChanged()
+        val image = screen.image
+        if (image != null) {
+            sideImage.setImageBitmap(image)
+            sideImage.visibility = View.VISIBLE
+        } else {
+            sideImage.setImageDrawable(null)
+            sideImage.visibility = View.GONE
+        }
         list.requestFocus()
-        list.setSelection(screen.position)
+        list.setSelection(screen.position.coerceIn(0, (screen.rows.size - 1).coerceAtLeast(0)))
         updateCounter(screen.position)
     }
 
@@ -104,9 +195,7 @@ class MainActivity : Activity() {
         when (event.keyCode) {
             KeyEvent.KEYCODE_BACK -> {
                 // Act on key-up only, so one press never goes back two screens.
-                if (event.action == KeyEvent.ACTION_UP) {
-                    if (stack.size > 1) pop() else finish()
-                }
+                if (event.action == KeyEvent.ACTION_UP) back()
                 return true
             }
             KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_MEDIA_REWIND -> {

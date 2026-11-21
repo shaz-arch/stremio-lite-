@@ -92,7 +92,7 @@ object DemoMenus {
         ).map { r -> Row(r.label, r.detail, action = { app.toast("Real playback arrives in step 5. Try Device check › Test VLC.") }) },
     )
 
-    private fun deviceCheck(app: MainActivity): Screen {
+    fun deviceCheck(app: MainActivity): Screen {
         val am = app.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
         val mem = ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }
         val rt = Runtime.getRuntime()
@@ -100,21 +100,23 @@ object DemoMenus {
         fun yesNo(b: Boolean) = if (b) "installed" else "not installed"
 
         // Values sit right after their labels so they're easy to read and photograph.
-        fun info(label: String, value: String) = Row("${label.padEnd(24)} $value")
+        fun line(label: String, value: String) = Row(info(label, value))
         val vlc = Player.isInstalled(app, Player.VLC)
         val just = Player.isInstalled(app, Player.JUST_PLAYER)
 
         return Screen("Device check", listOf(
-            info("Device", "${Build.MANUFACTURER} ${Build.MODEL}"),
-            info("Android", "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"),
-            info("RAM total", "${mem.totalMem / mb} MB"),
-            info("RAM free now", "${mem.availMem / mb} MB"),
-            info("Low on memory?", if (mem.lowMemory) "YES" else "no"),
-            info("Memory allowed per app", "${am.memoryClass} MB"),
-            info("This app is using", "${(rt.totalMemory() - rt.freeMemory()) / mb} MB"),
-            info("VLC", yesNo(vlc)),
-            info("Just Player", yesNo(just)),
+            line("Device", "${Build.MANUFACTURER} ${Build.MODEL}"),
+            line("Android", "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"),
+            line("RAM total", "${mem.totalMem / mb} MB"),
+            line("RAM free now", "${mem.availMem / mb} MB"),
+            line("Low on memory?", if (mem.lowMemory) "YES" else "no"),
+            line("Memory allowed per app", "${am.memoryClass} MB"),
+            line("This app is using", "${(rt.totalMemory() - rt.freeMemory()) / mb} MB"),
+            line("VLC", yesNo(vlc)),
+            line("Just Player", yesNo(just)),
+            line("Rescued by bundled certs", "${Trust.rescued} connection(s)"),
             Row("────────────────────"),
+            letsEncryptTest(app),
             Row("Test VLC: play the 20-second test clip", action = {
                 if (vlc) Player.play(app, Player.TEST_CLIP, "Stremio Lite test clip")
                 else app.toast("VLC isn't installed. Get it from the Appstore.")
@@ -126,15 +128,33 @@ object DemoMenus {
         ))
     }
 
-    private fun about() = Screen("About", listOf(
-        Row("Stremio Lite", BuildConfigLite.VERSION),
-        Row("Step 1 of 6: skeleton and test menus"),
-        Row("Lists here are sample data."),
-        Row("Next: sign in with your Stremio account."),
+    fun about() = Screen("About", listOf(
+        Row(info("Stremio Lite", BuildConfigLite.VERSION)),
+        Row("Step 2 of 6: sign-in and your add-ons"),
+        Row("Demo menus are still sample data."),
+        Row("Next: your real catalogue rows on the home menu."),
     ))
+
+    /** Fetches a Let's Encrypt test page: the kind of site old Android can't verify on its own. */
+    private fun letsEncryptTest(app: MainActivity): Row {
+        lateinit var row: Row
+        row = Row("Test a Let's Encrypt site (like many add-ons)", action = {
+            row.detail = "testing…"
+            app.refreshTop()
+            val before = Trust.rescued
+            Net.async({ Net.get("https://valid-isrgrootx1.letsencrypt.org/", timeoutMs = 10_000) }) { r ->
+                row.detail = r.fold(
+                    { if (Trust.rescued > before) "OK (bundled certs)" else "OK (stick's own)" },
+                    { e -> "FAILED: ${Net.describe(e)}" },
+                )
+                app.refreshTop()
+            }
+        })
+        return row
+    }
 }
 
 /** Kept by hand so the build needs no BuildConfig generation. */
 object BuildConfigLite {
-    const val VERSION = "0.1.1"
+    const val VERSION = "0.2.0"
 }
