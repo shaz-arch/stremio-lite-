@@ -9,6 +9,7 @@ import android.net.Uri
 
 /** Hands a stream link to an external player. The app never decodes video itself. */
 object Player {
+    const val REQUEST_PLAY = 7
     const val VLC = "org.videolan.vlc"
     const val JUST_PLAYER = "com.brouken.player"
 
@@ -30,6 +31,8 @@ object Player {
         title: String,
         subs: List<Subtitles.Sub> = emptyList(),
         force: String? = null,
+        watch: History.Watch? = null,
+        startAt: Long = 0,
     ) {
         val uri = Uri.parse(url)
         val choice = force ?: Settings.player(activity).pkg
@@ -45,24 +48,29 @@ object Player {
                 putExtra("subs.name", subs.map { Subtitles.languageName(it.lang) + " · " + it.addon }.toTypedArray())
                 putExtra("subs.enable", arrayOf(subUris.first()))
             }
+            // Ask the player to report where playback stopped (VLC always does when started for a result;
+            // Just Player follows the MX Player convention).
+            putExtra("return_result", true)
         }
 
         val attempts = mutableListOf<Intent>()
         when (choice) {
             VLC -> {
                 // VLC's documented way for other apps: open its player screen directly.
-                attempts += viewIntent().setComponent(
-                    ComponentName(VLC, "org.videolan.vlc.gui.video.VideoPlayerActivity")
-                ).putExtra("from_start", true)
-                attempts += viewIntent().setPackage(VLC)
+                val direct = viewIntent().setComponent(ComponentName(VLC, "org.videolan.vlc.gui.video.VideoPlayerActivity"))
+                if (startAt > 0) direct.putExtra("position", startAt) else direct.putExtra("from_start", true)
+                attempts += direct
+                attempts += viewIntent().setPackage(VLC).also { if (startAt > 0) it.putExtra("position", startAt) }
             }
             null -> Unit
-            else -> attempts += viewIntent().setPackage(choice)
+            // Just Player and other MX-style players take the start position as an int
+            else -> attempts += viewIntent().setPackage(choice).also { if (startAt > 0) it.putExtra("position", startAt.toInt()) }
         }
+        History.setPending(activity, watch)
 
         for (intent in attempts) {
             try {
-                activity.startActivity(intent)
+                activity.startActivityForResult(intent, REQUEST_PLAY)
                 return
             } catch (e: ActivityNotFoundException) {
                 // try the next way
@@ -72,7 +80,7 @@ object Player {
         }
         // "Ask each time", or the chosen player is missing: let Android offer what can play video.
         try {
-            activity.startActivity(Intent.createChooser(viewIntent(), "Play with"))
+            activity.startActivityForResult(Intent.createChooser(viewIntent(), "Play with"), REQUEST_PLAY)
         } catch (e: ActivityNotFoundException) {
             activity.toast("No video player found. Install VLC from the Appstore.")
         }

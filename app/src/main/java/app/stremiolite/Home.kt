@@ -54,7 +54,15 @@ object Home {
                 else -> ""
             }
             if (status.label.isNotEmpty()) rows.add(0, status)
-            rows.add(0, search)
+            // Search, then what you're watching and what you've saved, then the catalogue rows.
+            val cw = History.continueWatching(app)
+            val lib = History.library(app)
+            rows.addAll(0, listOf(
+                search,
+                Row("Continue watching", if (cw.isEmpty()) "nothing yet" else "${cw.size}  ►", opens = { continueScreen(app) }),
+                Row("Library", if (lib.isEmpty()) "empty" else "${lib.size}  ►", opens = { libraryScreen(app) }),
+                Row("────────────────────"),
+            ))
             screen.rows = rows + tools
             app.refresh(screen)
         }
@@ -112,6 +120,44 @@ object Home {
             val tag = if (a === main) "" else shortName(a.name) + " · "
             Row(c.name, tag + Catalogs.typeLabel(c.type) + "  ►", opens = { Catalogs.screen(app, a, c) })
         }
+    }
+
+    private fun continueScreen(app: MainActivity): Screen {
+        lateinit var screen: Screen
+        fun build(): List<Row> {
+            val list = History.continueWatching(app)
+            if (list.isEmpty()) return listOf(Row("Nothing here yet. Films and episodes you start will appear here."))
+            return list.map { e ->
+                val detail = when {
+                    e.upNext -> "next: " + e.label.substringBefore(' ')
+                    e.duration > 0 -> (if (e.label.isNotEmpty()) e.label.substringBefore(' ') + "  " else "") +
+                        "${History.clock((e.duration - e.position).coerceAtLeast(0))} left"
+                    else -> e.label.substringBefore(' ')
+                }
+                Row(e.name, detail, opens = {
+                    Details.screenFor(app, e.id, e.type, e.name, e.year) ?: Screen(e.name, listOf(Row("Your add-ons are still loading. Try again in a moment.")))
+                })
+            }
+        }
+        screen = Screen("Continue watching", build())
+        screen.onShow = { screen.rows = build(); app.refresh(screen) }
+        return screen
+    }
+
+    private fun libraryScreen(app: MainActivity): Screen {
+        lateinit var screen: Screen
+        fun build(): List<Row> {
+            val list = History.library(app)
+            if (list.isEmpty()) return listOf(Row("Empty. Use \"Add to library\" on any film or show."))
+            return list.map { s ->
+                Row(s.name, listOf(s.year, Catalogs.typeLabel(s.type).removeSuffix("s")).filter { it.isNotBlank() }.joinToString("  "), opens = {
+                    Details.screenFor(app, s.id, s.type, s.name, s.year) ?: Screen(s.name, listOf(Row("Your add-ons are still loading. Try again in a moment.")))
+                })
+            }
+        }
+        screen = Screen("Library", build())
+        screen.onShow = { screen.rows = build(); app.refresh(screen) }
+        return screen
     }
 
     private fun shortName(name: String) = name.substringBefore('|').trim().take(18)

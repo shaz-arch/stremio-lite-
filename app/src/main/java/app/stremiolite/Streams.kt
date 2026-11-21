@@ -124,7 +124,7 @@ object Streams {
 
     // ---- the full list ------------------------------------------------------------------------
 
-    fun screen(app: MainActivity, type: String, id: String, title: String): Screen {
+    fun screen(app: MainActivity, type: String, id: String, title: String, watch: History.Watch? = null, startAt: Long = 0): Screen {
         val summary = Row("")
         lateinit var screen: Screen
         lateinit var fetch: Fetch
@@ -150,7 +150,7 @@ object Streams {
             rows += Row("────────────────────")
             sorted.forEach { s ->
                 val detail = (if (s.cached == false) "not cached · " else "") + s.addon
-                rows += Row(s.summary, detail, action = { Player.play(app, s.url, title, listOfNotNull(subs.chosen)) })
+                rows += Row(s.summary, detail, action = { Player.play(app, s.url, title, listOfNotNull(subs.chosen), watch = watch, startAt = freshStart(app, watch, startAt)) })
             }
             val firstStream = rows.size - sorted.size
             val wasOnHeader = screen.position < firstStream
@@ -178,7 +178,7 @@ object Streams {
      * Waits for the add-ons (and subtitles), picks the best stream for an old 1080p stick and plays it.
      * [runtime] is the title's running time text ("1h 52m", "45min"), used to work out bitrates.
      */
-    fun playBest(app: MainActivity, type: String, id: String, title: String, runtime: String): Screen {
+    fun playBest(app: MainActivity, type: String, id: String, title: String, runtime: String, watch: History.Watch? = null, startAt: Long = 0): Screen {
         val status = Row("")
         val pickRow = Row("")
         lateinit var screen: Screen
@@ -195,9 +195,9 @@ object Streams {
             if (picked != null) list += pickRow
             list += Row("────────────────────")
             if (picked != null) list += Row("Play it again", action = {
-                picked?.let { Player.play(app, it.url, title, listOfNotNull(subs.chosen)) }
+                picked?.let { Player.play(app, it.url, title, listOfNotNull(subs.chosen), watch = watch, startAt = freshStart(app, watch, startAt)) }
             })
-            list += Row("Choose a different stream", opens = { screen(app, type, id, title) })
+            list += Row("Choose a different stream", opens = { screen(app, type, id, title, watch, startAt) })
             return list
         }
 
@@ -205,7 +205,7 @@ object Streams {
             val s = picked
             if (s != null && active && !played) {
                 played = true
-                Player.play(app, s.url, title, listOfNotNull(subs.chosen))
+                Player.play(app, s.url, title, listOfNotNull(subs.chosen), watch = watch, startAt = startAt)
             }
         }
 
@@ -230,7 +230,8 @@ object Streams {
             }
             picked = best
             val sub = subs.chosen?.let { " · subtitles " + Subtitles.languageName(it.lang) } ?: ""
-            status.label = "Playing in a moment…$sub"
+            val from = if (startAt > 0) " from ${History.clock(startAt)}" else ""
+            status.label = "Playing in a moment$from…$sub"
             pickRow.label = best.summary
             pickRow.detail = best.addon
             screen.rows = rows()
@@ -261,6 +262,10 @@ object Streams {
         }
         return screen
     }
+
+    /** When resuming, pick up from the latest saved position (it moves on each time you watch a bit more). */
+    private fun freshStart(app: MainActivity, watch: History.Watch?, startAt: Long): Long =
+        if (startAt > 0 && watch != null) History.resumeAt(app, watch.videoId).takeIf { it > 0 } ?: startAt else startAt
 
     private fun shortName(name: String) = name.substringBefore('|').trim().ifEmpty { name }.take(16)
 

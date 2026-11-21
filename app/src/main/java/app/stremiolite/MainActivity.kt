@@ -56,6 +56,22 @@ class MainActivity : Activity() {
         push(if (Account.authKey(this) != null) Home.screen(this) else SignIn.screen(this))
     }
 
+    /** The player has closed: file how far it got (VLC: extra_position/extra_duration; MX-style: position/duration). */
+    @Suppress("DEPRECATION")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != Player.REQUEST_PLAY) return
+        val watch = History.takePending(this) ?: return
+        val extras = data?.extras
+        fun num(vararg keys: String): Long? = keys.firstNotNullOfOrNull { k -> (extras?.get(k) as? Number)?.toLong() }
+        val position = num("extra_position", "position")?.takeIf { it >= 0 }
+        val duration = num("extra_duration", "duration")?.takeIf { it > 0 }
+        val completed = extras?.getString("end_by") == "playback_completion"
+        History.record(this, watch, position, duration, completed)
+        refreshTop()
+        stack.lastOrNull()?.onShow?.invoke()
+    }
+
     override fun onDestroy() {
         stack.lastOrNull()?.onHide?.invoke()
         super.onDestroy()
