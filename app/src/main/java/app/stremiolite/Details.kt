@@ -90,7 +90,7 @@ object Details {
             type = m.optString("type"),
             name = m.optString("name"),
             year = m.optString("releaseInfo").ifEmpty { m.optString("year") },
-            rating = m.optString("imdbRating").takeIf { it != "null" } ?: "",
+            rating = Catalogs.cleanRating(m.optString("imdbRating")),
             runtime = m.optString("runtime"),
             genres = strings(m, "genres", "genre"),
             director = strings(m, "director", "directors"),
@@ -103,7 +103,7 @@ object Details {
 
     fun screen(app: MainActivity, from: Addon, item: Catalogs.Meta): Screen {
         // Start with what the catalogue already knows, so there's something to read at once.
-        val quick = Catalogs.preview(item)
+        val quick = Catalogs.preview(app, item)
         val loadingRow = Row("Loading full details…")
         quick.rows = quick.rows.dropLast(1) + loadingRow
         var started = false
@@ -143,10 +143,10 @@ object Details {
             // e.g. a film collection: each part is its own title
             rows += Row("Parts in this collection: ${f.videos.size}")
             f.videos.forEach { v ->
-                rows += Row(v.title.ifEmpty { v.id }, v.released.take(4), opens = { streamsPlaceholder(f.name + " › " + v.title, v.id) })
+                rows += Row(v.title.ifEmpty { v.id }, v.released.take(4), opens = { Streams.screen(app, "movie", v.id, v.title.ifEmpty { f.name }) })
             }
         } else {
-            rows += Row("Streams", opens = { streamsPlaceholder(f.name, f.id) })
+            rows += Row("Streams", opens = { Streams.screen(app, f.type, f.id, f.name) })
         }
         rows += Row("────────────────────")
 
@@ -159,7 +159,7 @@ object Details {
         if (f.cast.isNotEmpty()) rows += Row(info("Cast", f.cast.take(4).joinToString(", ")))
         if (f.description.isNotBlank()) {
             rows += Row("────────────────────")
-            Catalogs.wrap(f.description, 68).forEach { rows += Row(it) }
+            Catalogs.wrap(f.description, app.columns()).forEach { rows += Row(it) }
         }
         rows += Row("────────────────────")
         rows += Row(info("Details from", f.source))
@@ -175,33 +175,25 @@ object Details {
                 upcoming(v.released) -> "${v.released}  upcoming"
                 else -> v.released
             }
-            Row("$num  $title", date, opens = { episode(f, seasonName, v) })
+            Row("$num  $title", date, opens = { episode(app, f, seasonName, v) })
         }
         return Screen("${f.name} › $seasonName", rows)
     }
 
-    private fun episode(f: Full, seasonName: String, v: Video): Screen {
+    private fun episode(app: MainActivity, f: Full, seasonName: String, v: Video): Screen {
         val label = "S${v.season.toString().padStart(2, '0')}E${v.episode.toString().padStart(2, '0')}"
         val rows = mutableListOf(
-            Row("Streams", opens = { streamsPlaceholder("${f.name} › $label", v.id) }),
+            Row("Streams", opens = { Streams.screen(app, f.type, v.id, "${f.name} $label") }),
             Row("────────────────────"),
         )
         rows += Row(info("Episode", "$seasonName, episode ${v.episode}"))
         if (v.released.isNotBlank()) rows += Row(info("Released", v.released + if (upcoming(v.released)) " (upcoming)" else ""))
         if (v.overview.isNotBlank()) {
             rows += Row("────────────────────")
-            Catalogs.wrap(v.overview, 68).forEach { rows += Row(it) }
+            Catalogs.wrap(v.overview, app.columns()).forEach { rows += Row(it) }
         }
         return Screen("${f.name} › $label  ${v.title}", rows)
     }
-
-    private fun streamsPlaceholder(title: String, videoId: String) = Screen(
-        title,
-        listOf(
-            Row("Streams arrive in step 5."),
-            Row(info("Stream add-ons will be asked for", videoId)),
-        ),
-    )
 
     private val day = SimpleDateFormat("yyyy-MM-dd", Locale.UK).apply { timeZone = TimeZone.getTimeZone("UTC") }
 

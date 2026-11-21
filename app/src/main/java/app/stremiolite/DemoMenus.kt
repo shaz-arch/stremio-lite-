@@ -130,8 +130,8 @@ object DemoMenus {
 
     fun about() = Screen("About", listOf(
         Row(info("Stremio Lite", BuildConfigLite.VERSION)),
-        Row("Step 4 of 6: full details, seasons and episodes"),
-        Row("Next: streams, played in VLC."),
+        Row("Step 5 of 6: streams, played in VLC"),
+        Row("Next: search, subtitles and player choice."),
     ))
 
     /** Fetches a Let's Encrypt test page: the kind of site old Android can't verify on its own. */
@@ -155,5 +155,5 @@ object DemoMenus {
 
 /** Kept by hand so the build needs no BuildConfig generation. */
 object BuildConfigLite {
-    const val VERSION = "0.4.0"
+    const val VERSION = "0.5.0"
 }

@@ -59,7 +59,7 @@ object Catalogs {
                 type = m.optString("type"),
                 name = m.optString("name").ifEmpty { m.optString("id") },
                 year = m.optString("releaseInfo").ifEmpty { m.optString("year") },
-                rating = m.optString("imdbRating"),
+                rating = cleanRating(m.optString("imdbRating")),
                 runtime = m.optString("runtime"),
                 genres = genres?.let { g -> (0 until g.length()).map { g.optString(it) } } ?: emptyList(),
                 description = m.optString("description"),
@@ -69,7 +69,7 @@ object Catalogs {
 
     private fun detail(m: Meta): String {
         val kind = when (m.type) { "movie" -> "Movie"; "series" -> "Series"; else -> m.type }
-        val rating = if (m.rating.isNotBlank() && m.rating != "null") "★ ${m.rating}" else ""
+        val rating = if (m.rating.isNotBlank()) "★ ${m.rating}" else ""
         return "${m.year.take(9).padEnd(9)} ${rating.padEnd(6)} ${kind.padEnd(6)}"
     }
 
@@ -126,21 +126,24 @@ object Catalogs {
     }
 
     /** What the catalogue already tells us about a title. Step 4 adds full details and episodes. */
-    fun preview(m: Meta): Screen {
+    fun preview(app: MainActivity, m: Meta): Screen {
         val rows = mutableListOf<Row>()
         rows += Row(info("Type", typeLabel(m.type).removeSuffix("s")))
         if (m.year.isNotBlank()) rows += Row(info("Year", m.year))
-        if (m.rating.isNotBlank() && m.rating != "null") rows += Row(info("IMDb rating", "★ ${m.rating}"))
+        if (m.rating.isNotBlank()) rows += Row(info("IMDb rating", "★ ${m.rating}"))
         if (m.runtime.isNotBlank()) rows += Row(info("Runtime", m.runtime))
         if (m.genres.isNotEmpty()) rows += Row(info("Genres", m.genres.joinToString(", ")))
         if (m.description.isNotBlank()) {
             rows += Row("────────────────────")
-            wrap(m.description, 68).forEach { rows += Row(it) }
+            wrap(m.description, app.columns()).forEach { rows += Row(it) }
         }
         rows += Row("────────────────────")
         rows += Row("Full details, seasons and streams arrive in steps 4 and 5.")
         return Screen(m.name, rows)
     }
+
+    /** Blank for missing ratings ("", "null", "N/A"). */
+    fun cleanRating(r: String) = r.trim().takeUnless { it.isEmpty() || it == "null" || it.equals("N/A", true) || it == "0" } ?: ""
 
     fun wrap(text: String, width: Int): List<String> {
         val lines = mutableListOf<String>()

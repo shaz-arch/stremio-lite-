@@ -96,6 +96,17 @@ class MainActivity : Activity() {
         render()
     }
 
+    /** How many characters of list text fit across the screen, for wrapping descriptions. */
+    fun columns(): Int {
+        val paint = android.graphics.Paint().apply {
+            typeface = android.graphics.Typeface.MONOSPACE
+            textSize = 20f * resources.displayMetrics.scaledDensity
+        }
+        val rowPadding = 24f * resources.displayMetrics.density
+        val width = (if (list.width > 0) list.width else resources.displayMetrics.widthPixels) - rowPadding
+        return ((width / paint.measureText("M")).toInt() - 1).coerceIn(30, 120)
+    }
+
     fun refreshTop() {
         stack.lastOrNull()?.let { refresh(it) }
     }
