@@ -99,22 +99,29 @@ object DemoMenus {
         val mb = 1024L * 1024L
         fun yesNo(b: Boolean) = if (b) "installed" else "not installed"
 
+        // Values sit right after their labels so they're easy to read and photograph.
+        fun info(label: String, value: String) = Row("${label.padEnd(24)} $value")
+        val vlc = Player.isInstalled(app, Player.VLC)
+        val just = Player.isInstalled(app, Player.JUST_PLAYER)
+
         return Screen("Device check", listOf(
-            Row("Device", "${Build.MANUFACTURER} ${Build.MODEL}"),
-            Row("Android", "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"),
-            Row("RAM total", "${mem.totalMem / mb} MB"),
-            Row("RAM free now", "${mem.availMem / mb} MB"),
-            Row("Low on memory?", if (mem.lowMemory) "YES" else "no"),
-            Row("Memory allowed per app", "${am.memoryClass} MB"),
-            Row("This app is using", "${(rt.totalMemory() - rt.freeMemory()) / mb} MB"),
-            Row("VLC", yesNo(Player.isInstalled(app, Player.VLC))),
-            Row("Just Player", yesNo(Player.isInstalled(app, Player.JUST_PLAYER))),
+            info("Device", "${Build.MANUFACTURER} ${Build.MODEL}"),
+            info("Android", "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"),
+            info("RAM total", "${mem.totalMem / mb} MB"),
+            info("RAM free now", "${mem.availMem / mb} MB"),
+            info("Low on memory?", if (mem.lowMemory) "YES" else "no"),
+            info("Memory allowed per app", "${am.memoryClass} MB"),
+            info("This app is using", "${(rt.totalMemory() - rt.freeMemory()) / mb} MB"),
+            info("VLC", yesNo(vlc)),
+            info("Just Player", yesNo(just)),
             Row("────────────────────"),
-            Row("Test VLC: play a sample clip", action = {
-                Player.play(app, Player.TEST_CLIP, "Stremio Lite test clip")
+            Row("Test VLC: play the 20-second test clip", action = {
+                if (vlc) Player.play(app, Player.TEST_CLIP, "Stremio Lite test clip")
+                else app.toast("VLC isn't installed. Get it from the Appstore.")
             }),
-            Row("Test Just Player: play a sample clip", action = {
-                Player.play(app, Player.TEST_CLIP, "Stremio Lite test clip", Player.JUST_PLAYER)
+            Row("Test Just Player: play the test clip", action = {
+                if (just) Player.play(app, Player.TEST_CLIP, "Stremio Lite test clip", Player.JUST_PLAYER)
+                else app.toast("Just Player isn't installed. That's fine: VLC is the default.")
             }),
         ))
     }
@@ -129,5 +136,5 @@ object DemoMenus {
 
 /** Kept by hand so the build needs no BuildConfig generation. */
 object BuildConfigLite {
-    const val VERSION = "0.1.0-skeleton"
+    const val VERSION = "0.1.1"
 }

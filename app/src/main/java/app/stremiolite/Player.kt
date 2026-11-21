@@ -1,6 +1,7 @@
 package app.stremiolite
 
 import android.content.ActivityNotFoundException
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -20,23 +21,40 @@ object Player {
     }
 
     fun play(activity: MainActivity, url: String, title: String, preferred: String = VLC) {
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(Uri.parse(url), "video/*")
+        val uri = Uri.parse(url)
+        fun viewIntent() = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "video/*")
             putExtra("title", title)
         }
-        try {
-            activity.startActivity(Intent(intent).setPackage(preferred))
-        } catch (e: ActivityNotFoundException) {
-            // Preferred player missing: let Android offer whatever can play video.
+
+        val attempts = mutableListOf<Intent>()
+        if (preferred == VLC) {
+            // VLC's documented way for other apps: open its player screen directly.
+            attempts += viewIntent().setComponent(
+                ComponentName(VLC, "org.videolan.vlc.gui.video.VideoPlayerActivity")
+            ).putExtra("from_start", true)
+        }
+        attempts += viewIntent().setPackage(preferred)
+
+        for (intent in attempts) {
             try {
-                activity.startActivity(Intent.createChooser(intent, "Play with"))
-            } catch (e2: ActivityNotFoundException) {
-                activity.toast("No video player found. Install VLC from the Appstore.")
+                activity.startActivity(intent)
+                return
+            } catch (e: ActivityNotFoundException) {
+                // try the next way
+            } catch (e: SecurityException) {
+                // try the next way
             }
+        }
+        // Preferred player missing: let Android offer whatever can play video.
+        try {
+            activity.startActivity(Intent.createChooser(viewIntent(), "Play with"))
+        } catch (e: ActivityNotFoundException) {
+            activity.toast("No video player found. Install VLC from the Appstore.")
         }
     }
 
-    /** A public test clip used by the device check (Big Buck Bunny, Blender Foundation). */
+    /** 20-second 720p test clip stored in this app's own GitHub repo (testmedia/). */
     const val TEST_CLIP =
-        "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+        "https://raw.githubusercontent.com/shaz-arch/stremio-lite-/main/testmedia/test-clip.mp4"
 }
