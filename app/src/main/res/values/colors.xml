@@ -1,0 +1,9 @@
+<resources>
+    <!-- Classic DOS palette -->
+    <color name="dos_blue">#0000AA</color>
+    <color name="dos_cyan">#00AAAA</color>
+    <color name="dos_yellow">#FFFF55</color>
+    <color name="dos_white">#FFFFFF</color>
+    <color name="dos_grey">#AAAAAA</color>
+    <color name="dos_black">#000000</color>
+</resources>

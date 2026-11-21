@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.StremioLite" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/dos_blue</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:colorPrimary">@color/dos_blue</item>
+        <item name="android:colorAccent">@color/dos_cyan</item>
+    </style>
+</resources>
