@@ -15,7 +15,8 @@ object Subtitles {
         val found = mutableListOf<Sub>()
         var answered = 0
         if (addons.isEmpty()) {
-            update(found, true)
+            // Report back after the caller has finished setting up, like the network answers do.
+            Net.later(0, Runnable { update(found, true) })
             return
         }
         addons.forEach { a ->

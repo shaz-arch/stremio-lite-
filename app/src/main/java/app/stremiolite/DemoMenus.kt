@@ -155,5 +155,5 @@ object DemoMenus {
 
 /** Kept by hand so the build needs no BuildConfig generation. */
 object BuildConfigLite {
-    const val VERSION = "1.0.0"
+    const val VERSION = "1.1.0"
 }

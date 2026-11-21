@@ -146,7 +146,8 @@ object Details {
                 rows += Row(v.title.ifEmpty { v.id }, v.released.take(4), opens = { Streams.screen(app, "movie", v.id, v.title.ifEmpty { f.name }) })
             }
         } else {
-            rows += Row("Streams", opens = { Streams.screen(app, f.type, f.id, f.name) })
+            rows += Row("Play best", "►", opens = { Streams.playBest(app, f.type, f.id, f.name, f.runtime) })
+            rows += Row("Choose a stream", opens = { Streams.screen(app, f.type, f.id, f.name) })
         }
         rows += Row("────────────────────")
 
@@ -183,7 +184,8 @@ object Details {
     private fun episode(app: MainActivity, f: Full, seasonName: String, v: Video): Screen {
         val label = "S${v.season.toString().padStart(2, '0')}E${v.episode.toString().padStart(2, '0')}"
         val rows = mutableListOf(
-            Row("Streams", opens = { Streams.screen(app, f.type, v.id, "${f.name} $label") }),
+            Row("Play best", "►", opens = { Streams.playBest(app, f.type, v.id, "${f.name} $label", f.runtime) }),
+            Row("Choose a stream", opens = { Streams.screen(app, f.type, v.id, "${f.name} $label") }),
             Row("────────────────────"),
         )
         rows += Row(info("Episode", "$seasonName, episode ${v.episode}"))
