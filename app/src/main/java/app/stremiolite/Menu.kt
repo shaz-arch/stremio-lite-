@@ -31,5 +31,8 @@ class Screen(
 
     /** Called each time the screen comes to the front, and when it leaves the front. */
     var onShow: (() -> Unit)? = null
+
+    /** Called when the cursor moves to a line (lists use it to load the next page). */
+    var onSelect: ((Int) -> Unit)? = null
     var onHide: (() -> Unit)? = null
 }

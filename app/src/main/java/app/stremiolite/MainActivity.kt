@@ -46,6 +46,7 @@ class MainActivity : Activity() {
         list.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 updateCounter(position)
+                stack.lastOrNull()?.onSelect?.invoke(position)
             }
 
             override fun onNothingSelected(parent: AdapterView<*>?) {}
@@ -187,6 +188,7 @@ class MainActivity : Activity() {
         val target = (from + direction * page).coerceIn(0, count - 1)
         list.setSelection(target)
         updateCounter(target)
+        stack.lastOrNull()?.onSelect?.invoke(target)
     }
 
     // ---- remote keys --------------------------------------------------------

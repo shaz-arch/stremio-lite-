@@ -130,9 +130,8 @@ object DemoMenus {
 
     fun about() = Screen("About", listOf(
         Row(info("Stremio Lite", BuildConfigLite.VERSION)),
-        Row("Step 2 of 6: sign-in and your add-ons"),
-        Row("Demo menus are still sample data."),
-        Row("Next: your real catalogue rows on the home menu."),
+        Row("Step 3 of 6: your home rows and lists"),
+        Row("Next: full details, seasons and episodes."),
     ))
 
     /** Fetches a Let's Encrypt test page: the kind of site old Android can't verify on its own. */
@@ -156,5 +155,5 @@ object DemoMenus {
 
 /** Kept by hand so the build needs no BuildConfig generation. */
 object BuildConfigLite {
-    const val VERSION = "0.2.0"
+    const val VERSION = "0.3.0"
 }

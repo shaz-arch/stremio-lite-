@@ -38,12 +38,14 @@ object Stremio {
     fun userEmail(authKey: String): String =
         call("getUser", JSONObject().put("type", "GetUser").put("authKey", authKey)).optString("email")
 
-    fun addons(authKey: String): List<Addon> {
-        val result = call(
-            "addonCollectionGet",
-            JSONObject().put("type", "AddonCollectionGet").put("authKey", authKey).put("update", true),
-        )
-        val arr = result.optJSONArray("addons") ?: JSONArray()
+    /** The add-on collection as raw JSON, so it can also be cached on disk. */
+    fun addonsJson(authKey: String): String = call(
+        "addonCollectionGet",
+        JSONObject().put("type", "AddonCollectionGet").put("authKey", authKey).put("update", true),
+    ).toString()
+
+    fun parseAddons(json: String): List<Addon> {
+        val arr = JSONObject(json).optJSONArray("addons") ?: JSONArray()
         return (0 until arr.length()).mapNotNull { i -> arr.optJSONObject(i)?.let(Addon::from) }
     }
 
@@ -145,5 +147,9 @@ object Account {
 
     fun clear(context: Context) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply()
+        addonCache(context).delete()
     }
+
+    /** Last known add-on list, so the home menu appears instantly at start-up. */
+    fun addonCache(context: Context) = java.io.File(context.filesDir, "addons.json")
 }

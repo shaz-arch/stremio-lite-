@@ -1,9 +1,8 @@
 package app.stremiolite
 
 /**
- * Step 2 home: who's signed in, the add-ons on the account (with a live connection check
- * for each), plus the step 1 demo menus and device check. Step 3 replaces the demo menus
- * with real catalogue rows.
+ * Home: every catalogue row from the account's add-ons as one list, in Stremio's order,
+ * then the tools (add-ons and their connection checks, device check, sign-out).
  */
 object Home {
     private var addons: List<Addon>? = null
@@ -15,68 +14,101 @@ object Home {
 
     fun forget() {
         addons = null
+        rebuildHome = null
         loadError = null
         checks.clear()
     }
 
     fun screen(app: MainActivity): Screen {
         val who = Row(info("Signed in as", Account.email(app).ifEmpty { "…" }))
-        val addonsRow = Row("Your add-ons", "loading…", opens = { addonList(app) })
+        val addonsRow = Row("Your add-ons", "", opens = { addonList(app) })
+        val status = Row("")
         lateinit var screen: Screen
 
-        fun showState() {
-            addonsRow.detail = when {
-                addons != null -> "${addons!!.size}  ►"
-                loading -> "loading…"
-                else -> "failed: ${loadError ?: "?"}"
+        val tools = listOf(
+            Row("────────────────────"),
+            addonsRow,
+            Row("Reload my rows and add-ons", action = { if (!loading) load(app, screen) }),
+            Row("Device check", opens = { DemoMenus.deviceCheck(app) }),
+            Row("About", opens = { DemoMenus.about() }),
+            who,
+            Row("Sign out", opens = { signOut(app) }),
+        )
+
+        fun rebuild() {
+            val list = addons
+            addonsRow.detail = if (list != null) "${list.size}  ►" else ""
+            Account.email(app).takeIf { it.isNotEmpty() }?.let { who.label = info("Signed in as", it) }
+            val rows = mutableListOf<Row>()
+            if (list != null) rows += homeRows(app, list)
+            status.label = when {
+                loading && list == null -> "Loading your rows…"
+                loadError != null && list == null -> "Couldn't load your rows: $loadError"
+                loadError != null -> "Showing saved rows (refresh failed: $loadError)"
+                list != null && rows.isEmpty() -> "No catalogue rows found in your add-ons."
+                else -> ""
             }
+            if (status.label.isNotEmpty()) rows.add(0, status)
+            screen.rows = rows + tools
             app.refresh(screen)
         }
+        rebuildHome = { rebuild() }
 
-        fun load() {
-            val key = Account.authKey(app) ?: return
-            loading = true
-            showState()
-            Net.async({
-                val email = runCatching { Stremio.userEmail(key) }.getOrDefault("")
-                email to Stremio.addons(key)
-            }) { r ->
-                loading = false
-                r.onSuccess { (email, list) ->
-                    addons = list
-                    loadError = null
-                    checks.clear()
-                    if (email.isNotEmpty()) {
-                        Account.saveEmail(app, email)
-                        who.label = info("Signed in as", email)
-                    }
-                }.onFailure { e ->
-                    loadError = if (e is Stremio.ApiError) e.message else Net.describe(e)
-                }
-                showState()
-            }
-        }
-
-        screen = Screen(
-            title = "Stremio Lite",
-            tag = "step 2",
-            rows = listOf(
-                who,
-                addonsRow,
-                Row("Reload add-ons from my account", action = { if (!loading) load() }),
-                Row("────────────────────"),
-                Row("Demo menus (sample data)", opens = { DemoMenus.home(app) }),
-                Row("Device check", opens = { DemoMenus.deviceCheck(app) }),
-                Row("About", opens = { DemoMenus.about() }),
-                Row("Sign out", opens = { signOut(app) }),
-            ),
-        )
-        screen.position = 1
+        screen = Screen(title = "Stremio Lite", rows = listOf(Row("Loading your rows…")) + tools)
         screen.onShow = {
-            if (addons == null && !loading) load() else showState()
+            if (addons == null) {
+                // Show the saved list straight away, then refresh it from the account.
+                runCatching { Stremio.parseAddons(Account.addonCache(app).readText()) }
+                    .onSuccess { addons = it }
+                if (!loading) load(app, screen)
+            }
+            rebuild()
         }
         return screen
     }
+
+    private var rebuildHome: (() -> Unit)? = null
+
+    private fun load(app: MainActivity, screen: Screen) {
+        val key = Account.authKey(app) ?: return
+        loading = true
+        rebuildHome?.invoke()
+        Net.async({
+            val email = runCatching { Stremio.userEmail(key) }.getOrDefault("")
+            val json = Stremio.addonsJson(key)
+            Triple(email, json, Stremio.parseAddons(json))
+        }) { r ->
+            loading = false
+            r.onSuccess { (email, json, list) ->
+                addons = list
+                loadError = null
+                checks.clear()
+                if (email.isNotEmpty()) Account.saveEmail(app, email)
+                runCatching { Account.addonCache(app).writeText(json) }
+            }.onFailure { e ->
+                loadError = if (e is Stremio.ApiError) e.message else Net.describe(e)
+            }
+            rebuildHome?.invoke()
+        }
+    }
+
+    /**
+     * Every catalogue that Stremio would show on its home screen (no required extras),
+     * in add-on order then catalogue order, so it matches the Stremio home layout.
+     */
+    private fun homeRows(app: MainActivity, list: List<Addon>): List<Row> {
+        val pairs = list.filter { !it.isLocal }.flatMap { a ->
+            a.catalogs.filter { it.required.isEmpty() }.map { c -> a to c }
+        }
+        // The add-on with the most rows (AIOMetadata) gets no name tag; others are labelled.
+        val main = pairs.groupingBy { it.first }.eachCount().maxByOrNull { it.value }?.key
+        return pairs.map { (a, c) ->
+            val tag = if (a === main) "" else shortName(a.name) + " · "
+            Row(c.name, tag + Catalogs.typeLabel(c.type) + "  ►", opens = { Catalogs.screen(app, a, c) })
+        }
+    }
+
+    private fun shortName(name: String) = name.substringBefore('|').trim().take(18)
 
     private fun addonList(app: MainActivity): Screen {
         val list = addons
@@ -139,12 +171,12 @@ object Home {
             Row(info("Connection", checks[a.transportUrl] ?: "not checked yet")),
             Row(info("Types", a.types.joinToString(", ").ifEmpty { "-" })),
             Row(info("Provides", a.resources.joinToString(", ").ifEmpty { "-" })),
-            Row(info("Catalogue rows", "${a.catalogs.size}" + if (searchOnly > 0) " ($searchOnly search-only)" else "")),
+            Row(info("Catalogue rows", "${a.catalogs.size}" + if (searchOnly > 0) " ($searchOnly not on home)" else "")),
         )
         val cats = if (a.catalogs.isEmpty()) emptyList() else
-            listOf(Row("──── Catalogue rows (open in step 3) ────")) +
+            listOf(Row("──── Catalogue rows ────")) +
                 a.catalogs.map { c ->
-                    Row(c.name, c.type + if (c.required.isNotEmpty()) " · search only" else "")
+                    Row(c.name, Catalogs.typeLabel(c.type) + if (c.required.isNotEmpty()) " · not on home" else "")
                 }
         return Screen(a.name, head + cats)
     }
