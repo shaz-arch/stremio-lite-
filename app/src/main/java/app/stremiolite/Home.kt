@@ -12,6 +12,9 @@ object Home {
     /** Connection result per add-on (by transport URL), shown on the list and details screens. */
     private val checks = mutableMapOf<String, String>()
 
+    /** The add-ons currently loaded (empty until the list arrives). */
+    fun allAddons(): List<Addon> = addons ?: emptyList()
+
     fun forget() {
         addons = null
         rebuildHome = null

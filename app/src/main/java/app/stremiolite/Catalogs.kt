@@ -85,7 +85,7 @@ object Catalogs {
 
         fun rebuild() {
             val rows = items.mapTo(ArrayList<Row>(items.size + 2)) { m ->
-                Row(m.name, detail(m), opens = { preview(m) })
+                Row(m.name, detail(m), opens = { Details.screen(app, a, m) })
             }
             when {
                 error != null -> {
@@ -126,7 +126,7 @@ object Catalogs {
     }
 
     /** What the catalogue already tells us about a title. Step 4 adds full details and episodes. */
-    private fun preview(m: Meta): Screen {
+    fun preview(m: Meta): Screen {
         val rows = mutableListOf<Row>()
         rows += Row(info("Type", typeLabel(m.type).removeSuffix("s")))
         if (m.year.isNotBlank()) rows += Row(info("Year", m.year))

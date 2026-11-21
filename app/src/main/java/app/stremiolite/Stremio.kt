@@ -66,8 +66,23 @@ class Addon(
     val types: List<String>,
     val resources: List<String>,
     val catalogs: List<Catalog>,
+    private val resourceRules: List<Resource> = emptyList(),
+    private val idPrefixes: List<String>? = null,
 ) {
     class Catalog(val type: String, val id: String, val name: String, val required: List<String>)
+
+    /** A resource with its own limits; null lists mean "use the manifest's". */
+    class Resource(val name: String, val types: List<String>?, val idPrefixes: List<String>?)
+
+    /** Stremio's rule for whether this add-on can answer e.g. a "meta" or "stream" request for a title. */
+    fun supports(resource: String, type: String, id: String): Boolean {
+        if (isLocal) return false
+        val r = resourceRules.firstOrNull { it.name == resource } ?: return false
+        val okTypes = r.types ?: types
+        if (type !in okTypes) return false
+        val prefixes = r.idPrefixes ?: idPrefixes ?: return true
+        return prefixes.any { id.startsWith(it) }
+    }
 
     /** The add-on's base address, without /manifest.json. */
     val base: String get() = transportUrl.removeSuffix("/manifest.json")
@@ -81,12 +96,15 @@ class Addon(
     companion object {
         fun from(o: JSONObject): Addon? {
             val m = o.optJSONObject("manifest") ?: return null
-            val resources = m.optJSONArray("resources").orEmpty().let { arr ->
+            // A resource is either "stream" or {"name":"stream","types":[...],"idPrefixes":[...]}
+            val rules = m.optJSONArray("resources").orEmpty().let { arr ->
                 (0 until arr.length()).map { i ->
-                    // A resource is either "stream" or {"name":"stream", ...}
-                    arr.optJSONObject(i)?.optString("name") ?: arr.optString(i)
+                    val o = arr.optJSONObject(i)
+                    if (o == null) Resource(arr.optString(i), null, null)
+                    else Resource(o.optString("name"), o.optJSONArray("types")?.strings(), o.optJSONArray("idPrefixes")?.strings())
                 }
             }
+            val resources = rules.map { it.name }
             val catalogs = m.optJSONArray("catalogs").orEmpty().let { arr ->
                 (0 until arr.length()).mapNotNull { i ->
                     val c = arr.optJSONObject(i) ?: return@mapNotNull null
@@ -105,6 +123,8 @@ class Addon(
                 types = m.optJSONArray("types").orEmpty().strings(),
                 resources = resources,
                 catalogs = catalogs,
+                resourceRules = rules,
+                idPrefixes = m.optJSONArray("idPrefixes")?.strings(),
             )
         }
 
