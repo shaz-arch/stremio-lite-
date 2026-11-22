@@ -34,7 +34,8 @@ object Settings {
         PlayerChoice("Ask each time", null),
     )
 
-    private fun prefs(c: Context) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    /** Each profile has its own settings. */
+    private fun prefs(c: Context) = Profiles.prefsFor(c, PREFS)
 
     fun player(c: Context): PlayerChoice =
         players.getOrElse(prefs(c).getInt("player", 0)) { players[0] }

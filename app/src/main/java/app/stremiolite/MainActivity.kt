@@ -228,6 +228,7 @@ class MainActivity : Activity() {
         Profiles.add(this, name, authKey, email)
         History.reset()
         Home.forget()
+        applyLook()
         resetTo(Home.screen(this))
     }
 

@@ -14,7 +14,7 @@ object Search {
 
     // ---- recent searches (last 8, newest first) ----
 
-    private fun prefs(c: android.content.Context) = c.getSharedPreferences("search", android.content.Context.MODE_PRIVATE)
+    private fun prefs(c: android.content.Context) = Profiles.prefsFor(c, "search")
 
     fun recent(c: android.content.Context): List<String> =
         prefs(c).getString("recent", "")!!.split('\n').filter { it.isNotBlank() }

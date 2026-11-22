@@ -281,6 +281,7 @@ object Home {
                 Account.clear(app)
                 History.reset()
                 forget()
+                app.applyLook()
                 app.resetTo(
                     when {
                         Profiles.all(app).size > 1 -> Profiles.chooser(app)

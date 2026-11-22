@@ -44,6 +44,7 @@ object Profiles {
         val list = all(c).toMutableList()
         val same = list.firstOrNull { (email.isNotEmpty() && it.email.equals(email, true)) || it.authKey == authKey }
         val id = same?.id ?: "p" + System.currentTimeMillis().toString(36)
+        if (same == null) current(c)?.let { copySettings(c, it.id, id) }
         val label = name.ifBlank { same?.name ?: email.substringBefore('@').ifBlank { "Profile ${list.size + 1}" } }
         list.removeAll { it.id == id }
         list += Profile(id, label, authKey, email)
@@ -64,6 +65,31 @@ object Profiles {
     fun remove(c: Context, id: String) {
         write(c, all(c).filter { it.id != id })
         if (prefs(c).getString("current", null) == id) prefs(c).edit().remove("current").apply()
+    }
+
+    /** A profile's own settings store; the first profile keeps the original one from before profiles existed. */
+    fun prefsFor(c: Context, base: String): android.content.SharedPreferences {
+        val id = current(c)?.id ?: "main"
+        return c.getSharedPreferences(if (id == "main") base else "$base-$id", Context.MODE_PRIVATE)
+    }
+
+    /** A new profile starts with a copy of the settings of the profile it was made from. */
+    private fun copySettings(c: Context, fromId: String, toId: String) {
+        for (base in listOf("settings", "search")) {
+            val from = c.getSharedPreferences(if (fromId == "main") base else "$base-$fromId", Context.MODE_PRIVATE)
+            val to = c.getSharedPreferences(if (toId == "main") base else "$base-$toId", Context.MODE_PRIVATE).edit().clear()
+            from.all.forEach { (k, v) ->
+                when (v) {
+                    is Boolean -> to.putBoolean(k, v)
+                    is Int -> to.putInt(k, v)
+                    is Long -> to.putLong(k, v)
+                    is Float -> to.putFloat(k, v)
+                    is String -> to.putString(k, v)
+                    is Set<*> -> to.putStringSet(k, v.filterIsInstance<String>().toSet())
+                }
+            }
+            to.apply()
+        }
     }
 
     /** Each profile's own files; the first profile keeps the original names from before profiles existed. */
@@ -114,6 +140,7 @@ object Profiles {
         select(app, id)
         History.reset()
         Home.forget()
+        app.applyLook()   // this profile's theme and text size
         app.resetTo(Home.screen(app))
     }
 
@@ -249,7 +276,7 @@ object Profiles {
             if (wasCurrent) { History.clear(app); Account.clear(app) } else remove(app, p.id)
             app.toast("${p.name} removed from this stick (the Stremio account still exists)")
             if (wasCurrent) {
-                History.reset(); Home.forget()
+                History.reset(); Home.forget(); app.applyLook()
                 app.resetTo(if (current(app) != null) Home.screen(app) else SignIn.screen(app))
             } else app.back()
         })

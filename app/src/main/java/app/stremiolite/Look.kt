@@ -31,7 +31,7 @@ object Look {
 
     val sizes = listOf(Size("Small", 16f), Size("Medium", 20f), Size("Large", 24f), Size("Extra large", 28f))
 
-    private fun prefs(c: Context) = c.getSharedPreferences("settings", Context.MODE_PRIVATE)
+    private fun prefs(c: Context) = Profiles.prefsFor(c, "settings")
 
     fun theme(c: Context): Theme = themes.getOrElse(prefs(c).getInt("theme", 0)) { themes[0] }
     fun size(c: Context): Size = sizes.getOrElse(prefs(c).getInt("textSize", 1)) { sizes[1] }
