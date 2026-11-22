@@ -43,6 +43,11 @@ class MainActivity : Activity() {
         list.adapter = adapter
 
         list.setOnItemClickListener { _, _, position, _ -> choose(position) }
+        // Phones and tablets have no Left/Right keys for paging: give long lists a drag handle instead.
+        if (packageManager.hasSystemFeature("android.hardware.touchscreen")) {
+            list.isFastScrollEnabled = true
+            list.isFastScrollAlwaysVisible = false
+        }
         list.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
                 updateCounter(position)
