@@ -52,9 +52,11 @@ object Folders {
             a.catalogs.filter { openable(it) && rowKey(a, it) !in hidden }.map { a to it }
         }
         // A prefix used by only one row is part of a title (e.g. "UK TV: BBC, ITV…"), not a folder.
-        val prefixCount = pairs.mapNotNull { split(it.second.name).first }.groupingBy { it }.eachCount()
+        // Counted by top-level folder, so "Top 10 > Movies" and "Top 10 > Shows" count together.
+        fun topOf(p: String) = p.substringBefore(" > ").trim()
+        val prefixCount = pairs.mapNotNull { split(it.second.name).first?.let(::topOf) }.groupingBy { it }.eachCount()
         return pairs.map { (a, c) ->
-            val (prefix, rest) = split(c.name).let { (p, r) -> if (p != null && (prefixCount[p] ?: 0) >= 2) p to r else null to c.name }
+            val (prefix, rest) = split(c.name).let { (p, r) -> if (p != null && (prefixCount[topOf(p)] ?: 0) >= 2) p to r else null to c.name }
             val folder = prefix ?: if (c.required.isEmpty()) null else autoFolder(c.name)
             Entry(a, c, folder, rest)
         }

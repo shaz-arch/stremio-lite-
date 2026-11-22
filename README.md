@@ -49,3 +49,17 @@ app/src/main/java/app/stremiolite/
   Net.kt           HTTP, background threads, bundled root certificates
   DemoMenus.kt     device check and about
 ```
+
+## Linux (terminal app)
+
+Stremio Lean also runs in a terminal on Linux, with the same menus, and plays through **mpv**
+(resume, watched marks and next episode all work, because the app follows mpv's position).
+
+Needs Java 17+ and mpv. On Arch:
+
+    sudo pacman -S jre-openjdk mpv
+    curl -fsSL https://raw.githubusercontent.com/shaz-arch/stremio-lite-/main/setup/install-linux.sh | sh
+    stremio-lean
+
+Keys: ↑↓ (or j/k) move · Enter open · p play · ←→ / PgUp PgDn page · Esc back · / search · q quit.
+Settings live in `~/.config/stremio-lean`. Updates: Settings → Check for updates.
