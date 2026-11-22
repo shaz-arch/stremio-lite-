@@ -125,8 +125,17 @@ object NewEpisodes {
             val seen = prefs.getString(id, null)
             if (seen != null && Releases.finished(show)) continue
             val (alert, mark) = Releases.check(show, seen)
+            if (alert == null) { if (mark != null) e.putString(id, mark); continue }
+            // Only tell once it really plays; after a couple of days, tell anyway.
+            val newest = alert.episodes.last()
+            val plays = runCatching { StreamParse.availableNow(addons, "series", newest.id) }.getOrDefault(false)
+            when {
+                plays -> alert.note = "ready to watch"
+                Releases.daysSince(newest.released) >= Releases.WAIT_FOR_STREAM_DAYS -> alert.note = "no stream yet"
+                else -> continue // not playable yet: the marker stays, so it's checked again next time
+            }
             if (mark != null) e.putString(id, mark)
-            alert?.let { alerts += it }
+            alerts += alert
         }
         e.apply()
         return alerts

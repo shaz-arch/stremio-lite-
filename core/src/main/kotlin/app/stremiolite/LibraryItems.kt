@@ -100,6 +100,23 @@ object LibraryItems {
         return item
     }
 
+    /**
+     * Takes [videoId] off the watched list: a film loses its watched count; an episode comes out
+     * of the show's watched marks ([videoIds]: the show's episodes in Stremio's order).
+     */
+    fun unwatch(item: JSONObject, videoId: String, videoIds: List<String>, now: Long = System.currentTimeMillis()): JSONObject {
+        val st = item.optJSONObject("state") ?: JSONObject().also { item.put("state", it) }
+        if (videoIds.isNotEmpty()) {
+            val marked = Sync.decodeWatched(st.optString("watched"), videoIds) - videoId
+            st.put("watched", Sync.encodeWatched(marked, videoIds))
+            if (st.optString("video_id") == videoId) st.put("flaggedWatched", 0)
+        } else {
+            st.put("timesWatched", 0).put("flaggedWatched", 0).put("timeOffset", 0)
+        }
+        item.put("_mtime", Sync.iso(now))
+        return item
+    }
+
     /** Counts as finished near the end: the last 8%, or the last 2 minutes (Stremio uses 90%). */
     fun finished(pos: Long, dur: Long) = dur > 0 && (pos >= dur * 0.92 || dur - pos < 120_000)
 }

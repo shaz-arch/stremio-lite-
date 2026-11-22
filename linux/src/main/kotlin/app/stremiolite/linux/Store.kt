@@ -223,6 +223,13 @@ object Lib {
         put(item)
     }
 
+    /** Takes a film or episode off the watched list ([videoIds]: the show's episodes in Stremio's order). */
+    fun unwatch(id: String, type: String, videoId: String, videoIds: List<String>) {
+        ensure()
+        val item = records[id] ?: return
+        put(LibraryItems.unwatch(item, videoId, if (type == "movie") emptyList() else videoIds))
+    }
+
     fun toggleLibrary(id: String, type: String, name: String): Boolean {
         ensure()
         val had = inLibrary(id)

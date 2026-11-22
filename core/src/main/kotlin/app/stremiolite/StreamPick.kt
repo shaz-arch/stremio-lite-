@@ -113,7 +113,16 @@ object StreamParse {
                 }
             }
         }
-        return Best.pick(found, if (type == "movie") 110.0 else 45.0) != null
+        // "Available" means it really plays: check what the best few links serve (broken releases
+        // give a tiny error clip), up to 3 of them.
+        val minutes = if (type == "movie") 110.0 else 45.0
+        val tried = mutableSetOf<Stream>()
+        repeat(3) {
+            val best = Best.pick(found.filter { it !in tried }, minutes) ?: return false
+            if (!StreamCheck.broken(best.url)) return true
+            tried += best
+        }
+        return false
     }
 
 }

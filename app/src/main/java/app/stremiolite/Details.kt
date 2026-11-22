@@ -175,6 +175,11 @@ object Details {
             app.refreshTop()
         })
         rows += lib
+        if (f.type == "movie" && History.marks(app)[f.id] == "✓") rows += Row("Remove from watched", action = {
+            History.unwatch(app, f.id, f.type, f.id, "", emptyList())
+            app.toast("${f.name} is no longer marked as watched")
+            app.refreshTop()
+        })
         if (f.type == "movie") {
             lateinit var wait: Row
             fun waitLabel() = if (Waiting.has(app, f.id)) "Stop waiting for a stream" else "Tell me when a stream is available"
@@ -308,6 +313,11 @@ object Details {
             rows += Row(info("Episode", "$seasonName, episode ${v.episode}"))
             if (v.released.isNotBlank()) rows += Row(info("Released", v.released + if (upcoming(v.released)) " (upcoming)" else ""))
             mark(app, v).takeIf { it.isNotEmpty() }?.let { rows += Row(info("Watched", if (it == "✓") "yes ✓" else it)) }
+            if (mark(app, v) == "✓") rows += Row("Remove from watched", action = {
+                History.unwatch(app, f.id, f.type, v.id, label, stremioOrder(f))
+                app.toast("$label is no longer marked as watched")
+                app.refreshTop()
+            })
             if (v.overview.isNotBlank()) {
                 rows += Row("────────────────────")
                 Catalogs.wrap(v.overview, app.columns()).forEach { rows += Row(it) }

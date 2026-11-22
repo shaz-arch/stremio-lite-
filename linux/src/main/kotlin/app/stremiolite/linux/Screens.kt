@@ -519,6 +519,9 @@ object Details {
             App.toast(if (added) "Added to library" else "Removed from library")
         })
         rows += lib
+        if (f.type == "movie" && Lib.filmWatched(f.id)) rows += Row("Remove from watched", action = {
+            Lib.unwatch(f.id, f.type, f.id, emptyList()); App.toast("${f.name} is no longer marked as watched"); App.top()?.onShow?.invoke()
+        })
         if (Lib.info(f.id)?.continuing == true) rows += Row("Remove from Continue watching", action = {
             Lib.removeFromContinue(f.id); App.toast("Removed from Continue watching")
         })
@@ -610,6 +613,11 @@ object Details {
             rows += Row("────────────────────")
             if (v.title.isNotBlank()) rows += Row(v.title)
             if (v.released.isNotBlank()) rows += Row(info("Released", v.released))
+            if (v.id in Lib.watchedEpisodes(f.id, MetaParse.stremioOrder(f))) rows += Row("Remove from watched", action = {
+                Lib.unwatch(f.id, f.type, v.id, MetaParse.stremioOrder(f))
+                App.toast("${MetaParse.epLabel(v)} is no longer marked as watched")
+                s.onShow?.invoke()
+            })
             if (v.overview.isNotBlank()) MetaParse.wrap(v.overview, App.columns()).forEach { rows += Row(it) }
             s.rows = rows
             App.refresh()

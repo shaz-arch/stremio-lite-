@@ -307,6 +307,22 @@ object History {
         send(c)
     }
 
+    /**
+     * Takes a film or an episode off the watched list, here and on the account.
+     * [label]: the episode label ("S01E02") for episodes, empty for films.
+     */
+    fun unwatch(c: Context, id: String, type: String, videoId: String, label: String, videoIds: List<String>) {
+        ensure(c)
+        log.removeAll { it.id == id && (label.isEmpty() || it.label.startsWith(label)) }
+        videos[videoId]?.let { videos[videoId] = Progress(0, it.duration, false) }
+        remote[id]?.let { runCatching { JSONObject(it) }.getOrNull() }?.let { item ->
+            remote[id] = LibraryItems.unwatch(item, videoId, if (type == "movie") emptyList() else videoIds).toString()
+            unsent += id
+        }
+        save()
+        send(c)
+    }
+
     fun removeItem(c: Context, id: String) {
         ensure(c)
         items.removeAll { it.id == id }

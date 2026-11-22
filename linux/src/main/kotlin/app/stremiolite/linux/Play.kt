@@ -191,6 +191,8 @@ object Play {
         lateinit var fetch: Fetch
         val minutes = minutes(w, type)
         var started = false
+        var checking = false
+        val broken = mutableSetOf<Stream>()
         fun build() {
             val scored = fetch.found.map { it to Best.score(it, minutes) }
                 .sortedWith(compareByDescending<Pair<Stream, Double?>> { it.second ?: Double.NEGATIVE_INFINITY }.thenBy { it.first.order })
@@ -200,8 +202,14 @@ object Play {
             rows += Row(if (sub != null) "Subtitles: ${Languages.name(sub.lang)} · ${sub.addon}" else if (Prefs.language().codes.isEmpty()) "Subtitles: off" else if (fetch.subsDone) "Subtitles: none found in ${Prefs.language().name}" else "Subtitles: looking…")
             fetch.notes.forEach { rows += Row("  $it") }
             rows += Row("────────────────────")
+            if (fetch.done && !checking) {
+                checking = true
+                scored.filter { it.second != null }.take(5).forEach { (st, _) ->
+                    App.async({ app.stremiolite.StreamCheck.broken(st.url) }) { r -> if (r.getOrDefault(false)) { broken += st; build() } }
+                }
+            }
             scored.forEach { (st, score) ->
-                rows += Row(st.summary + if (score == null) "  (${Best.whyOut(st)})" else "", st.addon, action = {
+                rows += Row(st.summary + if (score == null) "  (${Best.whyOut(st)})" else "", (if (st in broken) "✗ no video · " else "") + st.addon, action = {
                     App.toast("Checking the stream…")
                     App.async({ app.stremiolite.StreamCheck.broken(st.url) }) { ok ->
                         if (ok.getOrDefault(false)) App.toast("That release has no playable video. Pick another.")

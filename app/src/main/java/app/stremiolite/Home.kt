@@ -211,6 +211,34 @@ object Home {
         return screen
     }
 
+    /** One finished film or episode: open it, or take it off the watched list. */
+    private fun watchedEntry(app: MainActivity, f: History.Finished): Screen {
+        val ep = f.label.substringBefore(' ').takeIf { Regex("S\\d+E\\d+").matches(it) } ?: ""
+        val s = Screen(f.name + if (ep.isNotEmpty()) " $ep" else "", emptyList())
+        s.rows = listOf(
+            Row("Open", "►", opens = {
+                Details.screenFor(app, f.id, f.type, f.name, f.year) ?: Screen(f.name, listOf(Row("Your add-ons are still loading. Try again in a moment.")))
+            }),
+            Row("Remove from watched", action = {
+                if (f.type == "movie" || ep.isEmpty()) {
+                    History.unwatch(app, f.id, f.type, f.id, "", emptyList())
+                    app.toast("Removed from watched"); app.back()
+                } else {
+                    // Episodes: the show's episode list is needed to find this one and update its marks.
+                    app.toast("Removing…")
+                    Net.async({ Details.loadFull("series", f.id) }) { r ->
+                        r.onSuccess { show ->
+                            val v = show.videos.firstOrNull { Details.epLabel(it) == ep }
+                            History.unwatch(app, f.id, f.type, v?.id ?: f.id, ep, MetaParse.stremioOrder(show))
+                            app.toast("Removed from watched"); app.back()
+                        }.onFailure { app.toast("Couldn't remove: ${Net.describe(it)}") }
+                    }
+                }
+            }),
+        )
+        return s
+    }
+
     private fun watchedScreen(app: MainActivity): Screen {
         lateinit var screen: Screen
         val day = java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.UK)
@@ -220,9 +248,7 @@ object Home {
             return list.map { f ->
                 val detail = listOf(f.label.substringBefore(' ').takeIf { it.startsWith("S") } ?: f.label, if (f.time > 0) day.format(java.util.Date(f.time)) else "")
                     .filter { it.isNotBlank() }.joinToString("   ")
-                Row(f.name, detail, opens = {
-                    Details.screenFor(app, f.id, f.type, f.name, f.year) ?: Screen(f.name, listOf(Row("Your add-ons are still loading. Try again in a moment.")))
-                })
+                Row(f.name, detail, opens = { watchedEntry(app, f) })
             }
         }
         screen = Screen("Watched", build())

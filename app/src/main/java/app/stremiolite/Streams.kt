@@ -176,6 +176,8 @@ object Streams {
         lateinit var rebuild: () -> Unit
         val subRow = Row("Subtitles", opens = { subs.picker(app) { rebuild() } })
         var started = false
+        var checking = false
+        val broken = mutableSetOf<Stream>()
 
         rebuild = {
             summary.label = when {
@@ -192,8 +194,15 @@ object Streams {
             fetch.hiddenLine()?.let { rows += Row(it) }
             fetch.notes.forEach { rows += Row(it) }
             rows += Row("────────────────────")
+            // Once all answers are in, quietly check what the top few links really serve.
+            if (fetch.done && !checking) {
+                checking = true
+                fetch.found.map { it to Best.score(it, 45.0) }.filter { it.second != null }.sortedByDescending { it.second }.take(5).forEach { (st, _) ->
+                    Net.async({ StreamCheck.broken(st.url) }) { r -> if (r.getOrDefault(false)) { broken += st; if (app.isTop(screen)) rebuild() } }
+                }
+            }
             sorted.forEach { s ->
-                val detail = (if (s.cached == false) "not cached · " else "") + s.addon
+                val detail = (if (s in broken) "✗ no video · " else "") + (if (s.cached == false) "not cached · " else "") + s.addon
                 rows += Row(s.summary, detail, action = {
                     app.toast("Checking the stream…")
                     Net.async({ StreamCheck.broken(s.url) }) { r ->

@@ -33,12 +33,24 @@ object Releases {
     class Alert(val show: Full, val episodes: List<Video>) {
         val newSeason: Int? get() = episodes.firstOrNull { opensSeason(it) }?.season
 
+        /** e.g. "ready to watch" or "no stream yet". */
+        var note: String = ""
+
         val text: String get() = when {
             newSeason != null -> "New season: ${show.name} season $newSeason"
             episodes.size == 1 -> "New episode: ${show.name} ${MetaParse.epLabel(episodes[0])}"
             else -> "${show.name}: ${episodes.size} new episodes"
-        }
+        } + if (note.isNotEmpty()) ", $note" else ""
     }
+
+    /** Days since [date] ("yyyy-MM-dd"), or 0 if it can't be read. */
+    fun daysSince(date: String): Int = runCatching {
+        val f = SimpleDateFormat("yyyy-MM-dd", Locale.UK).apply { timeZone = TimeZone.getTimeZone("UTC") }
+        ((System.currentTimeMillis() - f.parse(date)!!.time) / 86_400_000L).toInt()
+    }.getOrDefault(0)
+
+    /** How long an episode can be out without a stream before you're told anyway. */
+    const val WAIT_FOR_STREAM_DAYS = 2
 
     /**
      * Compares a show with what was last seen ([seen]: the newest released episode then).
