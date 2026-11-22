@@ -33,6 +33,7 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        narrow = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT
         setContentView(R.layout.activity_main)
 
         titleView = findViewById(R.id.title)
@@ -401,6 +402,12 @@ class MainActivity : Activity() {
 
     // ---- list adapter -------------------------------------------------------
 
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        narrow = newConfig.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT
+        adapter.notifyDataSetChanged()
+    }
+
     private class RowAdapter(private val inflater: LayoutInflater, private val context: android.content.Context) : BaseAdapter() {
         var rows: List<Row> = emptyList()
 
@@ -424,16 +431,48 @@ class MainActivity : Activity() {
                 holder.sp = sp
                 holder.theme = t
             }
+            // Portrait (phones): the label gets the whole width and the detail goes on a smaller line
+            // below, so titles aren't squeezed down to a few letters.
+            val stacked = narrow
+            if (holder.stacked != stacked) {
+                (view as LinearLayout).orientation = if (stacked) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+                holder.label.layoutParams = LinearLayout.LayoutParams(
+                    if (stacked) ViewGroup.LayoutParams.MATCH_PARENT else 0, ViewGroup.LayoutParams.WRAP_CONTENT, if (stacked) 0f else 1f,
+                )
+                holder.detail.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    marginStart = if (stacked) 0 else (16 * context.resources.displayMetrics.density).toInt()
+                }
+                holder.stacked = stacked
+                holder.sp = 0f
+            }
+            if (holder.sp != sp || holder.theme !== t) {
+                holder.label.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, sp)
+                holder.detail.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, if (stacked) (sp * 0.8f).coerceAtLeast(13f) else sp)
+                holder.label.setTextColor(t.label)
+                holder.detail.setTextColor(t.detail)
+                holder.sp = sp
+                holder.theme = t
+            }
             holder.label.text = row.label
-            holder.detail.text = when {
+            val detail = when {
                 row.detail.isNotEmpty() -> row.detail
                 row.opens != null -> "►"
                 else -> ""
+            }
+            if (stacked) {
+                // A lone arrow needs no line of its own on a touch screen.
+                val d = detail.removeSuffix("►").trim()
+                holder.detail.text = d
+                holder.detail.visibility = if (d.isEmpty()) View.GONE else View.VISIBLE
+            } else {
+                holder.detail.text = detail
+                holder.detail.visibility = View.VISIBLE
             }
             return view
         }
 
         private class Holder(val label: TextView, val detail: TextView) {
+            var stacked = false
             var sp = 0f
             var theme: Look.Theme? = null
         }

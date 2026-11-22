@@ -405,4 +405,7 @@ object Home {
 }
 
 /** "Label ........ value" on one line, so values sit next to their labels. */
-fun info(label: String, value: String) = "${label.padEnd(22)} $value"
+/** True in portrait (phones held upright): rows stack and label columns are narrower. */
+var narrow = false
+
+fun info(label: String, value: String) = "${label.padEnd(if (narrow) 13 else 22)} $value"
