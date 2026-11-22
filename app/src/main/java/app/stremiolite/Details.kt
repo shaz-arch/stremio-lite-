@@ -129,8 +129,11 @@ object Details {
                             app.push(target.second)
                             return@async
                         }
-                        // Fetch the streams you'd most likely play next, so Play best is quick.
-                        target?.first?.let { Streams.prefetch(app, loaded.type, it) }
+                        // Fetch the streams you'd most likely play next, so Play best is quick,
+                        // but only once you've stayed on this title (not while browsing past it).
+                        target?.first?.let { vid ->
+                            Net.later(1_500, Runnable { if (app.isTop(quick)) Streams.prefetch(app, loaded.type, vid) })
+                        }
                     }.onFailure { e ->
                         loadingRow.label = "Couldn't load full details: ${Net.describe(e).let { d -> if (d == e.javaClass.simpleName) e.message ?: d else d }}"
                     }
@@ -345,7 +348,7 @@ object Details {
         screen.onShow = {
             screen.rows = build()
             app.refresh(screen)
-            Streams.prefetch(app, f.type, v.id)
+            Net.later(1_500, Runnable { if (app.isTop(screen)) Streams.prefetch(app, f.type, v.id) })
         }
         return screen
     }

@@ -14,7 +14,7 @@ android {
         // CI passes the GitHub build number, so the app can tell when a newer build is out.
         val build = (project.findProperty("buildNumber") as String?)?.toIntOrNull() ?: 1
         versionCode = build
-        versionName = "1.4.0 (build $build)"
+        versionName = "1.4.1 (build $build)"
     }
 
     buildTypes {

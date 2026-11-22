@@ -28,6 +28,9 @@ class Screen(
     /** Where the cursor was, so Back returns to the same line. */
     var position: Int = 0
 
+    /** Set to move the cursor on the next redraw (e.g. to the first stream once results arrive). */
+    var moveTo: Int? = null
+
     /** Optional picture shown beside the list (only the sign-in QR code uses it). */
     var image: Bitmap? = null
 

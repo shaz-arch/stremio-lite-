@@ -35,6 +35,8 @@ object Net {
     /** Run [work] in the background, then [done] on the main thread. */
     fun <T> async(work: () -> T, done: (Result<T>) -> Unit) {
         pool.execute {
+            // Lower priority than the screen, so loading never makes scrolling stutter.
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
             val result = runCatching(work)
             main.post { done(result) }
         }

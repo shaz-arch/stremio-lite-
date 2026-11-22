@@ -91,6 +91,11 @@ class MainActivity : Activity() {
     /** Set by Play best before starting the player; returns true if it is trying another stream. */
     var onPlayerFailed: (() -> Boolean)? = null
 
+    override fun onPause() {
+        super.onPause()
+        History.flush()
+    }
+
     override fun onDestroy() {
         stack.lastOrNull()?.onHide?.invoke()
         super.onDestroy()
@@ -124,11 +129,43 @@ class MainActivity : Activity() {
     }
 
     /** Redraw [screen] if it's the one showing, keeping the cursor where it is. */
+    /**
+     * Redraws [screen] if it's showing: just the text, so the cursor stays put and nothing re-lays out
+     * unless the screen asked to move the cursor ([Screen.moveTo]).
+     */
     fun refresh(screen: Screen) {
         if (stack.lastOrNull() !== screen || isFinishing) return
-        val pos = list.selectedItemPosition
-        if (pos >= 0) screen.position = pos
-        render()
+        adapter.rows = screen.rows
+        adapter.notifyDataSetChanged()
+        showImage(screen)
+        val move = screen.moveTo
+        screen.moveTo = null
+        if (move != null) {
+            val p = move.coerceIn(0, (screen.rows.size - 1).coerceAtLeast(0))
+            list.setSelection(p)
+            screen.position = p
+        } else {
+            list.selectedItemPosition.takeIf { it >= 0 }?.let { screen.position = it }
+        }
+        updateCounter(screen.position)
+    }
+
+    /** Where the cursor is on the current screen. */
+    fun cursor(): Int = list.selectedItemPosition
+
+    private fun showImage(screen: Screen) {
+        val image = screen.image
+        if (image != null) {
+            if (sideImage.visibility != View.VISIBLE || sideImage.tag !== image) {
+                sideImage.setImageBitmap(image)
+                sideImage.tag = image
+            }
+            sideImage.visibility = View.VISIBLE
+        } else if (sideImage.visibility != View.GONE) {
+            sideImage.setImageDrawable(null)
+            sideImage.tag = null
+            sideImage.visibility = View.GONE
+        }
     }
 
     /** How many characters of list text fit across the screen, for wrapping descriptions. */
@@ -217,14 +254,8 @@ class MainActivity : Activity() {
         }
         adapter.rows = screen.rows
         adapter.notifyDataSetChanged()
-        val image = screen.image
-        if (image != null) {
-            sideImage.setImageBitmap(image)
-            sideImage.visibility = View.VISIBLE
-        } else {
-            sideImage.setImageDrawable(null)
-            sideImage.visibility = View.GONE
-        }
+        screen.moveTo = null
+        showImage(screen)
         list.requestFocus()
         list.setSelection(screen.position.coerceIn(0, (screen.rows.size - 1).coerceAtLeast(0)))
         updateCounter(screen.position)

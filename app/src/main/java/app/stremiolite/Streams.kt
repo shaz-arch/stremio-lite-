@@ -189,10 +189,10 @@ object Streams {
                 rows += Row(s.summary, detail, action = { Player.play(app, s.url, title, listOfNotNull(subs.chosen), watch = watch, startAt = freshStart(app, watch, startAt)) })
             }
             val firstStream = rows.size - sorted.size
-            val wasOnHeader = screen.position < firstStream
+            val wasOnHeader = app.cursor() < firstStream
             screen.rows = rows
             // Keep the cursor on the first stream while results are still arriving.
-            if (wasOnHeader && sorted.isNotEmpty()) screen.position = firstStream
+            if (wasOnHeader && sorted.isNotEmpty()) screen.moveTo = firstStream
             app.refresh(screen)
         }
 
@@ -264,7 +264,7 @@ object Streams {
                 pickRow.label = next.summary
                 pickRow.detail = next.addon
                 screen.rows = rows()
-                screen.position = 0
+                screen.moveTo = 0
                 app.refresh(screen)
                 Net.later(3_000, start)
                 true
@@ -286,7 +286,7 @@ object Streams {
                 status.label = if (fetch.found.isEmpty()) "No playable streams found." else "No stream suits this device. Choose one below."
                 val r = rows()
                 screen.rows = r
-                screen.position = r.lastIndex
+                screen.moveTo = r.lastIndex
                 app.refresh(screen)
                 return
             }
@@ -297,7 +297,7 @@ object Streams {
             pickRow.label = best.summary
             pickRow.detail = best.addon
             screen.rows = rows()
-            screen.position = 0
+            screen.moveTo = 0
             app.refresh(screen)
             // A short pause so you can read the pick, and press Back if it's wrong.
             Net.later(1_500, start)

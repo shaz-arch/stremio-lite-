@@ -15,7 +15,7 @@ import java.io.File
 object History {
     private const val MAX_VIDEOS = 3000
     private const val MAX_LOG = 300
-    private const val PULL_EVERY_MS = 2 * 60_000L
+    private const val PULL_EVERY_MS = 5 * 60_000L
 
     /** What is about to be played, so the result from the player can be filed against it. */
     class Watch(
@@ -73,8 +73,8 @@ object History {
     private val items = mutableListOf<Item>()
     private val library = mutableListOf<Saved>()
     private val log = mutableListOf<Finished>()
-    /** The account's own copy of each item, kept whole so nothing Stremio stores is lost when we update it. */
-    private val remote = LinkedHashMap<String, JSONObject>()
+    /** The account's own copy of each item (as JSON text), kept whole so nothing Stremio stores is lost. */
+    private val remote = LinkedHashMap<String, String>()
     /** Titles changed here that haven't reached the account yet. */
     private val unsent = LinkedHashSet<String>()
     private var lastPull = 0L
@@ -103,7 +103,7 @@ object History {
         json.optJSONArray("log")?.forEachObj { o ->
             log += Finished(o.optString("id"), o.optString("type"), o.optString("name"), o.optString("year"), o.optString("label"), o.optLong("time"))
         }
-        json.optJSONObject("remote")?.let { r -> r.keys().forEach { k -> r.optJSONObject(k)?.let { remote[k] = it } } }
+        json.optJSONObject("remote")?.let { r -> r.keys().forEach { k -> r.optJSONObject(k)?.let { remote[k] = it.toString() } } }
         json.optJSONArray("unsent")?.let { a -> for (i in 0 until a.length()) unsent += a.optString(i) }
     }
 
@@ -111,30 +111,63 @@ object History {
         for (i in 0 until length()) optJSONObject(i)?.let(f)
     }
 
+    // Saving: grouped (one write a moment after the last change) and done off the screen's thread.
+    private val saveTask = Runnable { writeNow() }
+    private val writeLock = Any()
+    @Volatile private var writeSeq = 0
+
     private fun save() {
-        val v = JSONObject()
-        videos.entries.toList().takeLast(MAX_VIDEOS).forEach { (k, p) ->
-            v.put(k, JSONObject().put("pos", p.position).put("dur", p.duration).put("done", p.done))
-        }
-        val arr = JSONArray()
-        items.forEach { e ->
-            arr.put(
-                JSONObject().put("id", e.id).put("type", e.type).put("name", e.name).put("year", e.year)
-                    .put("videoId", e.videoId).put("label", e.label).put("pos", e.position).put("dur", e.duration)
-                    .put("upNext", e.upNext).put("updated", e.updated)
-            )
-        }
-        val lib = JSONArray()
-        library.forEach { s -> lib.put(JSONObject().put("id", s.id).put("type", s.type).put("name", s.name).put("year", s.year)) }
-        val lg = JSONArray()
-        log.sortedByDescending { it.time }.take(MAX_LOG).forEach { f ->
-            lg.put(JSONObject().put("id", f.id).put("type", f.type).put("name", f.name).put("year", f.year).put("label", f.label).put("time", f.time))
-        }
-        val r = JSONObject()
-        remote.forEach { (k, o) -> r.put(k, o) }
-        val json = JSONObject().put("videos", v).put("items", arr).put("library", lib).put("log", lg)
-            .put("remote", r).put("unsent", JSONArray(unsent.toList()))
-        runCatching { file.writeText(json.toString()) }
+        Net.cancel(saveTask)
+        Net.later(1_500, saveTask)
+    }
+
+    /** Writes any waiting change now (the app is going into the background). */
+    fun flush() {
+        if (!loaded) return
+        Net.cancel(saveTask)
+        writeNow()
+    }
+
+    private fun writeNow() {
+        if (!loaded) return
+        val seq = ++writeSeq
+        val vSnap = videos.entries.toList().takeLast(MAX_VIDEOS).map { it.key to it.value }
+        val iSnap = items.toList()
+        val lSnap = library.toList()
+        val gSnap = log.sortedByDescending { it.time }.take(MAX_LOG)
+        val rSnap = remote.entries.map { it.key to it.value }
+        val uSnap = unsent.toList()
+        val target = file
+        Net.async({
+            val v = JSONObject()
+            vSnap.forEach { (k, p) -> v.put(k, JSONObject().put("pos", p.position).put("dur", p.duration).put("done", p.done)) }
+            val arr = JSONArray()
+            iSnap.forEach { e ->
+                arr.put(
+                    JSONObject().put("id", e.id).put("type", e.type).put("name", e.name).put("year", e.year)
+                        .put("videoId", e.videoId).put("label", e.label).put("pos", e.position).put("dur", e.duration)
+                        .put("upNext", e.upNext).put("updated", e.updated)
+                )
+            }
+            val lib = JSONArray()
+            lSnap.forEach { x -> lib.put(JSONObject().put("id", x.id).put("type", x.type).put("name", x.name).put("year", x.year)) }
+            val lg = JSONArray()
+            gSnap.forEach { f -> lg.put(JSONObject().put("id", f.id).put("type", f.type).put("name", f.name).put("year", f.year).put("label", f.label).put("time", f.time)) }
+            val head = JSONObject().put("videos", v).put("items", arr).put("library", lib).put("log", lg)
+                .put("unsent", JSONArray(uSnap)).toString()
+            // The account's items are already JSON text: splice them in rather than re-parsing.
+            val text = StringBuilder(head.length + rSnap.sumOf { it.second.length + it.first.length + 4 } + 16)
+                .append(head, 0, head.length - 1)
+                .append(",\"remote\":{")
+            rSnap.forEachIndexed { n, (k, raw) ->
+                if (n > 0) text.append(',')
+                text.append(JSONObject.quote(k)).append(':').append(raw)
+            }
+            text.append("}}")
+            synchronized(writeLock) {
+                if (seq == writeSeq) target.writeText(text.toString())
+            }
+        }) { }
     }
 
     /** Wipes everything (signing out). */
@@ -187,7 +220,7 @@ object History {
     /** Marks episodes the account says are watched, once a show's episode list is known. */
     fun applyAccountWatched(c: Context, id: String, orderedIds: List<String>) {
         ensure(c)
-        val field = remote[id]?.optJSONObject("state")?.optString("watched")
+        val field = remote[id]?.let { runCatching { JSONObject(it) }.getOrNull() }?.optJSONObject("state")?.optString("watched")
         val done = Sync.decodeWatched(field, orderedIds)
         var changed = false
         done.forEach { vid ->
@@ -232,7 +265,7 @@ object History {
         }
 
         // The account's copy, updated the way Stremio's player does it.
-        val item = remote[w.id] ?: Sync.newItem(w.id, w.type, w.name)
+        val item = remote[w.id]?.let { runCatching { JSONObject(it) }.getOrNull() } ?: Sync.newItem(w.id, w.type, w.name)
         item.put("name", w.name).put("type", w.type).put("_mtime", Sync.iso(now))
         val st = item.optJSONObject("state") ?: JSONObject().also { item.put("state", it) }
         st.put("lastWatched", Sync.iso(now))
@@ -262,7 +295,7 @@ object History {
         } else if (position != null) {
             st.put("timeOffset", pos.coerceAtLeast(1))
         }
-        remote[w.id] = item
+        remote[w.id] = item.toString()
         unsent += w.id
         save()
         send(c)
@@ -271,9 +304,10 @@ object History {
     fun removeItem(c: Context, id: String) {
         ensure(c)
         items.removeAll { it.id == id }
-        remote[id]?.let { item ->
+        remote[id]?.let { runCatching { JSONObject(it) }.getOrNull() }?.let { item ->
             item.optJSONObject("state")?.put("timeOffset", 0)
             item.put("_mtime", Sync.iso(System.currentTimeMillis()))
+            remote[id] = item.toString()
             unsent += id
         }
         save()
@@ -284,9 +318,9 @@ object History {
         ensure(c)
         val had = library.removeAll { it.id == s.id }
         if (!had) library.add(0, s)
-        val item = remote[s.id] ?: Sync.newItem(s.id, s.type, s.name)
+        val item = remote[s.id]?.let { runCatching { JSONObject(it) }.getOrNull() } ?: Sync.newItem(s.id, s.type, s.name)
         item.put("removed", had).put("temp", false).put("_mtime", Sync.iso(System.currentTimeMillis()))
-        remote[s.id] = item
+        remote[s.id] = item.toString()
         unsent += s.id
         save()
         send(c)
@@ -300,8 +334,8 @@ object History {
         val key = Account.authKey(c) ?: return
         val ids = unsent.toList()
         if (ids.isEmpty()) return
-        val payload = ids.mapNotNull { remote[it] }.map { JSONObject(it.toString()) }
-        Net.async({ Sync.push(key, payload) }) { r ->
+        val raw = ids.mapNotNull { remote[it] }
+        Net.async({ Sync.push(key, raw.map { JSONObject(it) }) }) { r ->
             if (r.isSuccess) {
                 unsent.removeAll(ids.toSet())
                 save()
@@ -309,36 +343,51 @@ object History {
         }
     }
 
-    /** Fetches the account's library (at most every couple of minutes unless [force]); [done] after merging. */
-    fun pull(c: Context, force: Boolean = false, done: (() -> Unit)? = null) {
+    /** What a pull found, worked out off the screen's thread. */
+    private class Merge(
+        val items: List<Item>,
+        val library: List<Saved>,
+        val remote: List<Pair<String, String>>,
+        val progress: Map<String, Progress>,
+        val log: List<Finished>,
+    )
+
+    /**
+     * Fetches the account's library (at most every few minutes unless [force]). [changed] runs only if
+     * Continue watching, the Library or the Watched list actually changed, so screens aren't redrawn for nothing.
+     */
+    fun pull(c: Context, force: Boolean = false, changed: (() -> Unit)? = null) {
         ensure(c)
         val key = Account.authKey(c) ?: return
         if (pulling || (!force && System.currentTimeMillis() - lastPull < PULL_EVERY_MS)) return
         pulling = true
         send(c)
-        Net.async({ Sync.pull(key) }) { r ->
+        val skip = unsent.toSet()
+        val doneIds = videos.filterValues { it.done }.keys.toHashSet()
+        val logIds = log.map { it.id }.toHashSet()
+        Net.async({ compute(Sync.pull(key), skip, doneIds, logIds) }) { r ->
             pulling = false
-            r.onSuccess { arr ->
+            r.onSuccess { m ->
                 lastPull = System.currentTimeMillis()
-                merge(arr)
-                save()
-                done?.invoke()
+                if (apply(m)) {
+                    save()
+                    changed?.invoke()
+                }
             }
         }
     }
 
-    private fun merge(arr: JSONArray) {
-        val keepItems = items.filter { it.id in unsent }
-        val keepLib = library.filter { it.id in unsent }
+    private fun compute(arr: JSONArray, skip: Set<String>, doneIds: Set<String>, logIds: Set<String>): Merge {
         val newItems = mutableListOf<Item>()
         val newLib = mutableListOf<Saved>()
-        val logIds = log.map { it.id }.toHashSet()
-
+        val newRemote = mutableListOf<Pair<String, String>>()
+        val progress = HashMap<String, Progress>()
+        val newLog = mutableListOf<Finished>()
         arr.forEachObj { o ->
             val id = o.optString("_id")
             val type = o.optString("type")
-            if (id.isEmpty() || type == "other" || id in unsent) return@forEachObj
-            remote[id] = o
+            if (id.isEmpty() || type == "other" || id in skip) return@forEachObj
+            newRemote += id to o.toString()
             val name = o.optString("name")
             val removed = o.optBoolean("removed")
             val temp = o.optBoolean("temp")
@@ -352,20 +401,42 @@ object History {
             if ((!removed || temp) && offset > 0) {
                 val upNext = offset == 1L
                 newItems += Item(id, type, name, "", videoId, if (videoId != id) episodeLabel(videoId) else "", if (upNext) 0 else offset, dur, upNext, updated)
-                if (!upNext && videos[videoId]?.done != true) videos[videoId] = Progress(offset, dur, false)
+                if (!upNext && videoId !in doneIds) progress[videoId] = Progress(offset, dur, false)
             }
             // Films watched to the end elsewhere count as watched here too.
-            if (type == "movie" && (st.optInt("flaggedWatched") == 1 || st.optInt("timesWatched") > 0) && offset == 0L) {
-                if (videos[id]?.done != true) videos[id] = Progress(0, dur, true)
+            if (type == "movie" && (st.optInt("flaggedWatched") == 1 || st.optInt("timesWatched") > 0) && offset == 0L && id !in doneIds) {
+                progress[id] = Progress(0, dur, true)
             }
             if (id !in logIds && (st.optInt("timesWatched") > 0 || st.optInt("flaggedWatched") == 1)) {
-                log += Finished(id, type, name, "", if (type == "movie") "" else "watched on another device", updated)
+                newLog += Finished(id, type, name, "", if (type == "movie") "" else "watched on another device", updated)
             }
         }
+        return Merge(newItems, newLib, newRemote, progress, newLog)
+    }
+
+    /** Applies a pull; true if anything you'd see changed. */
+    private fun apply(m: Merge): Boolean {
+        fun sig() = items.map { "${it.id}|${it.videoId}|${it.position / 60_000}|${it.upNext}" }.sorted().joinToString() +
+            "#" + library.map { it.id }.sorted().joinToString() + "#" + log.size
+        val before = sig()
+        val keepItems = items.filter { it.id in unsent }
+        val keepLib = library.filter { it.id in unsent }
+        m.remote.forEach { (id, raw) -> if (id !in unsent) remote[id] = raw }
+        var progressChanged = false
+        m.progress.forEach { (vid, p) ->
+            val old = videos[vid]
+            if (old?.done != true && (old == null || old.position / 60_000 != p.position / 60_000 || old.done != p.done)) {
+                videos[vid] = p
+                progressChanged = true
+            }
+        }
+        val logIds = log.map { it.id }.toHashSet()
+        m.log.forEach { if (it.id !in logIds) log += it }
         items.clear()
-        items += keepItems + newItems.filter { n -> keepItems.none { it.id == n.id } }
+        items += keepItems + m.items.filter { n -> n.id !in unsent && keepItems.none { it.id == n.id } }
         library.clear()
-        library += keepLib + newLib.filter { n -> keepLib.none { it.id == n.id } }
+        library += keepLib + m.library.filter { n -> n.id !in unsent && keepLib.none { it.id == n.id } }
+        return sig() != before || progressChanged
     }
 
     /** "tt123:2:3" → "S02E03". */
