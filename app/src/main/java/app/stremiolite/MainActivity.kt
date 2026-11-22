@@ -298,7 +298,7 @@ class MainActivity : Activity() {
         screen.position = position
         when {
             row.opens != null -> push(row.opens.invoke())
-            row.action != null -> row.action.invoke()
+            row.action != null -> row.action?.invoke()
         }
     }
 
