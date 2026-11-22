@@ -30,4 +30,33 @@ object Folders {
         return null to name
     }
 
+
+    /**
+     * Add-ons whose rows and search the apps use: an add-on installed as "stick rows" takes the
+     * place of the add-on with the same id (e.g. the phone's AIOMetadata) for rows and search.
+     */
+    fun rowAddons(list: List<Addon>): List<Addon> {
+        val replaced = list.filter { it.stickRows }.map { it.id }.toSet()
+        return list.filter { it.stickRows || it.id !in replaced }
+    }
+
+    /** A row with the folder it belongs in (null = the front page) and its name without the prefix. */
+    class Entry(val addon: Addon, val catalog: Addon.Catalog, val folder: String?, val name: String)
+
+    /** "addonName|type|id", the key hidden rows are stored under. */
+    fun rowKey(a: Addon, c: Addon.Catalog) = "${a.name}|${c.type}|${c.id}"
+
+    /** Every openable, not hidden row, with its folder. */
+    fun entries(list: List<Addon>, hidden: Set<String>): List<Entry> {
+        val pairs = rowAddons(list).filter { !it.isLocal }.flatMap { a ->
+            a.catalogs.filter { openable(it) && rowKey(a, it) !in hidden }.map { a to it }
+        }
+        // A prefix used by only one row is part of a title (e.g. "UK TV: BBC, ITV…"), not a folder.
+        val prefixCount = pairs.mapNotNull { split(it.second.name).first }.groupingBy { it }.eachCount()
+        return pairs.map { (a, c) ->
+            val (prefix, rest) = split(c.name).let { (p, r) -> if (p != null && (prefixCount[p] ?: 0) >= 2) p to r else null to c.name }
+            val folder = prefix ?: if (c.required.isEmpty()) null else autoFolder(c.name)
+            Entry(a, c, folder, rest)
+        }
+    }
 }

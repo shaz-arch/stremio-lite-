@@ -21,16 +21,20 @@ jobs:
       - name: Build release APK
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon -PbuildNumber=${{ github.run_number }}
+          ./gradlew assembleRelease :linux:fatJar --no-daemon -PbuildNumber=${{ github.run_number }}
       - uses: actions/upload-artifact@v4
         with:
           name: stremio-lite-apk
           path: app/build/outputs/apk/release/*.apk
       - name: Publish download link
-        run: cp app/build/outputs/apk/release/app-release.apk stremio-lite.apk
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk stremio-lite.apk
+          cp linux/build/dist/stremio-lean-linux.jar stremio-lean-linux.jar
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
           name: Stremio Lite build ${{ github.run_number }}
           make_latest: true
-          files: stremio-lite.apk
+          files: |
+            stremio-lite.apk
+            stremio-lean-linux.jar

@@ -20,10 +20,7 @@ object Home {
      * place of the add-on with the same id (e.g. the phone's AIOMetadata) for rows and search.
      * That add-on still answers everything else (details, episodes).
      */
-    fun rowAddons(list: List<Addon> = allAddons()): List<Addon> {
-        val replaced = list.filter { it.stickRows }.map { it.id }.toSet()
-        return list.filter { it.stickRows || it.id !in replaced }
-    }
+    fun rowAddons(list: List<Addon> = allAddons()): List<Addon> = Folders.rowAddons(list)
 
     fun forget() {
         addons = null

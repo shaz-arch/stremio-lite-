@@ -267,7 +267,7 @@ object History {
     /** Counts as finished near the end: the last 8%, or the last 2 minutes (Stremio uses 90%). */
     fun isFinished(pos: Long, dur: Long) = finished(pos, dur)
 
-    private fun finished(pos: Long, dur: Long) = dur > 0 && (pos >= dur * 0.92 || dur - pos < 120_000)
+    private fun finished(pos: Long, dur: Long) = LibraryItems.finished(pos, dur)
 
     /**
      * Files what the player reported ([position]/[duration] in ms, null if the player didn't say;
@@ -294,37 +294,13 @@ object History {
             log.add(0, Finished(w.id, w.type, w.name, w.year, w.label, now))
         }
 
-        // The account's copy, updated the way Stremio's player does it.
-        val item = remote[w.id]?.let { runCatching { JSONObject(it) }.getOrNull() } ?: Sync.newItem(w.id, w.type, w.name)
-        item.put("name", w.name).put("type", w.type).put("_mtime", Sync.iso(now))
-        val st = item.optJSONObject("state") ?: JSONObject().also { item.put("state", it) }
-        st.put("lastWatched", Sync.iso(now))
-        if (st.optString("video_id") != w.videoId) {
-            st.put("overallTimeWatched", st.optLong("overallTimeWatched") + st.optLong("timeWatched"))
-            st.put("timeWatched", 0).put("flaggedWatched", 0).put("video_id", w.videoId).put("timeOffset", 0)
-        }
-        val gained = (pos - st.optLong("timeOffset")).coerceAtLeast(0)
-        st.put("timeWatched", st.optLong("timeWatched") + gained)
-        st.put("overallTimeWatched", st.optLong("overallTimeWatched") + gained)
-        if (dur > 0) st.put("duration", dur)
-        if (done) {
-            st.put("flaggedWatched", 1).put("timesWatched", st.optInt("timesWatched") + 1)
-            if (w.videoIds.isNotEmpty()) {
-                val marked = Sync.decodeWatched(st.optString("watched"), w.videoIds).toMutableSet()
-                w.videoIds.filterTo(marked) { videos[it]?.done == true }
-                marked += w.videoId
-                st.put("watched", Sync.encodeWatched(marked, w.videoIds))
-            }
-            if (w.nextVideoId != null) {
-                // Stremio's "next episode" marker: the next video with a position of 1
-                st.put("overallTimeWatched", st.optLong("overallTimeWatched") + st.optLong("timeWatched"))
-                st.put("video_id", w.nextVideoId).put("timeWatched", 0).put("flaggedWatched", 0).put("timeOffset", 1)
-            } else {
-                st.put("timeOffset", 0)
-            }
-        } else if (position != null) {
-            st.put("timeOffset", pos.coerceAtLeast(1))
-        }
+        // The account's copy, updated the way Stremio's player does it (shared with the Linux app).
+        val item = LibraryItems.update(
+            existing = remote[w.id]?.let { runCatching { JSONObject(it) }.getOrNull() },
+            id = w.id, type = w.type, name = w.name, videoId = w.videoId,
+            pos = pos, dur = dur, done = done, positionKnown = position != null,
+            videoIds = w.videoIds, alsoDone = videos.filterValues { it.done }.keys, nextVideoId = w.nextVideoId, now = now,
+        )
         remote[w.id] = item.toString()
         unsent += w.id
         save()
@@ -436,8 +412,10 @@ object History {
         arr.forEachObj { o ->
             val id = o.optString("_id")
             val type = o.optString("type")
-            if (id.isEmpty() || type == "other" || id in skip) return@forEachObj
+            if (id.isEmpty() || id in skip) return@forEachObj
             newRemote += id to o.toString()
+            // Hidden records (waiting list, shared settings) are kept, but aren't titles.
+            if (type == "other") return@forEachObj
             val name = o.optString("name")
             val removed = o.optBoolean("removed")
             val temp = o.optBoolean("temp")

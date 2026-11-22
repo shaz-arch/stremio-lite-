@@ -1,0 +1,747 @@
+package app.stremiolite.linux
+
+import app.stremiolite.Addon
+import app.stremiolite.Folders
+import app.stremiolite.Full
+import app.stremiolite.Http
+import app.stremiolite.Meta
+import app.stremiolite.MetaParse
+import app.stremiolite.Stremio
+import app.stremiolite.Video
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.EncodeHintType
+import com.google.zxing.qrcode.QRCodeWriter
+import org.json.JSONArray
+import org.json.JSONObject
+import java.net.SocketTimeoutException
+import java.net.URLEncoder
+import java.net.UnknownHostException
+
+object Net {
+    fun describe(e: Throwable): String {
+        var t: Throwable? = e
+        while (t != null) {
+            when (t) {
+                is SocketTimeoutException -> return "timed out"
+                is UnknownHostException -> return "address not found (offline?)"
+                is Http.HttpError -> return "server said ${t.code}"
+                is java.net.ConnectException -> return "connection refused"
+                is org.json.JSONException -> return "unexpected reply"
+            }
+            t = t.cause
+        }
+        return e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName
+    }
+
+    fun enc(s: String): String = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
+}
+
+/** A QR code as lines of half-block characters (dark modules drawn in the foreground colour). */
+fun qrLines(text: String): List<String> = runCatching {
+    val m = QRCodeWriter().encode(text, BarcodeFormat.QR_CODE, 0, 0, mapOf(EncodeHintType.MARGIN to 1))
+    val lines = mutableListOf<String>()
+    var y = 0
+    while (y < m.height) {
+        val sb = StringBuilder()
+        for (x in 0 until m.width) {
+            val top = m[x, y]
+            val bottom = y + 1 < m.height && m[x, y + 1]
+            sb.append(when { top && bottom -> '█'; top -> '▀'; bottom -> '▄'; else -> ' ' })
+        }
+        lines += sb.toString()
+        y += 2
+    }
+    lines
+}.getOrDefault(emptyList())
+
+// ============================================================================================
+// Sign in
+// ============================================================================================
+
+object SignIn {
+    fun screen(): Screen {
+        val linkRow = Row("   getting a code…")
+        val codeRow = Row("")
+        val status = Row("")
+        lateinit var s: Screen
+        var code: String? = null
+        var started = 0L
+        var active = false
+
+        fun poll() {
+            val c = code ?: return
+            if (!active || !App.isTop(s)) return
+            if (System.currentTimeMillis() - started > 10 * 60_000) { status.label = "This code has expired. Choose 'Get a new code'."; App.refresh(); return }
+            App.async({ Stremio.linkRead(c) }) { r ->
+                val key = r.getOrNull()
+                if (key != null && code == c) {
+                    active = false
+                    status.label = "Approved. Loading…"
+                    App.async({ runCatching { Stremio.userEmail(key) }.getOrDefault("") }) { e -> signedIn(key, e.getOrDefault("")) }
+                } else App.later(3_000) { poll() }
+            }
+        }
+
+        fun newCode() {
+            code = null
+            s.qr = null
+            status.label = ""
+            linkRow.label = "   getting a code…"
+            App.async({ Stremio.linkCreate() }) { r ->
+                r.onSuccess { lc ->
+                    code = lc.code
+                    started = System.currentTimeMillis()
+                    val link = lc.link.ifEmpty { "https://www.stremio.com/link" }
+                    linkRow.label = "   " + link.removePrefix("https://").removePrefix("http://")
+                    codeRow.label = "   " + lc.code
+                    status.label = "Waiting for you to approve it on your phone…"
+                    s.qr = qrLines(link)
+                    active = true
+                    App.later(3_000) { poll() }
+                }.onFailure { e -> status.label = "Couldn't get a code (${Net.describe(e)}). Choose 'Get a new code'." }
+                App.refresh()
+            }
+        }
+
+        s = Screen(
+            "Sign in to Stremio",
+            listOf(
+                Row("Scan the code with your phone, or open this link:"),
+                linkRow,
+                Row("and enter the code:"),
+                codeRow,
+                Row(""),
+                status,
+                Row("────────────────────"),
+                Row("Get a new code", action = { newCode() }),
+                Row("Use email and password instead", action = { askEmail() }),
+                Row("Quit", action = { App.quit() }),
+            ),
+        )
+        s.onShow = { if (code == null) newCode() else { active = true; poll() } }
+        s.onHide = { active = false }
+        s.pos = 7
+        return s
+    }
+
+    private fun askEmail() {
+        App.ask("Email") { email ->
+            if (email.isNullOrBlank()) return@ask
+            App.ask("Password", hidden = true) { pw ->
+                if (pw.isNullOrEmpty()) return@ask
+                App.toast("Signing in…")
+                App.async({ Stremio.login(email.trim(), pw) }) { r ->
+                    r.onSuccess { key -> signedIn(key, email.trim()) }
+                        .onFailure { e -> App.toast("Couldn't sign in: " + if (e is Stremio.ApiError) e.message else Net.describe(e)) }
+                }
+            }
+        }
+    }
+
+    private fun signedIn(key: String, email: String) {
+        Account.save(key, email)
+        Lib.reset()
+        Home.forget()
+        App.resetTo(Home.screen())
+    }
+}
+
+// ============================================================================================
+// Home and the Index
+// ============================================================================================
+
+object Home {
+    private var addons: List<Addon>? = null
+    private var loading = false
+    private var error: String? = null
+    private var rebuild: (() -> Unit)? = null
+
+    fun all(): List<Addon> = addons ?: emptyList()
+    fun rowAddons() = Folders.rowAddons(all())
+    fun forget() { addons = null; error = null }
+    fun redraw() { rebuild?.invoke() }
+
+    fun screen(): Screen {
+        lateinit var s: Screen
+        val status = Row("")
+        fun build() {
+            val list = addons
+            val rows = mutableListOf<Row>()
+            status.label = when {
+                loading && list == null -> "Loading your rows…"
+                error != null && list == null -> "Couldn't load your rows: $error"
+                error != null -> "Showing saved rows (refresh failed: $error)"
+                else -> ""
+            }
+            if (status.label.isNotEmpty()) rows += status
+            val cw = Lib.continueWatching()
+            val lib = Lib.library()
+            val waiting = Waiting.list()
+            rows += Row("Search", "/  ►", opens = null, action = { Search.start() })
+            rows += Row("Continue watching", if (cw.isEmpty()) "nothing yet" else "${cw.size}  ►", opens = { continueScreen() })
+            rows += Row("Library", if (lib.isEmpty()) "empty" else "${lib.size}  ►", opens = { libraryScreen() })
+            if (waiting.isNotEmpty()) rows += Row("Waiting for streams", Waiting.summary(), opens = { Waiting.screen() })
+            rows += Row("────────────────────")
+            if (list != null) {
+                val entries = Folders.entries(list, Prefs.hiddenRows)
+                val main = entries.groupingBy { it.addon }.eachCount().maxByOrNull { it.value }?.key
+                entries.filter { it.folder == null }.forEach { e ->
+                    val tag = if (e.addon === main) "" else e.addon.name.substringBefore('|').trim().take(18) + " · "
+                    rows += Row(e.name, tag + MetaParse.typeLabel(e.catalog.type) + "  ►", opens = { Catalogs.screen(e.addon, e.catalog) },
+                        play = null)
+                }
+                val folders = Index.folderRows(entries)
+                if (folders.isNotEmpty()) {
+                    rows += Row("──── Index ─────────────")
+                    rows += folders
+                }
+                rows += Row("────────────────────")
+            }
+            rows += Row("Settings", opens = { Settings.screen() })
+            rows += Row("Reload my rows and add-ons", action = { load(force = true) })
+            rows += Row(info("Signed in as", Account.email.ifEmpty { "?" }))
+            rows += Row("About", opens = { about() })
+            rows += Row("Sign out", opens = { signOut() })
+            s.rows = rows
+            App.refresh()
+        }
+        rebuild = { build() }
+        s = Screen("Stremio Lean", listOf(Row("Loading…")), tag = "Linux")
+        s.onShow = {
+            if (addons == null) {
+                runCatching { Stremio.parseAddons(Store.file("addons.json").readText()) }.onSuccess { addons = it }
+                load()
+            }
+            Lib.pull { build() }
+            Updates.check { build() }
+            build()
+        }
+        return s
+    }
+
+    fun load(force: Boolean = false) {
+        val key = Account.authKey ?: return
+        if (loading) return
+        loading = true
+        rebuild?.invoke()
+        App.async({
+            val json = Stremio.withLiveManifests(Stremio.addonsJson(key))
+            json to Stremio.parseAddons(json)
+        }) { r ->
+            loading = false
+            r.onSuccess { (json, list) ->
+                addons = list
+                error = null
+                runCatching { Store.file("addons.json").writeText(json) }
+                if (force) Lib.pull(force = true) { rebuild?.invoke() }
+            }.onFailure { e ->
+                error = if (e is Stremio.ApiError) e.message else Net.describe(e)
+                if (e is Stremio.ApiError && e.message?.contains("session", true) == true) {
+                    App.toast("Your sign-in has expired: sign in again")
+                    Account.clear()
+                    App.resetTo(SignIn.screen())
+                }
+            }
+            rebuild?.invoke()
+        }
+    }
+
+    private fun continueScreen(): Screen {
+        val rows = Lib.continueWatching().map { i ->
+            val left = if (i.upNext) "next episode" else if (i.duration > 0) "${((i.duration - i.offset) / 60_000).coerceAtLeast(1)} min left" else ""
+            Row(i.name, left + "  ►", opens = { Details.screenFor(i.id, i.type, i.name) }, play = { App.push(Details.screenFor(i.id, i.type, i.name, autoPlay = true)) })
+        }
+        return Screen("Continue watching", rows.ifEmpty { listOf(Row("Nothing yet.")) })
+    }
+
+    private fun libraryScreen(): Screen {
+        val rows = Lib.library().map { i ->
+            Row(i.name, MetaParse.typeLabel(i.type) + "  ►", opens = { Details.screenFor(i.id, i.type, i.name) })
+        }
+        return Screen("Library", rows.ifEmpty { listOf(Row("Your library is empty.")) })
+    }
+
+    private fun about() = Screen(
+        "About",
+        listOf(
+            Row(info("Stremio Lean", "Linux, build ${Updates.current}")),
+            Row(info("Player", Prefs.player)),
+            Row(info("Settings folder", Store.dir.path)),
+            Row(""),
+            Row("A text-menu way to browse your Stremio add-ons and play"),
+            Row("through mpv. Not made by or connected with Stremio."),
+        ),
+    )
+
+    private fun signOut() = Screen(
+        "Sign out?",
+        listOf(
+            Row("No, go back", action = { App.back() }),
+            Row("Yes, sign out of this computer", action = {
+                Account.clear(); Lib.reset(); forget()
+                App.resetTo(SignIn.screen())
+            }),
+        ),
+    )
+}
+
+object Index {
+    private fun parts(e: Folders.Entry) = e.folder!!.split(" > ").map { it.trim() }.filter { it.isNotEmpty() }
+
+    fun folderRows(entries: List<Folders.Entry>): List<Row> = groupRows(entries.filter { it.folder != null }, 0)
+
+    private fun groupRows(list: List<Folders.Entry>, depth: Int): List<Row> {
+        val groups = LinkedHashMap<String, MutableList<Folders.Entry>>()
+        list.forEach { e -> parts(e).getOrNull(depth)?.let { groups.getOrPut(it) { mutableListOf() } += e } }
+        groups.remove("More")?.let { groups["More"] = it }
+        return groups.map { (name, l) -> Row(name, "${l.size}  ►", opens = { folder(name, l, depth + 1) }) }
+    }
+
+    private fun folder(name: String, list: List<Folders.Entry>, depth: Int): Screen {
+        val main = list.groupingBy { it.addon }.eachCount().maxByOrNull { it.value }?.key
+        val subs = groupRows(list, depth)
+        val direct = list.filter { parts(it).size <= depth }.map { e ->
+            val tag = if (e.addon === main) "" else e.addon.name.substringBefore('|').trim().take(18) + " · "
+            Row(e.name, tag + MetaParse.typeLabel(e.catalog.type) + "  ►", opens = { Catalogs.screen(e.addon, e.catalog, e.name) })
+        }
+        val title = if (depth > 1) parts(list.first()).take(depth).joinToString(" · ") else name
+        return Screen(title, subs + direct, tag = "Index").also { it.key = "index:$title" }
+    }
+}
+
+// ============================================================================================
+// Catalogue rows
+// ============================================================================================
+
+object Catalogs {
+    private const val LOAD_AHEAD = 15
+
+    private fun pageUrl(a: Addon, c: Addon.Catalog, skip: Int) =
+        a.base + "/catalog/" + Net.enc(c.type) + "/" + Net.enc(c.id) + (if (skip > 0) "/skip=$skip" else "") + ".json"
+
+    fun detail(m: Meta): String {
+        val kind = when (m.type) { "movie" -> "Movie"; "series" -> "Series"; else -> m.type }
+        val rating = if (m.rating.isNotBlank()) "★ ${m.rating}" else ""
+        return "${m.year.take(9).padEnd(9)} ${rating.padEnd(6)} ${kind.padEnd(6)}"
+    }
+
+    fun mark(m: Meta): String? = when {
+        m.type == "movie" && Lib.filmWatched(m.id) -> "✓"
+        Lib.info(m.id)?.continuing == true -> "▶"
+        else -> null
+    }
+
+    fun row(a: Addon?, m: Meta): Row = Row(
+        (mark(m)?.let { "$it " } ?: "") + m.name, detail(m),
+        opens = { Details.screen(a, m) },
+        play = { App.push(Details.screen(a, m, autoPlay = true)) },
+    )
+
+    fun screen(a: Addon, c: Addon.Catalog, title: String = c.name): Screen {
+        val items = mutableListOf<Meta>()
+        val seen = HashSet<String>()
+        var fetched = 0
+        var loading = false
+        var ended = false
+        var error: String? = null
+        lateinit var s: Screen
+        lateinit var loadMore: () -> Unit
+        val placeKey = "cat:${a.transportUrl}|${c.type}|${c.id}"
+        var pending: Int? = App.place(placeKey)?.takeIf { it in 1..400 }
+
+        fun rebuild() {
+            val rows = items.mapTo(ArrayList(items.size + 2)) { row(a, it) }
+            when {
+                error != null -> { rows += Row("Couldn't load: $error"); rows += Row("Try again", action = { error = null; loadMore() }) }
+                loading -> rows += Row(if (items.isEmpty()) "Loading…" else "Loading more…")
+                ended -> rows += Row(if (items.isEmpty()) "This row is empty." else "──── end of list: ${items.size} titles ────")
+            }
+            s.rows = rows
+            pending?.let { want ->
+                when {
+                    want < items.size -> { s.moveTo = want; pending = null }
+                    ended || error != null -> { s.moveTo = (items.size - 1).coerceAtLeast(0); pending = null }
+                    !loading -> App.later(0) { loadMore() }
+                }
+            }
+            App.refresh()
+        }
+
+        loadMore = {
+            if (!loading && !ended) {
+                loading = true
+                rebuild()
+                val url = pageUrl(a, c, fetched)
+                App.async({ MetaParse.parse(Http.get(url)) }) { r ->
+                    loading = false
+                    r.onSuccess { page ->
+                        fetched += page.size
+                        var added = 0
+                        for (m in page) if (seen.add(m.type + ":" + m.id)) { items += m; added++ }
+                        if (page.isEmpty() || added == 0) ended = true
+                    }.onFailure { e -> error = Net.describe(e) }
+                    rebuild()
+                }
+            }
+        }
+
+        s = Screen(title, listOf(Row("Loading…")), tag = MetaParse.typeLabel(c.type))
+        s.key = placeKey
+        s.onShow = { if (items.isEmpty() && !loading && error == null && !ended) loadMore() else if (items.isNotEmpty()) rebuild() }
+        s.onSelect = { pos -> if (pos >= items.size - LOAD_AHEAD && error == null) loadMore() }
+        return s
+    }
+}
+
+// ============================================================================================
+// Search
+// ============================================================================================
+
+object Search {
+    fun start() {
+        if (Account.authKey == null) return
+        App.ask("Search") { q -> if (!q.isNullOrBlank()) App.push(results(q.trim())) }
+    }
+
+    private fun results(q: String): Screen {
+        lateinit var s: Screen
+        val sources = Folders.rowAddons(Home.all()).filter { !it.isLocal }.flatMap { a -> a.catalogs.filter { it.searchable }.map { a to it } }
+        val found = LinkedHashMap<String, Pair<Addon, Meta>>()
+        var answered = 0
+        fun build() {
+            val rows = mutableListOf<Row>()
+            rows += Row(if (answered < sources.size) "Searching… ${answered} of ${sources.size}" else "${found.size} results for \"$q\"")
+            rows += Row("────────────────────")
+            found.values.forEach { (a, m) -> rows += Catalogs.row(a, m) }
+            s.rows = rows
+            App.refresh()
+        }
+        s = Screen("Search: $q", listOf(Row("Searching…")))
+        if (sources.isEmpty()) s.rows = listOf(Row("None of your add-ons can search."))
+        sources.forEach { (a, c) ->
+            val url = a.base + "/catalog/" + Net.enc(c.type) + "/" + Net.enc(c.id) + "/search=" + Net.enc(q) + ".json"
+            App.async({ MetaParse.parse(Http.get(url)) }) { r ->
+                answered++
+                r.getOrNull()?.forEach { m -> found.putIfAbsent(m.type + ":" + m.id, a to m) }
+                build()
+            }
+        }
+        s.pos = 2
+        return s
+    }
+}
+
+// ============================================================================================
+// Title details, seasons and episodes
+// ============================================================================================
+
+object Details {
+    private val cache = HashMap<String, Full>()
+
+    private fun fetch(from: Addon?, type: String, id: String): Full {
+        cache["$type/$id"]?.let { return it }
+        val candidates = (listOfNotNull(from) + Home.all()).distinct().filter { it.supports("meta", type, id) }
+        if (candidates.isEmpty()) throw IllegalStateException("none of your add-ons can describe this title")
+        var last: Throwable? = null
+        for (a in candidates) {
+            try {
+                val m = JSONObject(Http.get(a.base + "/meta/" + Net.enc(type) + "/" + Net.enc(id) + ".json")).optJSONObject("meta") ?: continue
+                val full = MetaParse.full(m, a.name)
+                cache["$type/$id"] = full
+                return full
+            } catch (e: Exception) { last = e }
+        }
+        throw last ?: IllegalStateException("no details found")
+    }
+
+    fun screenFor(id: String, type: String, name: String, autoPlay: Boolean = false): Screen =
+        screen(null, Meta(id, type, name, "", "", "", emptyList(), ""), autoPlay)
+
+    private fun isShow(f: Full) = f.type != "movie" && f.videos.any { it.season > 0 || it.episode > 0 }
+
+    /** What "play" means: a film (resuming if started); for a show, the episode in progress, the next one, or the first not watched. */
+    private fun mainVideo(f: Full): Video? {
+        if (!isShow(f)) return null
+        val eps = MetaParse.ordered(f)
+        val info = Lib.info(f.id)
+        if (info != null && info.continuing) eps.firstOrNull { it.id == info.videoId }?.let { return it }
+        val done = Lib.watchedEpisodes(f.id, MetaParse.stremioOrder(f))
+        return eps.firstOrNull { it.id !in done && !upcoming(it) } ?: eps.firstOrNull()
+    }
+
+    fun watchFor(f: Full, v: Video?): Watch {
+        if (v == null) return Watch(f.id, f.type, f.name, f.id, "", f.runtime)
+        val eps = MetaParse.ordered(f)
+        val next = eps.getOrNull(eps.indexOfFirst { it.id == v.id } + 1)?.takeIf { !upcoming(it) }
+        return Watch(f.id, f.type, f.name, v.id, MetaParse.epLabel(v), f.runtime, MetaParse.stremioOrder(f), next?.id, next?.let { MetaParse.epLabel(it) })
+    }
+
+    private fun title(f: Full, v: Video?) = if (v == null) f.name else "${f.name} ${MetaParse.epLabel(v)}"
+
+    private fun playRows(f: Full, v: Video?): List<Row> {
+        val w = watchFor(f, v)
+        val at = Lib.resumeAt(f.id, w.videoId)
+        val t = title(f, v)
+        val rows = mutableListOf<Row>()
+        val what = if (v != null) " ${MetaParse.epLabel(v)}" else ""
+        if (at > 0) {
+            rows += Row("Resume$what from ${clock(at)}", "►", opens = { Play.best(f.type, w.videoId, t, w, at) })
+            rows += Row("Play$what from the start", opens = { Play.best(f.type, w.videoId, t, w, 0) })
+        } else {
+            rows += Row("Play best$what", "►", opens = { Play.best(f.type, w.videoId, t, w, 0) })
+        }
+        rows += Row("Choose a stream", opens = { Play.list(f.type, w.videoId, t, w, at) })
+        return rows
+    }
+
+    private fun rows(f: Full): List<Row> {
+        val rows = mutableListOf<Row>()
+        if (!isShow(f) && f.videos.isEmpty()) rows += playRows(f, null)
+        if (isShow(f)) {
+            mainVideo(f)?.let { rows += playRows(f, it) }
+            val seasons = MetaParse.ordered(f).groupBy { it.season }
+            rows += Row("────────────────────")
+            seasons.forEach { (n, eps) ->
+                val done = Lib.watchedEpisodes(f.id, MetaParse.stremioOrder(f))
+                val left = eps.count { it.id !in done && !upcoming(it) }
+                rows += Row("Season $n", (if (left == 0) "✓ " else "") + "${eps.size} episodes  ►", opens = { episodes(f, n, eps) })
+            }
+        } else if (f.videos.isNotEmpty()) {
+            rows += Row("────────────────────")
+            f.videos.forEach { v -> rows += Row(v.title.ifEmpty { v.id }, "►", opens = { episode(f, v) }) }
+        }
+        rows += Row("────────────────────")
+        lateinit var lib: Row
+        lib = Row(if (Lib.inLibrary(f.id)) "Remove from library" else "Add to library", action = {
+            val added = Lib.toggleLibrary(f.id, f.type, f.name)
+            lib.label = if (added) "Remove from library" else "Add to library"
+            App.toast(if (added) "Added to library" else "Removed from library")
+        })
+        rows += lib
+        if (Lib.info(f.id)?.continuing == true) rows += Row("Remove from Continue watching", action = {
+            Lib.removeFromContinue(f.id); App.toast("Removed from Continue watching")
+        })
+        if (f.type == "movie") {
+            lateinit var wait: Row
+            fun label() = if (Waiting.has(f.id)) "Stop waiting for a stream" else "Tell me when a stream is available"
+            wait = Row(label(), action = {
+                if (Waiting.has(f.id)) Waiting.remove(f.id) else Waiting.add(f.id, f.type, f.name, f.year)
+                wait.label = label()
+                App.refresh()
+            })
+            rows += wait
+        }
+        rows += Row("────────────────────")
+        rows += Row(info("Type", if (f.type == "movie") "Movie" else if (f.type == "series") "Series" else f.type))
+        if (f.year.isNotBlank()) rows += Row(info("Year", f.year))
+        if (f.rating.isNotBlank()) rows += Row(info("IMDb rating", "★ ${f.rating}"))
+        if (f.runtime.isNotBlank()) rows += Row(info("Runtime", f.runtime))
+        if (f.genres.isNotEmpty()) rows += Row(info("Genres", f.genres.joinToString(", ")))
+        if (f.director.isNotEmpty()) rows += Row(info("Director", f.director.joinToString(", ")))
+        if (f.cast.isNotEmpty()) rows += Row(info("Cast", f.cast.take(5).joinToString(", ")))
+        if (f.description.isNotBlank()) {
+            rows += Row("────────────────────")
+            MetaParse.wrap(f.description, App.columns()).forEach { rows += Row(it) }
+        }
+        rows += Row("────────────────────")
+        rows += Row(info("Details from", f.source.substringBefore('|').trim()))
+        return rows
+    }
+
+    fun screen(from: Addon?, item: Meta, autoPlay: Boolean = false): Screen {
+        val loading = Row("Loading details…")
+        var full: Full? = null
+        var started = false
+        lateinit var s: Screen
+        s = Screen(item.name, listOf(loading), tag = item.year)
+        s.onShow = {
+            val f = full
+            if (f != null) { s.rows = rows(f); App.refresh() }
+            else if (!started) {
+                started = true
+                App.async({ fetch(from, item.type, item.id) }) { r ->
+                    r.onSuccess { loaded ->
+                        full = loaded
+                        s.rows = rows(loaded)
+                        if (autoPlay && App.isTop(s)) {
+                            val v = mainVideo(loaded)
+                            val w = watchFor(loaded, v)
+                            App.push(Play.best(loaded.type, w.videoId, title(loaded, v), w, Lib.resumeAt(loaded.id, w.videoId)))
+                        }
+                    }.onFailure { e -> loading.label = "Couldn't load details: ${Net.describe(e)}" }
+                    App.refresh()
+                }
+            }
+        }
+        return s
+    }
+
+    private fun episodes(f: Full, season: Int, eps: List<Video>): Screen {
+        val s = Screen("${f.name} · Season $season", emptyList())
+        fun build() {
+            val done = Lib.watchedEpisodes(f.id, MetaParse.stremioOrder(f))
+            val info = Lib.info(f.id)
+            s.rows = eps.map { v ->
+                val mark = when {
+                    v.id in done -> "✓ "
+                    info?.continuing == true && info.videoId == v.id -> "▶ "
+                    else -> "  "
+                }
+                val when_ = if (upcoming(v)) "out ${v.released}" else v.released
+                Row(mark + MetaParse.epLabel(v) + "  " + v.title, when_ + "  ►", opens = { episode(f, v) }, play = {
+                    val w = watchFor(f, v)
+                    App.push(Play.best(f.type, w.videoId, title(f, v), w, Lib.resumeAt(f.id, w.videoId)))
+                })
+            }
+        }
+        build()
+        s.onShow = { build(); App.refresh() }
+        s.key = "eps:${f.id}:$season"
+        return s
+    }
+
+    private fun episode(f: Full, v: Video): Screen {
+        val s = Screen("${f.name} ${MetaParse.epLabel(v)}", emptyList())
+        s.onShow = {
+            val rows = mutableListOf<Row>()
+            if (upcoming(v)) rows += Row("Not out yet: ${v.released}")
+            rows += playRows(f, v)
+            rows += Row("────────────────────")
+            if (v.title.isNotBlank()) rows += Row(v.title)
+            if (v.released.isNotBlank()) rows += Row(info("Released", v.released))
+            if (v.overview.isNotBlank()) MetaParse.wrap(v.overview, App.columns()).forEach { rows += Row(it) }
+            s.rows = rows
+            App.refresh()
+        }
+        return s
+    }
+
+    private fun upcoming(v: Video): Boolean = v.released.length == 10 && v.released > java.time.LocalDate.now().toString()
+}
+
+fun clock(ms: Long): String {
+    val s = ms / 1000
+    return if (s >= 3600) "%d:%02d:%02d".format(s / 3600, s / 60 % 60, s % 60) else "%d:%02d".format(s / 60, s % 60)
+}
+
+// ============================================================================================
+// Settings
+// ============================================================================================
+
+object Settings {
+    fun screen(): Screen {
+        lateinit var s: Screen
+        fun build() {
+            s.rows = listOf(
+                Row("Enter on a line to change it"),
+                Row("────────────────────"),
+                Row("Subtitle language", "◄ ${Prefs.language().name} ►", action = {
+                    Prefs.subLang = (Prefs.subLang + 1) % app.stremiolite.Languages.all.size; Prefs.syncOut(); build()
+                }),
+                Row("Auto-play next episode", "◄ ${if (Prefs.autoNext) "On" else "Off"} ►", action = {
+                    Prefs.autoNext = !Prefs.autoNext; Prefs.syncOut(); build()
+                }),
+                Row("Theme", "◄ ${Look.theme().name} ►", action = {
+                    Prefs.theme = (Prefs.theme + 1) % themes.size; Prefs.syncOut(); build()
+                }),
+                Row("Hide rows", "►", opens = { rowsScreen() }),
+                Row("────────────────────"),
+                Row("Player command", Prefs.player, action = {
+                    App.ask("Player command (e.g. mpv)", Prefs.player) { v -> if (!v.isNullOrBlank()) { Prefs.player = v.trim(); build() } }
+                }),
+                Row("Extra player options", Prefs.playerArgs.ifEmpty { "none" }, action = {
+                    App.ask("Extra options (e.g. --fs --volume=80)", Prefs.playerArgs) { v -> if (v != null) { Prefs.playerArgs = v.trim(); build() } }
+                }),
+                Row("────────────────────"),
+                Row(info("Version", "build ${Updates.current}")),
+                Row("Check for updates", action = { Updates.checkNow() }),
+            )
+            App.refresh()
+        }
+        s = Screen("Settings", emptyList())
+        build()
+        s.pos = 2
+        return s
+    }
+
+    private fun rowsScreen(): Screen {
+        lateinit var s: Screen
+        fun build() {
+            val pairs = Folders.rowAddons(Home.all()).filter { !it.isLocal }.flatMap { a -> a.catalogs.filter { Folders.openable(it) }.map { a to it } }
+            val hidden = Prefs.hiddenRows
+            val rows = mutableListOf(
+                Row("Enter switches a row between shown and hidden (shared with your other devices)"),
+                Row("Show all rows", action = { Prefs.hiddenRows = emptySet(); Prefs.syncOut(); build(); Home.redraw() }),
+                Row("────────────────────"),
+            )
+            pairs.forEach { (a, c) ->
+                val key = Folders.rowKey(a, c)
+                rows += Row("${c.name}  ·  ${MetaParse.typeLabel(c.type)}", if (key in hidden) "hidden" else "shown", action = {
+                    val now = Prefs.hiddenRows.toMutableSet()
+                    if (key in now) now -= key else now += key
+                    Prefs.hiddenRows = now
+                    Prefs.syncOut()
+                    build()
+                    Home.redraw()
+                })
+            }
+            s.rows = rows
+            App.refresh()
+        }
+        s = Screen("Hide rows", emptyList())
+        build()
+        s.pos = 3
+        return s
+    }
+}
+
+// ============================================================================================
+// Waiting for streams (the list shared with the phone; the phone does the background checks)
+// ============================================================================================
+
+object Waiting {
+    private const val ID = "stremiolite:waiting"
+
+    class Entry(val id: String, val type: String, val name: String, val year: String, val ready: Long)
+
+    fun list(): List<Entry> {
+        val name = Lib.raw(ID)?.optString("name") ?: return emptyList()
+        val arr = runCatching { JSONArray(name) }.getOrNull() ?: return emptyList()
+        return (0 until arr.length()).mapNotNull { i -> arr.optJSONObject(i)?.let { Entry(it.optString("id"), it.optString("type"), it.optString("name"), it.optString("year"), it.optLong("ready")) } }
+            .filter { it.id.isNotEmpty() }
+    }
+
+    fun has(id: String) = list().any { it.id == id }
+
+    private fun save(list: List<Entry>) {
+        val item = Lib.raw(ID) ?: app.stremiolite.Sync.newItem(ID, "other", "[]")
+        val arr = JSONArray()
+        list.forEach { arr.put(JSONObject().put("id", it.id).put("type", it.type).put("name", it.name).put("year", it.year).put("ready", it.ready)) }
+        item.put("name", arr.toString()).put("removed", true).put("temp", false).put("_mtime", app.stremiolite.Sync.iso(System.currentTimeMillis()))
+        Lib.put(item)
+    }
+
+    fun add(id: String, type: String, name: String, year: String) {
+        save(list().filter { it.id != id } + Entry(id, type, name, year, 0))
+        App.toast("Added to Waiting for streams (your phone checks it)")
+    }
+
+    fun remove(id: String) {
+        save(list().filter { it.id != id })
+        App.toast("Removed from Waiting for streams")
+    }
+
+    fun summary(): String {
+        val l = list()
+        val ready = l.count { it.ready > 0 }
+        return (if (ready > 0) "$ready ready · " else "") + "${l.size - ready} waiting  ►"
+    }
+
+    fun screen(): Screen {
+        val rows = list().sortedWith(compareByDescending<Entry> { it.ready }.thenBy { it.name }).map { e ->
+            Row((if (e.ready > 0) "● " else "") + e.name + if (e.year.isNotEmpty()) " (${e.year})" else "",
+                if (e.ready > 0) "ready  ►" else "waiting  ►", opens = { Details.screenFor(e.id, e.type, e.name) })
+        }
+        return Screen("Waiting for streams", rows.ifEmpty { listOf(Row("Nothing waiting.")) })
+    }
+}

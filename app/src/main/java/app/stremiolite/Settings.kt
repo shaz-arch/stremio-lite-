@@ -99,7 +99,7 @@ object Settings {
     /** Lists show watched films with a ✓, or leave them out. */
     fun hideWatched(c: Context) = prefs(c).getBoolean("hideWatched", false)
 
-    fun rowKey(a: Addon, c: Addon.Catalog) = "${a.name}|${c.type}|${c.id}"
+    fun rowKey(a: Addon, c: Addon.Catalog) = Folders.rowKey(a, c)
 
     fun hiddenRows(c: Context): Set<String> = prefs(c).getStringSet("hiddenRows", emptySet()) ?: emptySet()
 
