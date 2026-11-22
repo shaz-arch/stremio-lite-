@@ -61,7 +61,7 @@ object Settings {
     private fun rowsScreen(app: MainActivity): Screen {
         lateinit var screen: Screen
         fun build(): List<Row> {
-            val pairs = Home.allAddons().filter { !it.isLocal }.flatMap { a -> a.catalogs.filter { it.required.isEmpty() }.map { a to it } }
+            val pairs = Home.allAddons().filter { !it.isLocal }.flatMap { a -> a.catalogs.filter { Index.openable(it) }.map { a to it } }
             if (pairs.isEmpty()) return listOf(Row("Your rows are still loading. Go back and try again in a moment."))
             val hidden = hiddenRows(app)
             val rows = mutableListOf(
@@ -82,7 +82,7 @@ object Settings {
             }
             return rows
         }
-        screen = Screen("Hide Home rows", build())
+        screen = Screen("Hide rows", build())
         screen.position = 3
         return screen
     }
@@ -135,7 +135,7 @@ object Settings {
                 Row("Press OK on a line to change it"), Row("────────────────────"), playerRow, langRow, nextRow,
                 Row("────────────────────"),
                 themeRow, sizeRow,
-                Row("Hide Home rows", "►", opens = { rowsScreen(app) }),
+                Row("Hide rows", "►", opens = { rowsScreen(app) }),
                 Row("────────────────────"),
                 Row(info("App version", BuildConfig.VERSION_NAME)),
                 updateRow,

@@ -117,20 +117,23 @@ object Home {
     }
 
     /**
-     * Every catalogue that Stremio would show on its home screen (no required extras),
-     * in add-on order then catalogue order, so it matches the Stremio home layout.
+     * The front page (home rows with no folder prefix, in add-on order), then the Index of folders.
      */
     private fun homeRows(app: MainActivity, list: List<Addon>): List<Row> {
-        val hidden = Settings.hiddenRows(app)
-        val pairs = list.filter { !it.isLocal }.flatMap { a ->
-            a.catalogs.filter { it.required.isEmpty() && Settings.rowKey(a, it) !in hidden }.map { c -> a to c }
-        }
+        val entries = Index.entries(app, list)
+        val front = entries.filter { it.folder == null }
         // The add-on with the most rows (AIOMetadata) gets no name tag; others are labelled.
-        val main = pairs.groupingBy { it.first }.eachCount().maxByOrNull { it.value }?.key
-        return pairs.map { (a, c) ->
-            val tag = if (a === main) "" else shortName(a.name) + " · "
-            Row(c.name, tag + Catalogs.typeLabel(c.type) + "  ►", opens = { Catalogs.screen(app, a, c) })
+        val main = entries.groupingBy { it.addon }.eachCount().maxByOrNull { it.value }?.key
+        val rows = front.mapTo(mutableListOf()) { e ->
+            val tag = if (e.addon === main) "" else shortName(e.addon.name) + " · "
+            Row(e.name, tag + Catalogs.typeLabel(e.catalog.type) + "  ►", opens = { Catalogs.screen(app, e.addon, e.catalog) })
         }
+        val folders = Index.folderRows(app, entries)
+        if (folders.isNotEmpty()) {
+            rows += Row("──── Index ─────────────")
+            rows += folders
+        }
+        return rows
     }
 
     private fun continueScreen(app: MainActivity): Screen {

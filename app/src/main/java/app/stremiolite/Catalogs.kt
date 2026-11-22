@@ -73,7 +73,7 @@ object Catalogs {
         return "${m.year.take(9).padEnd(9)} ${rating.padEnd(6)} ${kind.padEnd(6)}"
     }
 
-    fun screen(app: MainActivity, a: Addon, c: Addon.Catalog): Screen {
+    fun screen(app: MainActivity, a: Addon, c: Addon.Catalog, title: String = c.name): Screen {
         val items = mutableListOf<Meta>()
         val seen = HashSet<String>()
         var fetched = 0
@@ -123,7 +123,7 @@ object Catalogs {
             }
         }
 
-        screen = Screen(c.name, listOf(Row("Loading…")), tag = typeLabel(c.type))
+        screen = Screen(title, listOf(Row("Loading…")), tag = typeLabel(c.type))
         screen.onShow = { if (items.isEmpty() && !loading && error == null && !ended) loadMore() }
         screen.onSelect = { pos -> if (pos >= items.size - LOAD_AHEAD && error == null) loadMore() }
         return screen
