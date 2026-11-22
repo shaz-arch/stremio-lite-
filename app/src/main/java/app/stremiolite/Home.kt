@@ -98,7 +98,7 @@ object Home {
         rebuildHome?.invoke()
         Net.async({
             val email = runCatching { Stremio.userEmail(key) }.getOrDefault("")
-            val json = Stremio.addonsJson(key)
+            val json = Stremio.withLiveManifests(Stremio.addonsJson(key))
             Triple(email, json, Stremio.parseAddons(json))
         }) { r ->
             loading = false
@@ -250,11 +250,44 @@ object Home {
             "Your add-ons",
             listOf(summary, Row("────────────────────")) +
                 rows.map { it.second } +
-                listOf(Row("────────────────────"), Row("Check connections again", action = { checkAll() })),
+                listOf(
+                    Row("────────────────────"),
+                    Row("Check connections again", action = { checkAll() }),
+                    Row("Install or replace an add-on by link", "►", action = { askInstall(app) }),
+                ),
         )
         screen.position = 2
         screen.onShow = { if (checks.isEmpty()) checkAll() else update() }
         return screen
+    }
+
+    /** Paste an add-on's link (https:// or stremio://). Replaces an installed copy of the same add-on. */
+    private fun askInstall(app: MainActivity) {
+        val key = Account.authKey(app) ?: return
+        val input = android.widget.EditText(app).apply {
+            hint = "https://…/manifest.json"
+            setSingleLine()
+        }
+        android.app.AlertDialog.Builder(app)
+            .setTitle("Add-on link")
+            .setMessage("Paste the add-on's install link. If you already have this add-on (e.g. AIOMetadata), it is replaced.")
+            .setView(input)
+            .setPositiveButton("Install") { _, _ ->
+                val link = input.text.toString().trim()
+                if (link.isEmpty()) return@setPositiveButton
+                val status = Screen("Installing", listOf(Row("Installing the add-on…")))
+                app.push(status)
+                Net.async({ Stremio.installAddon(key, link) }) { r ->
+                    status.rows = r.fold(
+                        { name -> listOf(Row("Installed: $name"), Row("Your rows will reload on Home.")) },
+                        { e -> listOf(Row("Couldn't install: " + if (e is Stremio.ApiError) e.message else Net.describe(e))) },
+                    )
+                    app.refresh(status)
+                    if (r.isSuccess) { forget() }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun addonDetails(app: MainActivity, a: Addon): Screen {

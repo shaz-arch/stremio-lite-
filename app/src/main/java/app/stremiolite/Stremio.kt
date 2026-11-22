@@ -56,6 +56,74 @@ object Stremio {
         JSONObject().put("type", "AddonCollectionGet").put("authKey", authKey).put("update", true),
     ).toString()
 
+    /**
+     * The collection with each add-on's manifest fetched live from the add-on itself.
+     * Stremio caps the size of what it stores, so the account may hold a slimmed copy;
+     * the live manifest has every catalogue. Keeps the stored copy if an add-on can't be reached.
+     */
+    fun withLiveManifests(json: String): String {
+        val root = JSONObject(json)
+        val arr = root.optJSONArray("addons") ?: return json
+        val threads = (0 until arr.length()).mapNotNull { i ->
+            val o = arr.optJSONObject(i) ?: return@mapNotNull null
+            val url = o.optString("transportUrl")
+            if (!url.startsWith("http") || "127.0.0.1" in url || "localhost" in url) return@mapNotNull null
+            Thread {
+                runCatching { JSONObject(Net.get(url, timeoutMs = 8_000)) }.getOrNull()
+                    ?.takeIf { it.has("id") && it.has("resources") }
+                    ?.let { m -> synchronized(o) { o.put("manifest", m) } }
+            }.also { it.start() }
+        }
+        threads.forEach { it.join(10_000) }
+        return root.toString()
+    }
+
+    /** A copy small enough for Stremio's size cap: home and search rows only, without option lists. */
+    fun slim(manifest: JSONObject): JSONObject {
+        val m = JSONObject(manifest.toString())
+        val cats = m.optJSONArray("catalogs") ?: return m
+        val keep = JSONArray()
+        for (i in 0 until cats.length()) {
+            val c = cats.optJSONObject(i) ?: continue
+            val extras = c.optJSONArray("extra")
+            var needed = false
+            if (extras != null) for (j in 0 until extras.length()) {
+                val e = extras.optJSONObject(j) ?: continue
+                if (e.optBoolean("isRequired") && e.optString("name") != "search") needed = true
+                e.remove("options")
+            }
+            if (!needed && keep.length() < 60) keep.put(c)
+        }
+        m.put("catalogs", keep)
+        return m
+    }
+
+    /**
+     * Installs an add-on from its link. One with the same id (e.g. an older AIOMetadata)
+     * is replaced in place; otherwise it is added to the end. Returns the add-on's name.
+     */
+    fun installAddon(authKey: String, link: String): String {
+        val url = link.trim().replace(Regex("^stremio://", RegexOption.IGNORE_CASE), "https://")
+            .let { if (it.endsWith("/manifest.json")) it else it.trimEnd('/') + "/manifest.json" }
+        val manifest = JSONObject(Net.get(url, timeoutMs = 15_000))
+        if (!manifest.has("id")) throw ApiError("That link isn't an add-on")
+        val entry = JSONObject().put("transportUrl", url).put("transportName", "")
+            .put("manifest", slim(manifest))
+            .put("flags", JSONObject().put("official", false).put("protected", false))
+        val old = JSONObject(addonsJson(authKey)).optJSONArray("addons") ?: JSONArray()
+        val out = JSONArray()
+        var placed = false
+        for (i in 0 until old.length()) {
+            val o = old.optJSONObject(i) ?: continue
+            val same = o.optString("transportUrl") == url ||
+                o.optJSONObject("manifest")?.optString("id") == manifest.optString("id")
+            if (same) { if (!placed) { out.put(entry); placed = true } } else out.put(o)
+        }
+        if (!placed) out.put(entry)
+        setAddons(authKey, out)
+        return manifest.optString("name", "Add-on")
+    }
+
     fun parseAddons(json: String): List<Addon> {
         val arr = JSONObject(json).optJSONArray("addons") ?: JSONArray()
         return (0 until arr.length()).mapNotNull { i -> arr.optJSONObject(i)?.let(Addon::from) }

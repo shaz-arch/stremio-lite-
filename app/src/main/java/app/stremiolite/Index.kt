@@ -41,12 +41,15 @@ object Index {
     /** Every openable, not hidden catalogue, with its folder (null = front page). */
     fun entries(app: MainActivity, list: List<Addon>): List<Entry> {
         val hidden = Settings.hiddenRows(app)
-        return list.filter { !it.isLocal }.flatMap { a ->
-            a.catalogs.filter { openable(it) && Settings.rowKey(a, it) !in hidden }.map { c ->
-                val (prefix, rest) = split(c.name)
-                val folder = prefix ?: if (c.required.isEmpty()) null else autoFolder(c.name)
-                Entry(a, c, folder, rest)
-            }
+        val pairs = list.filter { !it.isLocal }.flatMap { a ->
+            a.catalogs.filter { openable(it) && Settings.rowKey(a, it) !in hidden }.map { a to it }
+        }
+        // A prefix used by only one row is part of a title (e.g. "UK TV: BBC, ITV…"), not a folder.
+        val prefixCount = pairs.mapNotNull { split(it.second.name).first }.groupingBy { it }.eachCount()
+        return pairs.map { (a, c) ->
+            val (prefix, rest) = split(c.name).let { (p, r) -> if (p != null && (prefixCount[p] ?: 0) >= 2) p to r else null to c.name }
+            val folder = prefix ?: if (c.required.isEmpty()) null else autoFolder(c.name)
+            Entry(a, c, folder, rest)
         }
     }
 
