@@ -47,6 +47,14 @@ class MainActivity : Activity() {
         if (packageManager.hasSystemFeature("android.hardware.touchscreen")) {
             list.isFastScrollEnabled = true
             list.isFastScrollAlwaysVisible = false
+            // Finger scrolling doesn't move the cursor, so tell the list what's on screen:
+            // reaching the bottom loads the next page just as moving the cursor there does.
+            list.setOnScrollListener(object : android.widget.AbsListView.OnScrollListener {
+                override fun onScrollStateChanged(view: android.widget.AbsListView?, state: Int) {}
+                override fun onScroll(view: android.widget.AbsListView?, first: Int, visible: Int, total: Int) {
+                    if (total > 0 && visible > 0) stack.lastOrNull()?.onSelect?.invoke(first + visible - 1)
+                }
+            })
         }
         list.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
