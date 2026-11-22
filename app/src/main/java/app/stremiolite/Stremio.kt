@@ -112,7 +112,8 @@ object Stremio {
      */
     private fun stickRowsCopy(manifest: JSONObject): JSONObject {
         val m = JSONObject()
-        for (k in listOf("version", "description", "logo", "types", "idPrefixes")) if (manifest.has(k)) m.put(k, manifest.get(k))
+        // behaviorHints keeps the ⚙ settings button in Stremio's own apps.
+        for (k in listOf("version", "description", "logo", "types", "idPrefixes", "behaviorHints")) if (manifest.has(k)) m.put(k, manifest.get(k))
         m.put("id", manifest.optString("id") + STICK_ROWS)
         m.put("name", manifest.optString("name", "Add-on") + " (stick rows)")
         m.put("resources", JSONArray().put("catalog"))
