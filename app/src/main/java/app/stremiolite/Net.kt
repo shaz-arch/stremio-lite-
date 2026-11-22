@@ -108,7 +108,8 @@ object Net {
         }
         return when (e) {
             is SSLException -> "secure connection failed"
-            else -> e.javaClass.simpleName
+            // Our own errors (e.g. Stremio's reply) carry a readable message; class names are scrambled in release builds.
+            else -> e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName
         }
     }
 }

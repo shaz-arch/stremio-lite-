@@ -228,9 +228,23 @@ object Profiles {
     ).also { it.position = 2 }
 
     /** Copies one account's add-on list (in order, with their settings) onto another. */
+    /**
+     * Copies one account's add-ons to another. If Stremio says the list is too big (large
+     * AIOMetadata setups), the big add-ons are copied in slimmed form; the app still reads
+     * their full row lists live from the add-on.
+     */
     private fun copyAddons(fromKey: String, toKey: String) {
         val addons = JSONObject(Stremio.addonsJson(fromKey)).optJSONArray("addons") ?: JSONArray()
-        Stremio.setAddons(toKey, addons)
+        try {
+            Stremio.setAddons(toKey, addons)
+        } catch (e: Stremio.ApiError) {
+            if (e.message?.contains("size", ignoreCase = true) != true) throw e
+            for (i in 0 until addons.length()) {
+                val o = addons.optJSONObject(i) ?: continue
+                o.optJSONObject("manifest")?.let { o.put("manifest", Stremio.slim(it)) }
+            }
+            Stremio.setAddons(toKey, addons)
+        }
     }
 
     private fun manageScreen(app: MainActivity): Screen {
