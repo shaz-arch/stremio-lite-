@@ -89,7 +89,7 @@ object Waiting {
         if (pending.isEmpty()) return emptyList()
         val addons = runCatching { Stremio.parseAddons(Account.addonCache(c).readText()) }.getOrNull() ?: return emptyList()
         val now = System.currentTimeMillis()
-        val found = pending.filter { runCatching { Streams.availableNow(addons, it.type, it.id) }.getOrDefault(false) }.map { it.id }.toSet()
+        val found = pending.filter { runCatching { StreamParse.availableNow(addons, it.type, it.id) }.getOrDefault(false) }.map { it.id }.toSet()
         if (found.isEmpty()) return emptyList()
         val updated = all.map { if (it.id in found) Entry(it.id, it.type, it.name, it.year, now) else it }
         Sync.push(key, listOf(record(raw, updated)))

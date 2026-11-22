@@ -29,7 +29,7 @@ object Player {
         activity: MainActivity,
         url: String,
         title: String,
-        subs: List<Subtitles.Sub> = emptyList(),
+        subs: List<Sub> = emptyList(),
         force: String? = null,
         watch: History.Watch? = null,
         startAt: Long = 0,

@@ -14,23 +14,6 @@ import java.util.TimeZone
 object Details {
     private const val CACHE_MS = 24 * 60 * 60_000L
 
-    class Video(val id: String, val title: String, val season: Int, val episode: Int, val released: String, val overview: String)
-
-    class Full(
-        val id: String,
-        val type: String,
-        val name: String,
-        val year: String,
-        val rating: String,
-        val runtime: String,
-        val genres: List<String>,
-        val director: List<String>,
-        val cast: List<String>,
-        val description: String,
-        val videos: List<Video>,
-        val source: String,
-    )
-
     private class Cached(val time: Long, val full: Full)
     private val cache = object : LinkedHashMap<String, Cached>(16, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Cached>?) = size > 12
@@ -51,7 +34,7 @@ object Details {
             try {
                 val json = JSONObject(Net.get(a.base + "/meta/" + enc(type) + "/" + enc(id) + ".json"))
                 val m = json.optJSONObject("meta") ?: continue
-                val full = parse(m, a.name)
+                val full = MetaParse.full(m, a.name)
                 synchronized(cache) { cache[key] = Cached(System.currentTimeMillis(), full) }
                 return full
             } catch (e: Exception) {
@@ -61,48 +44,8 @@ object Details {
         throw last ?: IllegalStateException("no details found")
     }
 
-    private fun strings(o: JSONObject, vararg keys: String): List<String> {
-        for (k in keys) {
-            val arr = o.optJSONArray(k) ?: continue
-            return (0 until arr.length()).mapNotNull { i ->
-                // Some add-ons send ["Name"], others [{"name":"Name"}]
-                arr.optJSONObject(i)?.optString("name") ?: arr.optString(i).takeIf { it.isNotBlank() }
-            }
-        }
-        return emptyList()
-    }
-
-    private fun parse(m: JSONObject, source: String): Full {
-        val vids = m.optJSONArray("videos")
-        val videos = if (vids == null) emptyList() else (0 until vids.length()).mapNotNull { i ->
-            val v = vids.optJSONObject(i) ?: return@mapNotNull null
-            Video(
-                id = v.optString("id"),
-                title = v.optString("title").ifEmpty { v.optString("name") },
-                season = v.optInt("season", 0),
-                episode = v.optInt("episode", v.optInt("number", 0)),
-                released = v.optString("released").take(10),
-                overview = v.optString("overview").ifEmpty { v.optString("description") },
-            )
-        }
-        return Full(
-            id = m.optString("id"),
-            type = m.optString("type"),
-            name = m.optString("name"),
-            year = m.optString("releaseInfo").ifEmpty { m.optString("year") },
-            rating = Catalogs.cleanRating(m.optString("imdbRating")),
-            runtime = m.optString("runtime"),
-            genres = strings(m, "genres", "genre"),
-            director = strings(m, "director", "directors"),
-            cast = strings(m, "cast"),
-            description = m.optString("description"),
-            videos = videos,
-            source = source,
-        )
-    }
-
     /** [autoPlay]: go straight on to playing (Play/Pause on a list), via the same resume/next logic. */
-    fun screen(app: MainActivity, from: Addon, item: Catalogs.Meta, autoPlay: Boolean = false): Screen {
+    fun screen(app: MainActivity, from: Addon, item: Meta, autoPlay: Boolean = false): Screen {
         // Start with what the catalogue already knows, so there's something to read at once.
         val quick = Catalogs.preview(app, item)
         val loadingRow = Row("Loading full details…")
@@ -147,7 +90,7 @@ object Details {
     /** Opens a title from Continue watching or the Library, where only the basics were saved. */
     fun screenFor(app: MainActivity, id: String, type: String, name: String, year: String, autoPlay: Boolean = false): Screen? {
         val from = Home.allAddons().firstOrNull { it.supports("meta", type, id) } ?: Home.allAddons().firstOrNull() ?: return null
-        return screen(app, from, Catalogs.Meta(id, type, name, year, "", "", emptyList(), ""), autoPlay)
+        return screen(app, from, Meta(id, type, name, year, "", "", emptyList(), ""), autoPlay)
     }
 
     /**
@@ -187,12 +130,12 @@ object Details {
 
     fun isUpcoming(date: String) = upcoming(date)
 
-    fun epLabel(v: Video) = "S${v.season.toString().padStart(2, '0')}E${v.episode.toString().padStart(2, '0')}"
+    fun epLabel(v: Video) = MetaParse.epLabel(v)
 
-    private fun ordered(f: Full) = f.videos.filter { it.season > 0 }.sortedWith(compareBy({ it.season }, { it.episode }))
+    private fun ordered(f: Full) = MetaParse.ordered(f)
 
     /** Every video in Stremio's order (season, episode, release date), as its watched marks expect. */
-    private fun stremioOrder(f: Full) = f.videos.sortedWith(compareBy({ it.season }, { it.episode }, { it.released })).map { it.id }
+    private fun stremioOrder(f: Full) = MetaParse.stremioOrder(f)
 
     /** What to file the playback under; for an episode, also which episode comes next. */
     private fun watchFor(f: Full, v: Video?): History.Watch {

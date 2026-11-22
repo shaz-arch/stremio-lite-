@@ -14,3 +14,5 @@ dependencyResolutionManagement {
 }
 rootProject.name = "StremioLite"
 include(":app")
+include(":core")
+

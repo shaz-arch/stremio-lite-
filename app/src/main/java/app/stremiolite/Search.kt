@@ -86,7 +86,7 @@ object Search {
             a.catalogs.filter { it.searchable }.map { c -> a to c }
         }
         // Each catalogue's results, kept in catalogue order so the list doesn't jump about.
-        val results = arrayOfNulls<List<Catalogs.Meta>>(sources.size)
+        val results = arrayOfNulls<List<Meta>>(sources.size)
         val errors = mutableListOf<String>()
         var answered = 0
         var started = false

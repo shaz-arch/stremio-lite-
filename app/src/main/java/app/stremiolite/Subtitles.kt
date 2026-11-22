@@ -5,7 +5,6 @@ import java.net.URLEncoder
 
 /** Subtitle links from the account's subtitle add-ons, for the title being played. */
 object Subtitles {
-    class Sub(val url: String, val lang: String, val addon: String)
 
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
 
@@ -65,9 +64,7 @@ object Subtitles {
         if (Settings.subtitleLanguage(app).codes.isNotEmpty()) get(app, type, id)
     }
 
-    fun matches(sub: Sub, lang: Settings.Language) =
-        lang.codes.any { sub.lang.equals(it, ignoreCase = true) } || sub.lang.equals(lang.name, ignoreCase = true)
+    fun matches(sub: Sub, lang: Language) = Languages.matches(sub, lang)
 
-    fun languageName(code: String): String =
-        Settings.languages.firstOrNull { l -> l.codes.any { it.equals(code, true) } }?.name ?: code.ifEmpty { "?" }
+    fun languageName(code: String): String = Languages.name(code)
 }

@@ -10,7 +10,7 @@ object NewEpisodes {
     private const val DAYS = 7
     private const val KEEP_MS = 60 * 60_000L
 
-    private class Found(val show: Details.Full, val ep: Details.Video)
+    private class Found(val show: Full, val ep: Video)
 
     private var found: List<Found> = emptyList()
     private var foundAt = 0L

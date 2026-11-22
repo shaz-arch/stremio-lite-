@@ -1,6 +1,5 @@
 package app.stremiolite
 
-import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLEncoder
@@ -18,14 +17,14 @@ object Stremio {
     class LinkCode(val code: String, val link: String, val qrcode: String)
 
     fun linkCreate(): LinkCode {
-        val r = unwrap(JSONObject(Net.get(LINK + "create?type=Create", allowErrors = true)))
+        val r = unwrap(JSONObject(Http.get(LINK + "create?type=Create", allowErrors = true)))
         return LinkCode(r.getString("code"), r.optString("link"), r.optString("qrcode"))
     }
 
     /** The auth key once the code has been approved on the phone, otherwise null. */
     fun linkRead(code: String): String? {
         val url = LINK + "read?type=Read&code=" + URLEncoder.encode(code, "UTF-8")
-        val json = JSONObject(Net.get(url, allowErrors = true))
+        val json = JSONObject(Http.get(url, allowErrors = true))
         val result = json.optJSONObject("result") ?: return null
         return result.optString("authKey").ifEmpty { null }
     }
@@ -70,7 +69,7 @@ object Stremio {
             if (!url.startsWith("http") || "127.0.0.1" in url || "localhost" in url) return@mapNotNull null
             if (o.optJSONObject("manifest")?.optString("id")?.endsWith(STICK_ROWS) == true) o.put("stickRows", true)
             Thread {
-                runCatching { JSONObject(Net.get(url, timeoutMs = 8_000)) }.getOrNull()
+                runCatching { JSONObject(Http.get(url, timeoutMs = 8_000)) }.getOrNull()
                     ?.takeIf { it.has("id") && it.has("resources") }
                     ?.let { m -> synchronized(o) { o.put("manifest", m) } }
             }.also { it.start() }
@@ -133,7 +132,7 @@ object Stremio {
     fun installAddon(authKey: String, link: String, stickRows: Boolean = false): String {
         val url = link.trim().replace(Regex("^stremio://", RegexOption.IGNORE_CASE), "https://")
             .let { if (it.endsWith("/manifest.json")) it else it.trimEnd('/') + "/manifest.json" }
-        val manifest = JSONObject(Net.get(url, timeoutMs = 15_000))
+        val manifest = JSONObject(Http.get(url, timeoutMs = 15_000))
         if (!manifest.has("id")) throw ApiError("That link isn't an add-on")
         val stored = if (stickRows) stickRowsCopy(manifest) else slim(manifest)
         val entry = JSONObject().put("transportUrl", url).put("transportName", "")
@@ -159,7 +158,7 @@ object Stremio {
     }
 
     private fun call(method: String, body: JSONObject): JSONObject =
-        unwrap(JSONObject(Net.postJson(API + method, body.toString())))
+        unwrap(JSONObject(Http.postJson(API + method, body.toString())))
 
     private fun unwrap(json: JSONObject): JSONObject {
         json.optJSONObject("error")?.let { throw ApiError(it.optString("message", "Stremio returned an error")) }
@@ -276,20 +275,3 @@ class Addon(
 }
 
 /** The current profile's sign-in key and email (see [Profiles]). */
-object Account {
-    fun authKey(context: Context): String? = Profiles.current(context)?.authKey
-
-    fun email(context: Context): String = Profiles.current(context)?.email ?: ""
-
-    fun saveEmail(context: Context, email: String) = Profiles.updateEmail(context, email)
-
-    /** Signs the current profile out of this device (the Stremio account itself is untouched). */
-    fun clear(context: Context) {
-        val p = Profiles.current(context) ?: return
-        addonCache(context).delete()
-        Profiles.remove(context, p.id)
-    }
-
-    /** Last known add-on list for the current profile, so Home appears instantly at start-up. */
-    fun addonCache(context: Context) = java.io.File(context.filesDir, Profiles.fileName(context, "addons"))
-}

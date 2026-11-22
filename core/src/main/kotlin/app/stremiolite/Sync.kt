@@ -1,6 +1,5 @@
 package app.stremiolite
 
-import android.util.Base64
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
@@ -25,7 +24,7 @@ object Sync {
     fun pull(authKey: String): JSONArray {
         val body = JSONObject().put("authKey", authKey).put("collection", "libraryItem")
             .put("ids", JSONArray()).put("all", true)
-        val json = JSONObject(Net.postJson(API + "datastoreGet", body.toString(), timeoutMs = 20_000))
+        val json = JSONObject(Http.postJson(API + "datastoreGet", body.toString(), timeoutMs = 20_000))
         json.optJSONObject("error")?.let { throw Stremio.ApiError(it.optString("message", "library sync failed")) }
         return json.optJSONArray("result") ?: JSONArray()
     }
@@ -34,7 +33,7 @@ object Sync {
     fun pullIds(authKey: String, ids: List<String>): JSONArray {
         val body = JSONObject().put("authKey", authKey).put("collection", "libraryItem")
             .put("ids", JSONArray(ids)).put("all", false)
-        val json = JSONObject(Net.postJson(API + "datastoreGet", body.toString(), timeoutMs = 20_000))
+        val json = JSONObject(Http.postJson(API + "datastoreGet", body.toString(), timeoutMs = 20_000))
         json.optJSONObject("error")?.let { throw Stremio.ApiError(it.optString("message", "library sync failed")) }
         return json.optJSONArray("result") ?: JSONArray()
     }
@@ -43,7 +42,7 @@ object Sync {
         if (items.isEmpty()) return
         val changes = JSONArray().apply { items.forEach { put(it) } }
         val body = JSONObject().put("authKey", authKey).put("collection", "libraryItem").put("changes", changes)
-        val json = JSONObject(Net.postJson(API + "datastorePut", body.toString()))
+        val json = JSONObject(Http.postJson(API + "datastorePut", body.toString()))
         json.optJSONObject("error")?.let { throw Stremio.ApiError(it.optString("message", "library sync failed")) }
     }
 
@@ -92,7 +91,7 @@ object Sync {
             val prev = field.lastIndexOf(':', last - 1)
             val anchor = field.substring(0, prev)
             val anchorLength = field.substring(prev + 1, last).toInt()
-            val bytes = inflate(Base64.decode(field.substring(last + 1), Base64.DEFAULT))
+            val bytes = inflate(B64.decode(field.substring(last + 1)))
             val anchorIdx = ids.indexOf(anchor)
             if (anchorIdx < 0) return emptySet()
             val offset = anchorLength - anchorIdx - 1
@@ -116,7 +115,7 @@ object Sync {
         }
         val lastIdx = if (lastSet >= 0) lastSet else 0
         val anchor = ids.getOrNull(lastIdx) ?: "undefined"
-        val data = Base64.encodeToString(deflate(bytes), Base64.NO_WRAP)
+        val data = B64.encode(deflate(bytes))
         return "$anchor:${lastIdx + 1}:$data"
     }
 

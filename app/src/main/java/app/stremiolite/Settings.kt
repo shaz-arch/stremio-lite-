@@ -8,25 +8,7 @@ import org.json.JSONObject
 object Settings {
     private const val PREFS = "settings"
 
-    class Language(val name: String, val codes: List<String>)
-
-    /** Off first, then the most likely choices. Codes cover both 3-letter and 2-letter forms. */
-    val languages = listOf(
-        Language("Off", emptyList()),
-        Language("English", listOf("eng", "en")),
-        Language("Urdu", listOf("urd", "ur")),
-        Language("Hindi", listOf("hin", "hi")),
-        Language("Punjabi", listOf("pan", "pa")),
-        Language("Arabic", listOf("ara", "ar")),
-        Language("French", listOf("fre", "fra", "fr")),
-        Language("Spanish", listOf("spa", "es")),
-        Language("German", listOf("ger", "deu", "de")),
-        Language("Italian", listOf("ita", "it")),
-        Language("Portuguese", listOf("por", "pt", "pob")),
-        Language("Polish", listOf("pol", "pl")),
-        Language("Turkish", listOf("tur", "tr")),
-        Language("Dutch", listOf("dut", "nld", "nl")),
-    )
+    val languages = Languages.all
 
     class PlayerChoice(val name: String, val pkg: String?)
 

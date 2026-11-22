@@ -11,16 +11,6 @@ object Catalogs {
     private const val CACHE_MS = 60 * 60_000L
     private const val LOAD_AHEAD = 15
 
-    class Meta(
-        val id: String,
-        val type: String,
-        val name: String,
-        val year: String,
-        val rating: String,
-        val runtime: String,
-        val genres: List<String>,
-        val description: String,
-    )
 
     /** First pages of recently opened rows, kept for an hour so Back-then-reopen is instant. */
     private class Cached(val time: Long, val metas: List<Meta>)
@@ -28,12 +18,7 @@ object Catalogs {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Cached>?) = size > 6
     }
 
-    fun typeLabel(type: String) = when (type) {
-        "movie" -> "Movies"
-        "series" -> "Shows"
-        "all" -> "Movies & shows"
-        else -> type.replaceFirstChar { it.uppercase() }
-    }
+    fun typeLabel(type: String) = MetaParse.typeLabel(type)
 
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
 
@@ -49,23 +34,7 @@ object Catalogs {
         return metas
     }
 
-    fun parse(json: String): List<Meta> {
-        val arr = JSONObject(json).optJSONArray("metas") ?: return emptyList()
-        return (0 until arr.length()).mapNotNull { i ->
-            val m = arr.optJSONObject(i) ?: return@mapNotNull null
-            val genres = m.optJSONArray("genres") ?: m.optJSONArray("genre")
-            Meta(
-                id = m.optString("id"),
-                type = m.optString("type"),
-                name = m.optString("name").ifEmpty { m.optString("id") },
-                year = m.optString("releaseInfo").ifEmpty { m.optString("year") },
-                rating = cleanRating(m.optString("imdbRating")),
-                runtime = m.optString("runtime"),
-                genres = genres?.let { g -> (0 until g.length()).map { g.optString(it) } } ?: emptyList(),
-                description = m.optString("description"),
-            )
-        }
-    }
+    fun parse(json: String): List<Meta> = MetaParse.parse(json)
 
     fun detail(m: Meta): String {
         val kind = when (m.type) { "movie" -> "Movie"; "series" -> "Series"; else -> m.type }
@@ -170,20 +139,7 @@ object Catalogs {
     }
 
     /** Blank for missing ratings ("", "null", "N/A"). */
-    fun cleanRating(r: String) = r.trim().takeUnless { it.isEmpty() || it == "null" || it.equals("N/A", true) || it == "0" } ?: ""
+    fun cleanRating(r: String) = MetaParse.cleanRating(r)
 
-    fun wrap(text: String, width: Int): List<String> {
-        val lines = mutableListOf<String>()
-        val line = StringBuilder()
-        for (word in text.replace('\n', ' ').split(' ').filter { it.isNotEmpty() }) {
-            if (line.isNotEmpty() && line.length + 1 + word.length > width) {
-                lines += line.toString()
-                line.setLength(0)
-            }
-            if (line.isNotEmpty()) line.append(' ')
-            line.append(word)
-        }
-        if (line.isNotEmpty()) lines += line.toString()
-        return lines
-    }
+    fun wrap(text: String, width: Int): List<String> = MetaParse.wrap(text, width)
 }

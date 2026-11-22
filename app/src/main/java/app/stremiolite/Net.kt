@@ -26,10 +26,9 @@ object Net {
     private val pool = Executors.newFixedThreadPool(4)
     private val main = Handler(Looper.getMainLooper())
 
-    class HttpError(val code: Int) : IOException("HTTP $code")
-
     fun init(context: Context) {
         HttpsURLConnection.setDefaultSSLSocketFactory(Trust.socketFactory(context.applicationContext))
+        Http.userAgent = "StremioLean/${BuildConfigLite.VERSION} (Android TV)"
     }
 
     /** Run [work] in the background, then [done] on the main thread. */
@@ -45,52 +44,13 @@ object Net {
     fun later(delayMs: Long, block: Runnable) = main.postDelayed(block, delayMs)
     fun cancel(block: Runnable) = main.removeCallbacks(block)
 
-    /** GET; throws [HttpError] for 4xx/5xx unless [allowErrors]. */
-    fun get(url: String, timeoutMs: Int = 15_000, allowErrors: Boolean = false): String =
-        request(url, null, timeoutMs, allowErrors)
+    /** GET; throws [Http.HttpError] for 4xx/5xx unless [allowErrors]. */
+    fun get(url: String, timeoutMs: Int = 15_000, allowErrors: Boolean = false): String = Http.get(url, timeoutMs, allowErrors)
 
     /** POST a JSON body. API errors come back as JSON, so error codes are allowed through. */
-    fun postJson(url: String, body: String, timeoutMs: Int = 15_000): String =
-        request(url, body, timeoutMs, allowErrors = true)
+    fun postJson(url: String, body: String, timeoutMs: Int = 15_000): String = Http.postJson(url, body, timeoutMs)
 
-    fun getBytes(url: String): ByteArray {
-        val c = open(url, 15_000)
-        try {
-            if (c.responseCode >= 400) throw HttpError(c.responseCode)
-            return c.inputStream.use { it.readBytes() }
-        } finally {
-            c.disconnect()
-        }
-    }
-
-    private fun open(url: String, timeoutMs: Int): HttpURLConnection {
-        val c = URL(url).openConnection() as HttpURLConnection
-        c.connectTimeout = timeoutMs
-        c.readTimeout = timeoutMs
-        c.instanceFollowRedirects = true
-        c.setRequestProperty("User-Agent", "StremioLean/${BuildConfigLite.VERSION} (Android TV)")
-        c.setRequestProperty("Accept", "application/json")
-        return c
-    }
-
-    private fun request(url: String, body: String?, timeoutMs: Int, allowErrors: Boolean): String {
-        val c = open(url, timeoutMs)
-        try {
-            if (body != null) {
-                c.requestMethod = "POST"
-                c.doOutput = true
-                c.setRequestProperty("Content-Type", "application/json")
-                c.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
-            }
-            val code = c.responseCode
-            val stream = if (code >= 400) c.errorStream else c.inputStream
-            val text = stream?.use { it.readBytes().toString(Charsets.UTF_8) } ?: ""
-            if (code >= 400 && !allowErrors) throw HttpError(code)
-            return text
-        } finally {
-            c.disconnect()
-        }
-    }
+    fun getBytes(url: String): ByteArray = Http.getBytes(url)
 
     /** A short, plain-English reason for a failed request. */
     fun describe(e: Throwable): String {
@@ -100,7 +60,7 @@ object Net {
                 is CertificateException -> return "certificate not trusted"
                 is SocketTimeoutException -> return "timed out"
                 is UnknownHostException -> return "address not found"
-                is HttpError -> return "server said ${t.code}"
+                is Http.HttpError -> return "server said ${t.code}"
                 is java.net.ConnectException -> return "connection refused"
                 is org.json.JSONException -> return "unexpected reply"
             }
