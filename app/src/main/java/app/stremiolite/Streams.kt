@@ -226,8 +226,6 @@ object Streams {
         var picked: Stream? = null
         val tried = mutableSetOf<Stream>()
         var askedAt = 0L
-        var subsGraceStarted = false
-        var subsGraceOver = false
         val minutes = Best.minutes(runtime) ?: if (type == "movie") 110.0 else 45.0
 
         fun rows(): List<Row> {
@@ -276,12 +274,9 @@ object Streams {
 
         fun update() {
             if (picked != null) return
-            // Once the streams are in, give subtitles one more second at most.
-            if (fetch.done && !subs.done && !subsGraceStarted) {
-                subsGraceStarted = true
-                Net.later(1_000, Runnable { subsGraceOver = true; update() })
-            }
-            val waitingSubs = !subs.done && !subsGraceOver
+            // Subtitles: go as soon as one in your language has arrived (the same one that would be
+            // chosen anyway); if none has yet, wait for every subtitle add-on to answer, as before.
+            val waitingSubs = !subs.done && subs.chosen == null
             if (!fetch.done || waitingSubs) {
                 status.label = "Finding the best stream… ${fetch.answered} of ${fetch.addons.size} add-ons, ${fetch.found.size} streams" +
                     if (fetch.done && waitingSubs) " · getting subtitles" else ""
