@@ -99,9 +99,30 @@ object Play {
             return out
         }
 
+        lateinit var launch: (Stream) -> Unit
         go = { st ->
             playing = true
             tried += st
+            status.label = "Checking the stream…"
+            s.rows = rows(); App.refresh()
+            App.async({ app.stremiolite.StreamCheck.broken(st.url) }) { r ->
+                if (!r.getOrDefault(false)) { launch(st); return@async }
+                val next = if (tried.size >= 6) null else Best.pick(fetch.found.filter { it !in tried }, minutes, prefer)
+                playing = false
+                if (next == null) {
+                    status.label = "That release has no playable video, and there's no other good one. Choose another below."
+                    s.rows = rows(); App.refresh()
+                } else {
+                    picked = next
+                    pickRow.label = next.summary; pickRow.detail = next.addon
+                    status.label = "Skipped a broken release (no playable video). Trying the next one…"
+                    s.rows = rows(); App.refresh()
+                    App.later(300) { if (App.isTop(s)) go(next) }
+                }
+            }
+        }
+        launch = { st ->
+            playing = true
             showId?.let { Binge.remember(it, st) }
             status.label = "Playing in ${Prefs.player}… (this screen waits until it closes)"
             s.rows = rows()
@@ -181,9 +202,13 @@ object Play {
             rows += Row("────────────────────")
             scored.forEach { (st, score) ->
                 rows += Row(st.summary + if (score == null) "  (${Best.whyOut(st)})" else "", st.addon, action = {
-                    Player.play(st.url, title, fetch.chosenSub(), startAt) { r ->
-                        if (r.failed) App.toast("That stream didn't play (${r.why})")
-                        else if (w != null) After.played(w, r)
+                    App.toast("Checking the stream…")
+                    App.async({ app.stremiolite.StreamCheck.broken(st.url) }) { ok ->
+                        if (ok.getOrDefault(false)) App.toast("That release has no playable video. Pick another.")
+                        else Player.play(st.url, title, fetch.chosenSub(), startAt) { r ->
+                            if (r.failed) App.toast("That stream didn't play (${r.why})")
+                            else if (w != null) After.played(w, r)
+                        }
                     }
                 })
             }

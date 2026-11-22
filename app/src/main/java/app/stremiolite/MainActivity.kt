@@ -282,7 +282,10 @@ class MainActivity : Activity() {
             setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, (sp * 0.8f).coerceAtLeast(14f))
         }
         updateClock()
-        list.selector = android.graphics.drawable.ColorDrawable(t.bar)
+        // Touch screens have no cursor to show; the bar would stay where a finger last pressed.
+        list.selector = android.graphics.drawable.ColorDrawable(
+            if (packageManager.hasSystemFeature("android.hardware.touchscreen") && !packageManager.hasSystemFeature("android.software.leanback")) android.graphics.Color.TRANSPARENT else t.bar,
+        )
         adapter.notifyDataSetChanged()
     }
 

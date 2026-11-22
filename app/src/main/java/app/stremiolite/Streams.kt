@@ -194,7 +194,13 @@ object Streams {
             rows += Row("────────────────────")
             sorted.forEach { s ->
                 val detail = (if (s.cached == false) "not cached · " else "") + s.addon
-                rows += Row(s.summary, detail, action = { Player.play(app, s.url, title, listOfNotNull(subs.chosen), watch = watch, startAt = freshStart(app, watch, startAt)) })
+                rows += Row(s.summary, detail, action = {
+                    app.toast("Checking the stream…")
+                    Net.async({ StreamCheck.broken(s.url) }) { r ->
+                        if (r.getOrDefault(false)) app.toast("That release has no playable video. Pick another.")
+                        else Player.play(app, s.url, title, listOfNotNull(subs.chosen), watch = watch, startAt = freshStart(app, watch, startAt))
+                    }
+                })
             }
             val firstStream = rows.size - sorted.size
             val wasOnHeader = app.cursor() < firstStream
@@ -252,14 +258,35 @@ object Streams {
         }
 
         lateinit var retry: () -> Boolean
-        val start = Runnable {
+        lateinit var start: Runnable
+        start = Runnable {
             val s = picked
             if (s != null && active && !played) {
                 played = true
                 tried += s
-                showId?.let { remember(app, it, s) }
-                app.onPlayerFailed = { retry() }
-                Player.play(app, s.url, title, listOfNotNull(subs.chosen), watch = watch, startAt = freshStart(app, watch, startAt))
+                // Check what the link really serves first: a broken release gives a tiny error clip.
+                Net.async({ StreamCheck.broken(s.url) }) { r ->
+                    if (!active || picked !== s) return@async
+                    if (r.getOrDefault(false)) {
+                        val next = if (tried.size >= 6) null else Best.pick(fetch.found.filter { it !in tried }, minutes, prefer)
+                        if (next == null) {
+                            status.label = "That release has no playable video, and there's no other good one. Choose below."
+                            screen.rows = rows(); app.refresh(screen)
+                        } else {
+                            picked = next
+                            played = false
+                            status.label = "Skipped a broken release (no playable video). Trying the next one…"
+                            pickRow.label = next.summary
+                            pickRow.detail = next.addon
+                            screen.rows = rows(); screen.moveTo = 0; app.refresh(screen)
+                            Net.later(300, start)
+                        }
+                        return@async
+                    }
+                    showId?.let { remember(app, it, s) }
+                    app.onPlayerFailed = { retry() }
+                    Player.play(app, s.url, title, listOfNotNull(subs.chosen), watch = watch, startAt = freshStart(app, watch, startAt))
+                }
             }
         }
 
