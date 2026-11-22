@@ -82,6 +82,7 @@ object Home {
                 Row("Library", if (lib.isEmpty()) "empty" else "${lib.size}  ►", opens = { libraryScreen(app) }),
                 Row("New episodes", opens = { NewEpisodes.screen(app) }),
                 Row("Watched", opens = { watchedScreen(app) }),
+                Row("Waiting for streams", Waiting.summary(app), opens = { Waiting.screen(app) }),
                 Row("────────────────────"),
             ))
             screen.rows = rows + tools
@@ -93,6 +94,7 @@ object Home {
         screen.onShow = {
             History.pull(app) { rebuild() }
             Updates.check { rebuild() }
+            Waiting.checkSoon(app) { rebuild() }
             if (addons == null) {
                 // Show the saved list straight away, then refresh it from the account.
                 runCatching { Account.addonCache(app).readText() }.onSuccess { text ->

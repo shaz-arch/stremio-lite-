@@ -30,6 +30,15 @@ object Sync {
         return json.optJSONArray("result") ?: JSONArray()
     }
 
+    /** Just the listed records (for the background check, which needs only the waiting list). */
+    fun pullIds(authKey: String, ids: List<String>): JSONArray {
+        val body = JSONObject().put("authKey", authKey).put("collection", "libraryItem")
+            .put("ids", JSONArray(ids)).put("all", false)
+        val json = JSONObject(Net.postJson(API + "datastoreGet", body.toString(), timeoutMs = 20_000))
+        json.optJSONObject("error")?.let { throw Stremio.ApiError(it.optString("message", "library sync failed")) }
+        return json.optJSONArray("result") ?: JSONArray()
+    }
+
     fun push(authKey: String, items: List<JSONObject>) {
         if (items.isEmpty()) return
         val changes = JSONArray().apply { items.forEach { put(it) } }

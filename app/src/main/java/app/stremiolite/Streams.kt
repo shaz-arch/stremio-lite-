@@ -297,7 +297,12 @@ object Streams {
             val best = Best.pick(fetch.found, minutes)
             if (best == null) {
                 status.label = if (fetch.found.isEmpty()) "No playable streams found." else "No stream suits this device. Choose one below."
-                val r = rows()
+                val r = rows().toMutableList()
+                if (type == "movie" && !Waiting.has(app, id)) r.add(1, Row("Tell me when a stream is available", action = {
+                    Waiting.add(app, Waiting.Entry(id, type, title, "", 0))
+                    app.toast("Added to Waiting for streams")
+                    app.back()
+                }))
                 screen.rows = r
                 screen.moveTo = r.lastIndex
                 app.refresh(screen)
@@ -368,6 +373,26 @@ object Streams {
             out.forEach { (s, _) -> rows += Row("      ${s.summary}", Best.whyOut(s)) }
         }
         return Screen("Why this stream?", rows)
+    }
+
+    /**
+     * Asks the stream add-ons directly (blocking, for background checks) whether a stream that
+     * Play best would choose exists right now.
+     */
+    fun availableNow(addons: List<Addon>, type: String, id: String): Boolean {
+        val found = mutableListOf<Stream>()
+        for (a in addons.filter { it.supports("stream", type, id) }) {
+            val url = a.base + "/stream/" + enc(type) + "/" + enc(id) + ".json"
+            val arr = runCatching { JSONObject(Net.get(url, timeoutMs = TIMEOUT_MS)).optJSONArray("streams") }.getOrNull() ?: continue
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val link = o.optString("url")
+                if (link.startsWith("http") && o.optJSONObject("behaviorHints")?.optJSONObject("proxyHeaders") == null) {
+                    found.add(parse(o, link, shortName(a.name), found.size))
+                }
+            }
+        }
+        return Best.pick(found, if (type == "movie") 110.0 else 45.0) != null
     }
 
     private fun shortName(name: String) = name.substringBefore('|').trim().ifEmpty { name }.take(16)

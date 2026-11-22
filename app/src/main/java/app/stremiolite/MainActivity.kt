@@ -66,6 +66,7 @@ class MainActivity : Activity() {
         }
 
         applyLook()
+        Waiting.schedule(this)
         Net.init(this)
         push(
             when {

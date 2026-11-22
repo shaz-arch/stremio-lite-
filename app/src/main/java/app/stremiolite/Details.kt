@@ -232,6 +232,17 @@ object Details {
             app.refreshTop()
         })
         rows += lib
+        if (f.type == "movie") {
+            lateinit var wait: Row
+            fun waitLabel() = if (Waiting.has(app, f.id)) "Stop waiting for a stream" else "Tell me when a stream is available"
+            wait = Row(waitLabel(), action = {
+                if (Waiting.has(app, f.id)) { Waiting.remove(app, f.id); app.toast("Removed from Waiting for streams") }
+                else { Waiting.add(app, Waiting.Entry(f.id, f.type, f.name, f.year, 0)); app.toast("Added to Waiting for streams") }
+                wait.label = waitLabel()
+                app.refreshTop()
+            })
+            rows += wait
+        }
         if (History.item(app, f.id) != null) {
             lateinit var cw: Row
             cw = Row("Remove from Continue watching", action = {

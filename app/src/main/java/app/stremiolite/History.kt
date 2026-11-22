@@ -344,6 +344,22 @@ object History {
         send(c)
     }
 
+    /** The account's copy of one record (e.g. the waiting list), as JSON text. */
+    fun rawRemote(c: Context, id: String): String? {
+        ensure(c)
+        return remote[id]
+    }
+
+    /** Stores and sends one record exactly as given. */
+    fun putRemote(c: Context, item: JSONObject) {
+        ensure(c)
+        val id = item.optString("_id")
+        remote[id] = item.toString()
+        unsent += id
+        save()
+        send(c)
+    }
+
     fun toggleLibrary(c: Context, s: Saved): Boolean {
         ensure(c)
         val had = library.removeAll { it.id == s.id }
