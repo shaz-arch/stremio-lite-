@@ -54,7 +54,13 @@ class MainActivity : Activity() {
 
         applyLook()
         Net.init(this)
-        push(if (Account.authKey(this) != null) Home.screen(this) else SignIn.screen(this))
+        push(
+            when {
+                Profiles.all(this).size > 1 -> Profiles.chooser(this)   // "Who's watching?"
+                Account.authKey(this) != null -> Home.screen(this)
+                else -> SignIn.screen(this)
+            }
+        )
     }
 
     /** The player has closed: file how far it got (VLC: extra_position/extra_duration; MX-style: position/duration). */
@@ -216,8 +222,11 @@ class MainActivity : Activity() {
         stack.lastOrNull()?.let { refresh(it) }
     }
 
-    fun signedIn(authKey: String, email: String = "") {
-        Account.save(this, authKey, email)
+    /** A new sign-in becomes a profile (or refreshes the existing one for that account) and opens its Home. */
+    fun signedIn(authKey: String, email: String = "", name: String = "") {
+        History.flush()
+        Profiles.add(this, name, authKey, email)
+        History.reset()
         Home.forget()
         resetTo(Home.screen(this))
     }

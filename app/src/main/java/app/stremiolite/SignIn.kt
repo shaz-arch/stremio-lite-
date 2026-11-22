@@ -12,7 +12,8 @@ object SignIn {
     private const val POLL_MS = 3_000L
     private const val CODE_LIFETIME_MS = 10 * 60_000L
 
-    fun screen(app: MainActivity): Screen {
+    /** [addingProfile]: signing in an extra account as a new profile (reached from "Add a profile"). */
+    fun screen(app: MainActivity, addingProfile: Boolean = false): Screen {
         val linkRow = Row("   getting a code…")
         val codeRow = Row("   ")
         val status = Row("")
@@ -79,7 +80,7 @@ object SignIn {
         }
 
         screen = Screen(
-            title = "Sign in to Stremio",
+            title = if (addingProfile) "Add a profile: sign in" else "Sign in to Stremio",
             rows = listOf(
                 Row("1. On your phone, scan the code or open:"),
                 linkRow,

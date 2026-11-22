@@ -35,6 +35,18 @@ object Stremio {
         JSONObject().put("type", "Login").put("email", email).put("password", password).put("facebook", false),
     ).getString("authKey")
 
+    /** Creates a new Stremio account (the user has agreed to Stremio's terms first); returns its sign-in key. */
+    fun register(email: String, password: String): String = call(
+        "register",
+        JSONObject().put("type", "Register").put("email", email).put("password", password)
+            .put("gdpr_consent", JSONObject().put("tos", true).put("privacy", true).put("marketing", false).put("from", "web")),
+    ).getString("authKey")
+
+    /** Replaces an account's add-on list (used to copy add-ons from one profile to another). */
+    fun setAddons(authKey: String, addons: JSONArray) {
+        call("addonCollectionSet", JSONObject().put("type", "AddonCollectionSet").put("authKey", authKey).put("addons", addons))
+    }
+
     fun userEmail(authKey: String): String =
         call("getUser", JSONObject().put("type", "GetUser").put("authKey", authKey)).optString("email")
 
@@ -159,30 +171,21 @@ class Addon(
     }
 }
 
-/** The sign-in key and email, kept in the app's private storage. */
+/** The current profile's sign-in key and email (see [Profiles]). */
 object Account {
-    private const val PREFS = "account"
+    fun authKey(context: Context): String? = Profiles.current(context)?.authKey
 
-    fun authKey(context: Context): String? =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("authKey", null)
+    fun email(context: Context): String = Profiles.current(context)?.email ?: ""
 
-    fun email(context: Context): String =
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("email", "") ?: ""
+    fun saveEmail(context: Context, email: String) = Profiles.updateEmail(context, email)
 
-    fun save(context: Context, authKey: String, email: String = "") {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putString("authKey", authKey).putString("email", email).apply()
-    }
-
-    fun saveEmail(context: Context, email: String) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("email", email).apply()
-    }
-
+    /** Signs the current profile out of this device (the Stremio account itself is untouched). */
     fun clear(context: Context) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply()
+        val p = Profiles.current(context) ?: return
         addonCache(context).delete()
+        Profiles.remove(context, p.id)
     }
 
-    /** Last known add-on list, so the home menu appears instantly at start-up. */
-    fun addonCache(context: Context) = java.io.File(context.filesDir, "addons.json")
+    /** Last known add-on list for the current profile, so Home appears instantly at start-up. */
+    fun addonCache(context: Context) = java.io.File(context.filesDir, Profiles.fileName(context, "addons"))
 }

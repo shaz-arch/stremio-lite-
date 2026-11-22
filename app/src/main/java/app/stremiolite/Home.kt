@@ -23,7 +23,8 @@ object Home {
     }
 
     fun screen(app: MainActivity): Screen {
-        val who = Row(info("Signed in as", Account.email(app).ifEmpty { "…" }))
+        fun whoText() = info("Profile", listOfNotNull(Profiles.current(app)?.name, Account.email(app).ifEmpty { null }).joinToString("  ·  ").ifEmpty { "…" })
+        val who = Row(whoText())
         val addonsRow = Row("Your add-ons", "", opens = { addonList(app) })
         val status = Row("")
         lateinit var screen: Screen
@@ -37,13 +38,14 @@ object Home {
             Row("Device check", opens = { DemoMenus.deviceCheck(app) }),
             Row("About", opens = { DemoMenus.about() }),
             who,
-            Row("Sign out", opens = { signOut(app) }),
+            Row("Switch profile", "►", opens = { Profiles.chooser(app) }),
+            Row("Sign out of this profile", opens = { signOut(app) }),
         )
 
         fun rebuild() {
             val list = addons
             addonsRow.detail = if (list != null) "${list.size}  ►" else ""
-            Account.email(app).takeIf { it.isNotEmpty() }?.let { who.label = info("Signed in as", it) }
+            who.label = whoText()
             val rows = mutableListOf<Row>()
             if (list != null) rows += homeRows(app, list)
             status.label = when {
@@ -73,7 +75,7 @@ object Home {
         }
         rebuildHome = { rebuild() }
 
-        screen = Screen(title = "Stremio Lite", rows = listOf(Row("Loading your rows…")) + tools)
+        screen = Screen(title = "Stremio Lite", rows = listOf(Row("Loading your rows…")) + tools, tag = Profiles.current(app)?.name ?: "")
         screen.onShow = {
             History.pull(app) { rebuild() }
             Updates.check { rebuild() }
@@ -274,11 +276,18 @@ object Home {
         "Sign out?",
         listOf(
             Row("No, go back", action = { app.back() }),
-            Row("Yes, sign out of this TV", action = {
+            Row("Yes, sign this profile out of the stick", action = {
                 History.clear(app)
                 Account.clear(app)
+                History.reset()
                 forget()
-                app.resetTo(SignIn.screen(app))
+                app.resetTo(
+                    when {
+                        Profiles.all(app).size > 1 -> Profiles.chooser(app)
+                        Account.authKey(app) != null -> screen(app)
+                        else -> SignIn.screen(app)
+                    }
+                )
             }),
         ),
     )

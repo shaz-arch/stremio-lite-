@@ -83,7 +83,7 @@ object History {
     private fun ensure(c: Context) {
         if (loaded) return
         loaded = true
-        file = File(c.applicationContext.filesDir, "history.json")
+        file = File(c.applicationContext.filesDir, Profiles.fileName(c, "history"))
         val json = runCatching { JSONObject(file.readText()) }.getOrNull() ?: return
         json.optJSONObject("videos")?.let { v ->
             v.keys().forEach { k ->
@@ -168,6 +168,15 @@ object History {
                 if (seq == writeSeq) target.writeText(text.toString())
             }
         }) { }
+    }
+
+    /** Forgets what's in memory, so the next use loads the (newly chosen) profile's file. */
+    fun reset() {
+        Net.cancel(saveTask)
+        loaded = false
+        videos.clear(); items.clear(); library.clear(); log.clear(); remote.clear(); unsent.clear()
+        lastPull = 0
+        pulling = false
     }
 
     /** Wipes everything (signing out). */
