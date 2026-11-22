@@ -38,4 +38,18 @@ object Look {
 
     fun nextTheme(c: Context) = prefs(c).edit().putInt("theme", (themes.indexOf(theme(c)) + 1) % themes.size).apply()
     fun nextSize(c: Context) = prefs(c).edit().putInt("textSize", (sizes.indexOf(size(c)) + 1) % sizes.size).apply()
+
+    /** Clock in the bottom-right corner; the pattern is for java.text.SimpleDateFormat, empty = off. */
+    class Clock(val name: String, val pattern: String)
+
+    val clocks = listOf(
+        Clock("Day/month, 24 h", "dd/MM HH:mm"),
+        Clock("Weekday, day/month, 24 h", "EEE dd/MM HH:mm"),
+        Clock("Time only, 24 h", "HH:mm"),
+        Clock("Day/month, 12 h", "dd/MM h:mm a"),
+        Clock("Off", ""),
+    )
+
+    fun clock(c: Context): Clock = clocks.getOrElse(prefs(c).getInt("clock", 0)) { clocks[0] }
+    fun nextClock(c: Context) = prefs(c).edit().putInt("clock", (clocks.indexOf(clock(c)) + 1) % clocks.size).apply()
 }

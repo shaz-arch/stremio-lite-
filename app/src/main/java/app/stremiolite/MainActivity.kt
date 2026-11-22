@@ -103,6 +103,28 @@ class MainActivity : Activity() {
     override fun onPause() {
         super.onPause()
         History.flush()
+        clockTick?.let { clockHandler.removeCallbacks(it) }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        updateClock()
+    }
+
+    private val clockHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var clockTick: Runnable? = null
+
+    /** Shows the time, then wakes again just after the next minute starts. Costs one redraw a minute. */
+    fun updateClock() {
+        clockTick?.let { clockHandler.removeCallbacks(it) }
+        val view = findViewById<TextView>(R.id.clock)
+        val pattern = Look.clock(this).pattern
+        if (pattern.isEmpty()) { view.visibility = View.GONE; return }
+        view.visibility = View.VISIBLE
+        view.text = java.text.SimpleDateFormat(pattern, java.util.Locale.UK).format(java.util.Date())
+        val tick = Runnable { updateClock() }
+        clockTick = tick
+        clockHandler.postDelayed(tick, 60_000L - System.currentTimeMillis() % 60_000L + 200L)
     }
 
     override fun onDestroy() {
@@ -210,10 +232,11 @@ class MainActivity : Activity() {
         titleView.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, sp + 2)
         counterView.setTextColor(t.dim)
         counterView.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, sp)
-        findViewById<TextView>(R.id.footer).apply {
+        for (id in intArrayOf(R.id.footer, R.id.clock)) findViewById<TextView>(id).apply {
             setTextColor(t.dim)
             setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, (sp * 0.8f).coerceAtLeast(14f))
         }
+        updateClock()
         list.selector = android.graphics.drawable.ColorDrawable(t.bar)
         adapter.notifyDataSetChanged()
     }
