@@ -28,6 +28,9 @@ class Screen(
     /** Where the cursor was, so Back returns to the same line. */
     var position: Int = 0
 
+    /** Set on lists worth coming back to: the cursor returns to the same line next time it opens. */
+    var key: String? = null
+
     /** Set to move the cursor on the next redraw (e.g. to the first stream once results arrive). */
     var moveTo: Int? = null
 

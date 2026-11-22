@@ -47,6 +47,9 @@ object Settings {
 
     // ---- Home rows hidden on this device ----
 
+    /** Lists show watched films with a ✓, or leave them out. */
+    fun hideWatched(c: Context) = prefs(c).getBoolean("hideWatched", false)
+
     fun rowKey(a: Addon, c: Addon.Catalog) = "${a.name}|${c.type}|${c.id}"
 
     fun hiddenRows(c: Context): Set<String> = prefs(c).getStringSet("hiddenRows", emptySet()) ?: emptySet()
@@ -95,11 +98,13 @@ object Settings {
         lateinit var themeRow: Row
         lateinit var sizeRow: Row
         lateinit var clockRow: Row
+        lateinit var watchedRow: Row
 
         fun show() {
             themeRow.detail = "◄ ${Look.theme(app).name} ►"
             sizeRow.detail = "◄ ${Look.size(app).name} ►"
             clockRow.detail = "◄ ${Look.clock(app).name} ►"
+            watchedRow.detail = "◄ ${if (hideWatched(app)) "Hide them" else "Show with ✓"} ►"
             playerRow.detail = "◄ ${player(app).name} ►"
             langRow.detail = "◄ ${subtitleLanguage(app).name} ►"
             nextRow.detail = "◄ ${if (autoNext(app)) "On" else "Off"} ►"
@@ -117,6 +122,7 @@ object Settings {
         themeRow = Row("Theme", action = { Look.nextTheme(app); app.applyLook(); show() })
         sizeRow = Row("Text size", action = { Look.nextSize(app); app.applyLook(); show() })
         clockRow = Row("Clock", action = { Look.nextClock(app); app.updateClock(); show() })
+        watchedRow = Row("Watched films in lists", action = { prefs(app).edit().putBoolean("hideWatched", !hideWatched(app)).apply(); show() })
         nextRow = Row("Auto-play next episode", action = {
             prefs(app).edit().putBoolean("autoNext", !autoNext(app)).apply()
             show()
@@ -137,7 +143,7 @@ object Settings {
             listOf(
                 Row("Press OK on a line to change it"), Row("────────────────────"), playerRow, langRow, nextRow,
                 Row("────────────────────"),
-                themeRow, sizeRow, clockRow,
+                themeRow, sizeRow, clockRow, watchedRow,
                 Row("Hide rows", "►", opens = { rowsScreen(app) }),
                 Row("────────────────────"),
                 Row(info("App version", BuildConfig.VERSION_NAME)),

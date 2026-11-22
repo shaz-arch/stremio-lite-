@@ -83,9 +83,19 @@ object Catalogs {
         lateinit var screen: Screen
         lateinit var loadMore: () -> Unit
 
+        val placeKey = "cat:${a.transportUrl}|${c.type}|${c.id}"
+        // Return to the same line as last time (loading further pages if needed, up to a limit).
+        var pending: Int? = app.savedPlace(placeKey)?.takeIf { it in 1..400 }
+        var shown = 0
+
         fun rebuild() {
-            val rows = items.mapTo(ArrayList<Row>(items.size + 2)) { m ->
-                Row(m.name, detail(m), opens = { Details.screen(app, a, m) }, play = {
+            val marks = History.marks(app)
+            val hide = Settings.hideWatched(app)
+            val visible = if (hide) items.filter { marks[it.id] != "✓" } else items
+            shown = visible.size
+            val rows = visible.mapTo(ArrayList<Row>(visible.size + 2)) { m ->
+                val mark = marks[m.id]
+                Row(if (mark != null) "$mark ${m.name}" else m.name, detail(m), opens = { Details.screen(app, a, m) }, play = {
                     // A film's stream request needs nothing from its details: start it right away.
                     if (m.type == "movie") Streams.prefetch(app, m.type, m.id)
                     app.push(Details.screen(app, a, m, autoPlay = true))
@@ -100,7 +110,14 @@ object Catalogs {
                 ended -> rows += Row(if (items.isEmpty()) "This row is empty." else "──── end of list: ${items.size} titles ────")
             }
             screen.rows = rows
+            pending?.let { want ->
+                when {
+                    want < shown -> { screen.moveTo = want; pending = null }
+                    ended || error != null -> { screen.moveTo = (shown - 1).coerceAtLeast(0); pending = null }
+                }
+            }
             app.refresh(screen)
+            if (pending != null && !loading && !ended && error == null) Net.later(0) { loadMore() }
         }
 
         loadMore = {
@@ -124,8 +141,12 @@ object Catalogs {
         }
 
         screen = Screen(title, listOf(Row("Loading…")), tag = typeLabel(c.type))
-        screen.onShow = { if (items.isEmpty() && !loading && error == null && !ended) loadMore() }
-        screen.onSelect = { pos -> if (pos >= items.size - LOAD_AHEAD && error == null) loadMore() }
+        screen.key = placeKey
+        screen.onShow = {
+            if (items.isEmpty() && !loading && error == null && !ended) loadMore()
+            else if (items.isNotEmpty()) rebuild() // refresh ✓ marks after watching something
+        }
+        screen.onSelect = { pos -> if (pos >= shown - LOAD_AHEAD && error == null) loadMore() }
         return screen
     }
 

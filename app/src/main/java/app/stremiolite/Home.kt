@@ -27,6 +27,7 @@ object Home {
 
     fun forget() {
         addons = null
+        savedJson = null
         rebuildHome = null
         loadError = null
         checks.clear()
@@ -94,8 +95,10 @@ object Home {
             Updates.check { rebuild() }
             if (addons == null) {
                 // Show the saved list straight away, then refresh it from the account.
-                runCatching { Stremio.parseAddons(Account.addonCache(app).readText()) }
-                    .onSuccess { addons = it }
+                runCatching { Account.addonCache(app).readText() }.onSuccess { text ->
+                    savedJson = text
+                    runCatching { Stremio.parseAddons(text) }.onSuccess { addons = it }
+                }
                 if (!loading) load(app, screen)
             }
             rebuild()
@@ -104,6 +107,9 @@ object Home {
     }
 
     private var rebuildHome: (() -> Unit)? = null
+
+    /** The add-on list as last saved, so a refresh that changes nothing doesn't redraw Home. */
+    private var savedJson: String? = null
 
     private fun load(app: MainActivity, screen: Screen) {
         val key = Account.authKey(app) ?: return
@@ -116,12 +122,18 @@ object Home {
         }) { r ->
             loading = false
             r.onSuccess { (email, json, list) ->
-                addons = list
+                val hadError = loadError != null
                 loadError = null
-                checks.clear()
                 if (email.isNotEmpty()) Account.saveEmail(app, email)
-                runCatching { Account.addonCache(app).writeText(json) }
-                History.pull(app, force = true) { rebuildHome?.invoke() }
+                if (json == savedJson && addons != null) {
+                    // Same rows as on screen already: nothing to redraw.
+                    if (hadError) rebuildHome?.invoke()
+                    return@async
+                }
+                addons = list
+                savedJson = json
+                checks.clear()
+                Net.async({ runCatching { Account.addonCache(app).writeText(json) } }) { }
             }.onFailure { e ->
                 loadError = if (e is Stremio.ApiError) e.message else Net.describe(e)
             }

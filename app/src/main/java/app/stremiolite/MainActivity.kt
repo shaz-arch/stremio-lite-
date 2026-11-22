@@ -134,8 +134,20 @@ class MainActivity : Activity() {
 
     // ---- navigation -------------------------------------------------------
 
+    /** Cursor line per remembered list (Screen.key), for this run of the app. */
+    private val places = HashMap<String, Int>()
+
+    fun savedPlace(key: String): Int? = places[key]
+
+    private fun rememberPlace(s: Screen) {
+        val k = s.key ?: return
+        if (stack.lastOrNull() === s) list.selectedItemPosition.takeIf { it >= 0 }?.let { s.position = it }
+        places[k] = s.position
+    }
+
     fun push(screen: Screen) {
-        stack.lastOrNull()?.onHide?.invoke()
+        stack.lastOrNull()?.let { rememberPlace(it); it.onHide?.invoke() }
+        screen.key?.let { k -> places[k]?.let { screen.position = it } }
         stack.add(screen)
         render()
         screen.onShow?.invoke()
@@ -147,6 +159,7 @@ class MainActivity : Activity() {
             finish()
             return
         }
+        stack.last().let { rememberPlace(it) }
         stack.removeAt(stack.lastIndex).onHide?.invoke()
         render()
         stack.last().onShow?.invoke()

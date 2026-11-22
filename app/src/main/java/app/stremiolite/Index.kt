@@ -74,6 +74,6 @@ object Index {
             Row(e.name, tag + Catalogs.typeLabel(e.catalog.type) + "  ►", opens = { Catalogs.screen(app, e.addon, e.catalog, e.name) })
         }
         val title = if (depth > 1) list.first().let { parts(it).take(depth).joinToString(" · ") } else name
-        return Screen(title, subs + direct, tag = "Index")
+        return Screen(title, subs + direct, tag = "Index").also { it.key = "index:$title" }
     }
 }

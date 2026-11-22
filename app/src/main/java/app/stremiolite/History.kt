@@ -116,7 +116,27 @@ object History {
     private val writeLock = Any()
     @Volatile private var writeSeq = 0
 
+    /** "✓" watched film, "▶" started or next up, by title id. Rebuilt only after a change. */
+    private var marks: Map<String, String>? = null
+
+    fun marks(c: Context): Map<String, String> {
+        ensure(c)
+        marks?.let { return it }
+        val m = HashMap<String, String>()
+        log.forEach { if (it.type == "movie") m[it.id] = "✓" }
+        remote.forEach { (id, raw) ->
+            if (id in m) return@forEach
+            val o = runCatching { JSONObject(raw) }.getOrNull() ?: return@forEach
+            val st = o.optJSONObject("state") ?: return@forEach
+            if (o.optString("type") == "movie" && (st.optInt("timesWatched") > 0 || st.optInt("flaggedWatched") > 0)) m[id] = "✓"
+        }
+        items.forEach { if (m[it.id] == null) m[it.id] = "▶" }
+        marks = m
+        return m
+    }
+
     private fun save() {
+        marks = null
         Net.cancel(saveTask)
         Net.later(1_500, saveTask)
     }
@@ -172,6 +192,7 @@ object History {
 
     /** Forgets what's in memory, so the next use loads the (newly chosen) profile's file. */
     fun reset() {
+        marks = null
         Net.cancel(saveTask)
         loaded = false
         videos.clear(); items.clear(); library.clear(); log.clear(); remote.clear(); unsent.clear()
@@ -445,6 +466,7 @@ object History {
         items += keepItems + m.items.filter { n -> n.id !in unsent && keepItems.none { it.id == n.id } }
         library.clear()
         library += keepLib + m.library.filter { n -> n.id !in unsent && keepLib.none { it.id == n.id } }
+        marks = null
         return sig() != before || progressChanged
     }
 
