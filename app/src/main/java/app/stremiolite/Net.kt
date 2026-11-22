@@ -68,7 +68,7 @@ object Net {
         c.connectTimeout = timeoutMs
         c.readTimeout = timeoutMs
         c.instanceFollowRedirects = true
-        c.setRequestProperty("User-Agent", "StremioLite/${BuildConfigLite.VERSION} (Android TV)")
+        c.setRequestProperty("User-Agent", "StremioLean/${BuildConfigLite.VERSION} (Android TV)")
         c.setRequestProperty("Accept", "application/json")
         return c
     }

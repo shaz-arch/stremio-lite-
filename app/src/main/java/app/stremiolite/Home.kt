@@ -90,7 +90,7 @@ object Home {
         }
         rebuildHome = { rebuild() }
 
-        screen = Screen(title = "Stremio Lite", rows = listOf(Row("Loading your rows…")) + tools, tag = Profiles.current(app)?.name ?: "")
+        screen = Screen(title = "Stremio Lean", rows = listOf(Row("Loading your rows…")) + tools, tag = Profiles.current(app)?.name ?: "")
         screen.onShow = {
             History.pull(app) { rebuild() }
             Updates.check { rebuild() }

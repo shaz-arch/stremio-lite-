@@ -12,7 +12,7 @@ import android.os.Build
 object DemoMenus {
 
     fun home(app: MainActivity) = Screen(
-        title = "Stremio Lite",
+        title = "Stremio Lean",
         tag = "demo",
         rows = listOf(
             sample(app, "Top 100 Today"),
@@ -118,18 +118,18 @@ object DemoMenus {
             Row("────────────────────"),
             letsEncryptTest(app),
             Row("Test VLC: play the 20-second test clip", action = {
-                if (vlc) Player.play(app, Player.TEST_CLIP, "Stremio Lite test clip", force = Player.VLC)
+                if (vlc) Player.play(app, Player.TEST_CLIP, "Stremio Lean test clip", force = Player.VLC)
                 else app.toast("VLC isn't installed. Get it from the Appstore.")
             }),
             Row("Test Just Player: play the test clip", action = {
-                if (just) Player.play(app, Player.TEST_CLIP, "Stremio Lite test clip", force = Player.JUST_PLAYER)
+                if (just) Player.play(app, Player.TEST_CLIP, "Stremio Lean test clip", force = Player.JUST_PLAYER)
                 else app.toast("Just Player isn't installed. That's fine: VLC is the default.")
             }),
         ))
     }
 
     fun about() = Screen("About", listOf(
-        Row(info("Stremio Lite", BuildConfig.VERSION_NAME)),
+        Row(info("Stremio Lean", BuildConfig.VERSION_NAME)),
         Row("Version 1 complete: all six steps built."),
         Row("Source: github.com/shaz-arch/stremio-lite-"),
     ))
