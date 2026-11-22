@@ -305,7 +305,31 @@ object Home {
                 a.catalogs.map { c ->
                     Row(c.name, Catalogs.typeLabel(c.type) + if (c.required.isNotEmpty()) " · not on home" else "")
                 }
-        return Screen(a.name, head + cats)
+        val edit = if (a.isLocal) emptyList() else listOf(
+            Row("Edit this add-on's settings on your phone", "QR  ►", opens = { editQr(a) }),
+        )
+        return Screen(a.name, edit + head + cats)
+    }
+
+    /** A QR code for the add-on's own configure page, so the phone opens the right config. */
+    private fun editQr(a: Addon): Screen {
+        val url = a.base + "/configure"
+        val s = Screen(
+            "Edit on your phone",
+            listOf(
+                Row("Scan the code with your phone's camera."),
+                Row("It opens this add-on's own settings page."),
+                Row(""),
+                Row("For AIOMetadata: press Load Configuration,"),
+                Row("enter your password, change things, then Save."),
+                Row("Back here, choose Reload my rows and add-ons."),
+                Row(""),
+                Row("Your install link stays the same,"),
+                Row("so nothing needs reinstalling."),
+            ),
+        )
+        s.image = Qr.make(url)
+        return s
     }
 
     private fun signOut(app: MainActivity) = Screen(

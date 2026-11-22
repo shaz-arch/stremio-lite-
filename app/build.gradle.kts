@@ -14,7 +14,7 @@ android {
         // CI passes the GitHub build number, so the app can tell when a newer build is out.
         val build = (project.findProperty("buildNumber") as String?)?.toIntOrNull() ?: 1
         versionCode = build
-        versionName = "1.7.2 (build $build)"
+        versionName = "1.7.3 (build $build)"
     }
 
     // One fixed key for every build, so each new version installs over the last.
@@ -53,4 +53,8 @@ android {
     }
 }
 
-// No libraries yet: plain Android views and the Kotlin standard library only.
+// Plain Android views and the Kotlin standard library, plus ZXing's core encoder for QR codes
+// (3.3.3 is the last release that runs on Android 5).
+dependencies {
+    implementation("com.google.zxing:core:3.3.3")
+}
