@@ -68,6 +68,7 @@ object Stremio {
             val o = arr.optJSONObject(i) ?: return@mapNotNull null
             val url = o.optString("transportUrl")
             if (!url.startsWith("http") || "127.0.0.1" in url || "localhost" in url) return@mapNotNull null
+            if (o.optJSONObject("manifest")?.optString("id")?.endsWith(STICK_ROWS) == true) o.put("stickRows", true)
             Thread {
                 runCatching { JSONObject(Net.get(url, timeoutMs = 8_000)) }.getOrNull()
                     ?.takeIf { it.has("id") && it.has("resources") }
@@ -102,13 +103,40 @@ object Stremio {
      * Installs an add-on from its link. One with the same id (e.g. an older AIOMetadata)
      * is replaced in place; otherwise it is added to the end. Returns the add-on's name.
      */
-    fun installAddon(authKey: String, link: String): String {
+    /** Marks the stored copy of a "stick rows" add-on (its id gets this ending). */
+    const val STICK_ROWS = ".stickrows"
+
+    /**
+     * A "stick rows" copy for the account: no rows and only the catalog resource, so Stremio's
+     * own apps ignore it. Stremio Lite reads the live list and uses its rows instead.
+     */
+    private fun stickRowsCopy(manifest: JSONObject): JSONObject {
+        val m = JSONObject()
+        for (k in listOf("version", "description", "logo", "types", "idPrefixes")) if (manifest.has(k)) m.put(k, manifest.get(k))
+        m.put("id", manifest.optString("id") + STICK_ROWS)
+        m.put("name", manifest.optString("name", "Add-on") + " (stick rows)")
+        m.put("resources", JSONArray().put("catalog"))
+        m.put("catalogs", JSONArray())
+        if (!m.has("types")) m.put("types", JSONArray().put("movie").put("series"))
+        return m
+    }
+
+    /** Removes the add-on with this link from the account. */
+    fun removeAddon(authKey: String, transportUrl: String) {
+        val old = JSONObject(addonsJson(authKey)).optJSONArray("addons") ?: JSONArray()
+        val out = JSONArray()
+        for (i in 0 until old.length()) old.optJSONObject(i)?.takeIf { it.optString("transportUrl") != transportUrl }?.let { out.put(it) }
+        setAddons(authKey, out)
+    }
+
+    fun installAddon(authKey: String, link: String, stickRows: Boolean = false): String {
         val url = link.trim().replace(Regex("^stremio://", RegexOption.IGNORE_CASE), "https://")
             .let { if (it.endsWith("/manifest.json")) it else it.trimEnd('/') + "/manifest.json" }
         val manifest = JSONObject(Net.get(url, timeoutMs = 15_000))
         if (!manifest.has("id")) throw ApiError("That link isn't an add-on")
+        val stored = if (stickRows) stickRowsCopy(manifest) else slim(manifest)
         val entry = JSONObject().put("transportUrl", url).put("transportName", "")
-            .put("manifest", slim(manifest))
+            .put("manifest", stored)
             .put("flags", JSONObject().put("official", false).put("protected", false))
         val old = JSONObject(addonsJson(authKey)).optJSONArray("addons") ?: JSONArray()
         val out = JSONArray()
@@ -116,7 +144,7 @@ object Stremio {
         for (i in 0 until old.length()) {
             val o = old.optJSONObject(i) ?: continue
             val same = o.optString("transportUrl") == url ||
-                o.optJSONObject("manifest")?.optString("id") == manifest.optString("id")
+                o.optJSONObject("manifest")?.optString("id") == stored.optString("id")
             if (same) { if (!placed) { out.put(entry); placed = true } } else out.put(o)
         }
         if (!placed) out.put(entry)
@@ -140,6 +168,10 @@ object Stremio {
 
 /** One installed add-on, as listed on the Stremio account. */
 class Addon(
+    /** The add-on's own id (for a stick-rows copy, the id of the add-on it was made from). */
+    val id: String,
+    /** Installed with "stick rows": its rows replace those of the add-on with the same id. */
+    val stickRows: Boolean,
     val name: String,
     val version: String,
     val transportUrl: String,
@@ -200,7 +232,10 @@ class Addon(
                     )
                 }
             }
+            val rawId = m.optString("id")
             return Addon(
+                id = rawId.removeSuffix(Stremio.STICK_ROWS),
+                stickRows = o.optBoolean("stickRows") || rawId.endsWith(Stremio.STICK_ROWS),
                 name = m.optString("name").ifEmpty { m.optString("id", "Add-on") },
                 version = m.optString("version"),
                 transportUrl = o.optString("transportUrl"),

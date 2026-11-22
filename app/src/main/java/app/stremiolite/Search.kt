@@ -82,7 +82,7 @@ object Search {
     }
 
     private fun results(app: MainActivity, query: String): Screen {
-        val sources = Home.allAddons().filter { !it.isLocal }.flatMap { a ->
+        val sources = Home.rowAddons().filter { !it.isLocal }.flatMap { a ->
             a.catalogs.filter { it.searchable }.map { c -> a to c }
         }
         // Each catalogue's results, kept in catalogue order so the list doesn't jump about.

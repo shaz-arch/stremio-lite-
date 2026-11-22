@@ -61,7 +61,7 @@ object Settings {
     private fun rowsScreen(app: MainActivity): Screen {
         lateinit var screen: Screen
         fun build(): List<Row> {
-            val pairs = Home.allAddons().filter { !it.isLocal }.flatMap { a -> a.catalogs.filter { Index.openable(it) }.map { a to it } }
+            val pairs = Home.rowAddons().filter { !it.isLocal }.flatMap { a -> a.catalogs.filter { Index.openable(it) }.map { a to it } }
             if (pairs.isEmpty()) return listOf(Row("Your rows are still loading. Go back and try again in a moment."))
             val hidden = hiddenRows(app)
             val rows = mutableListOf(

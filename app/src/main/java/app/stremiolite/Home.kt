@@ -15,6 +15,16 @@ object Home {
     /** The add-ons currently loaded (empty until the list arrives). */
     fun allAddons(): List<Addon> = addons ?: emptyList()
 
+    /**
+     * Add-ons whose rows and search the app uses: an add-on installed as "stick rows" takes the
+     * place of the add-on with the same id (e.g. the phone's AIOMetadata) for rows and search.
+     * That add-on still answers everything else (details, episodes).
+     */
+    fun rowAddons(list: List<Addon> = allAddons()): List<Addon> {
+        val replaced = list.filter { it.stickRows }.map { it.id }.toSet()
+        return list.filter { it.stickRows || it.id !in replaced }
+    }
+
     fun forget() {
         addons = null
         rebuildHome = null
@@ -256,7 +266,8 @@ object Home {
                 listOf(
                     Row("────────────────────"),
                     Row("Check connections again", action = { checkAll() }),
-                    Row("Install or replace an add-on by link", "►", action = { askInstall(app) }),
+                    Row("Install or replace an add-on by link", "►", action = { askInstall(app, false) }),
+                    Row("Add stick rows (an index config just for this app)", "►", action = { askInstall(app, true) }),
                 ),
         )
         screen.position = 2
@@ -265,7 +276,7 @@ object Home {
     }
 
     /** Paste an add-on's link (https:// or stremio://). Replaces an installed copy of the same add-on. */
-    private fun askInstall(app: MainActivity) {
+    private fun askInstall(app: MainActivity, stickRows: Boolean) {
         val key = Account.authKey(app) ?: return
         val input = android.widget.EditText(app).apply {
             hint = "https://…/manifest.json"
@@ -273,14 +284,18 @@ object Home {
         }
         android.app.AlertDialog.Builder(app)
             .setTitle("Add-on link")
-            .setMessage("Paste the add-on's install link. If you already have this add-on (e.g. AIOMetadata), it is replaced.")
+            .setMessage(
+                if (stickRows) "Paste the install link of the config whose rows this app should show. " +
+                    "Stremio's own apps won't see it, so your phone keeps its own rows."
+                else "Paste the add-on's install link. If you already have this add-on (e.g. AIOMetadata), it is replaced.",
+            )
             .setView(input)
             .setPositiveButton("Install") { _, _ ->
                 val link = input.text.toString().trim()
                 if (link.isEmpty()) return@setPositiveButton
                 val status = Screen("Installing", listOf(Row("Installing the add-on…")))
                 app.push(status)
-                Net.async({ Stremio.installAddon(key, link) }) { r ->
+                Net.async({ Stremio.installAddon(key, link, stickRows) }) { r ->
                     status.rows = r.fold(
                         { name -> listOf(Row("Installed: $name"), Row("Your rows will reload on Home.")) },
                         { e -> listOf(Row("Couldn't install: " + if (e is Stremio.ApiError) e.message else Net.describe(e))) },
@@ -310,9 +325,24 @@ object Home {
                 }
         val edit = if (a.isLocal) emptyList() else listOf(
             Row("Edit this add-on's settings on your phone", "QR  ►", opens = { editQr(a) }),
+            Row("Remove from this account", "►", opens = { removeScreen(app, a) }),
         )
         return Screen(a.name, edit + head + cats)
     }
+
+    private fun removeScreen(app: MainActivity, a: Addon) = Screen(
+        "Remove ${a.name}?",
+        listOf(
+            Row("No, go back", action = { app.back() }),
+            Row("Yes, remove it from this Stremio account", action = {
+                val key = Account.authKey(app) ?: return@Row
+                Net.async({ Stremio.removeAddon(key, a.transportUrl) }) { r ->
+                    r.onSuccess { app.toast("Removed ${a.name}"); forget(); app.resetTo(screen(app)) }
+                        .onFailure { app.toast("Couldn't remove: ${Net.describe(it)}") }
+                }
+            }),
+        ),
+    )
 
     /** A QR code for the add-on's own configure page, so the phone opens the right config. */
     private fun editQr(a: Addon): Screen {
