@@ -110,6 +110,9 @@ object Home {
 
     private var rebuildHome: (() -> Unit)? = null
 
+    /** Redraws Home if it has been built (e.g. an update was found while the app was in the background). */
+    fun redraw() { rebuildHome?.invoke() }
+
     /** The add-on list as last saved, so a refresh that changes nothing doesn't redraw Home. */
     private var savedJson: String? = null
 

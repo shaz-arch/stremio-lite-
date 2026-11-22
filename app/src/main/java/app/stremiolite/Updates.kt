@@ -6,7 +6,7 @@ import android.os.Build
 import org.json.JSONObject
 import java.io.File
 
-/** Checks GitHub once per start-up for a newer build, and installs it on request. */
+/** Checks GitHub for a newer build (at most every 30 minutes), and installs it on request. */
 object Updates {
     private const val LATEST = "https://api.github.com/repos/shaz-arch/stremio-lite-/releases/latest"
     private const val APK = "https://github.com/shaz-arch/stremio-lite-/releases/latest/download/stremio-lite.apk"
@@ -14,7 +14,8 @@ object Updates {
     /** The newer build number, once one has been found. */
     var available: Int? = null
         private set
-    private var checked = false
+    private var lastCheck = 0L
+    private const val EVERY_MS = 30 * 60_000L
 
     /** From Settings: check now and say what was found. */
     fun checkNow(app: MainActivity, done: () -> Unit) {
@@ -29,9 +30,11 @@ object Updates {
         }
     }
 
+    /** Quietly checks if 30 minutes have passed since the last check; [done] runs only if a newer build exists. */
     fun check(done: () -> Unit) {
-        if (checked) return
-        checked = true
+        val now = System.currentTimeMillis()
+        if (now - lastCheck < EVERY_MS) return
+        lastCheck = now
         Net.async({ JSONObject(Net.get(LATEST)).optString("tag_name") }) { r ->
             val n = r.getOrNull()?.removePrefix("build-")?.toIntOrNull()
             if (n != null && n > BuildConfig.VERSION_CODE) {

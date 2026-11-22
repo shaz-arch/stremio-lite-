@@ -123,6 +123,8 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         updateClock()
+        // Coming back to the app (it may have been running in the background for days).
+        Updates.check { Home.redraw() }
     }
 
     private val clockHandler = android.os.Handler(android.os.Looper.getMainLooper())
