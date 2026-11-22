@@ -54,12 +54,21 @@ object Streams {
         Subtitles.prefetch(app, type, id)
     }
 
-    /** A recent early fetch for this title, or a new one. */
+    /**
+     * A recent early fetch for this title if it can be trusted, or a fresh one: reused only if it's
+     * under 90 seconds old and still running, or finished with every source answering and results.
+     */
     private fun fetchFor(type: String, id: String): Fetch {
         val key = "$type/$id"
-        early[key]?.let { if (System.currentTimeMillis() - it.started < FRESH_MS) return it }
+        early[key]?.let { f ->
+            val young = System.currentTimeMillis() - f.started < REUSE_MS
+            val healthy = !f.done || (f.notes.isEmpty() && f.found.isNotEmpty())
+            if (young && healthy) return f
+        }
         return Fetch(type, id).also { early[key] = it }
     }
+
+    private const val REUSE_MS = 90_000L
 
     /** One round of asking the stream add-ons; every listener runs on the main thread after each answer. */
     class Fetch(type: String, id: String) {
@@ -231,6 +240,7 @@ object Streams {
         fun rows(): List<Row> {
             val list = mutableListOf(status)
             if (picked != null) list += pickRow
+            if (fetch.done) list += Row("Why this stream?", "►", opens = { why(fetch, minutes, picked, tried) })
             list += Row("────────────────────")
             if (picked != null) list += Row("Play it again", action = {
                 picked?.let { Player.play(app, it.url, title, listOfNotNull(subs.chosen), watch = watch, startAt = freshStart(app, watch, startAt)) }
@@ -297,7 +307,7 @@ object Streams {
             val sub = subs.chosen?.let { " · subtitles " + Subtitles.languageName(it.lang) } ?: ""
             val from = if (startAt > 0) " from ${History.clock(startAt)}" else ""
             val took = (System.currentTimeMillis() - (if (askedAt > 0) askedAt else fetch.started)) / 100 / 10.0
-            status.label = "Found in $took s. Playing$from…$sub"
+            status.label = "Found in $took s (${fetch.found.size} streams). Playing$from…$sub"
             pickRow.label = best.summary
             pickRow.detail = best.addon
             screen.rows = rows()
@@ -335,6 +345,30 @@ object Streams {
     /** When resuming, pick up from the latest saved position (it moves on each time you watch a bit more). */
     private fun freshStart(app: MainActivity, watch: History.Watch?, startAt: Long): Long =
         if (startAt > 0 && watch != null) History.resumeAt(app, watch.videoId).takeIf { it > 0 } ?: startAt else startAt
+
+    /** Every stream Play best considered, best score first, and why any were left out. */
+    private fun why(fetch: Fetch, minutes: Double, picked: Stream?, tried: Set<Stream>): Screen {
+        val scored = fetch.found.map { s -> s to Best.score(s, minutes) }
+        val rows = mutableListOf<Row>()
+        rows += Row("${fetch.found.size} streams from ${fetch.addons.size} add-ons, in ${(System.currentTimeMillis() - fetch.started) / 1000} s")
+        fetch.notes.forEach { rows += Row("Problem: $it") }
+        fetch.hiddenLine()?.let { rows += Row(it) }
+        rows += Row("──── Score · stream ────")
+        scored.filter { it.second != null }.sortedByDescending { it.second }.forEach { (s, sc) ->
+            val mark = when {
+                s === picked -> "  ◄ picked"
+                s in tried -> "  ✗ failed"
+                else -> ""
+            }
+            rows += Row("${sc!!.toInt().toString().padStart(4)}  ${s.summary}", s.addon + mark)
+        }
+        val out = scored.filter { it.second == null }
+        if (out.isNotEmpty()) {
+            rows += Row("──── Left out ────")
+            out.forEach { (s, _) -> rows += Row("      ${s.summary}", Best.whyOut(s)) }
+        }
+        return Screen("Why this stream?", rows)
+    }
 
     private fun shortName(name: String) = name.substringBefore('|').trim().ifEmpty { name }.take(16)
 
@@ -421,6 +455,15 @@ object Best {
             ?: if (h == 0.0) t.trim().toDoubleOrNull() else null
         val total = h * 60 + (m ?: 0.0)
         return if (total in 5.0..600.0) total else null
+    }
+
+    /** Why [score] leaves a stream out (for the "Why this stream?" screen). */
+    fun whyOut(s: Streams.Stream): String = when {
+        isCam(s.text) -> "cam copy"
+        s.cached == false -> "not cached yet"
+        s.rank >= 4 -> "4K: above this device"
+        Regex("""\bHI10P?\b""").containsMatchIn(s.text) -> "10-bit H.264"
+        else -> "left out"
     }
 
     /** A score, or null when the stream shouldn't be auto-played at all. */
