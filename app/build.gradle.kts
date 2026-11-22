@@ -17,13 +17,23 @@ android {
         versionName = "1.4.1 (build $build)"
     }
 
+    // One fixed key for every build, so each new version installs over the last.
+    // (A GitHub secret SIGNING_PASSWORD overrides the built-in password if you ever move the key out.)
+    signingConfigs {
+        create("fixed") {
+            storeFile = rootProject.file("signing/stremio-lite.jks")
+            storePassword = System.getenv("SIGNING_PASSWORD") ?: "03818f3fe24f9ddb7d608e5b0a975dd0"
+            keyAlias = "stremiolite"
+            keyPassword = System.getenv("SIGNING_PASSWORD") ?: "03818f3fe24f9ddb7d608e5b0a975dd0"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
-            // Signed with the debug key so it can be sideloaded without setting up a keystore.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("fixed")
         }
     }
 
