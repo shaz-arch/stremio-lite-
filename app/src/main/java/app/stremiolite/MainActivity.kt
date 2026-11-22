@@ -70,8 +70,10 @@ class MainActivity : Activity() {
         val completed = extras?.getString("end_by") == "playback_completion"
 
         // Back within 15 seconds without getting past 5: the stream didn't play.
+        // A "video" under 2 minutes is an error clip (e.g. ElfHosted's "couldn't play this" screen), not the title.
         val elapsed = System.currentTimeMillis() - launched
-        val failed = !completed && launched > 0 && elapsed < 15_000 && (position ?: 0) < 5_000
+        val errorClip = duration != null && duration < 120_000
+        val failed = errorClip || (!completed && launched > 0 && elapsed < 15_000 && (position ?: 0) < 5_000)
         val retry = onPlayerFailed
         onPlayerFailed = null
         if (failed) {

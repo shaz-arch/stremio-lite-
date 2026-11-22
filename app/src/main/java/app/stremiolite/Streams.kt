@@ -434,7 +434,11 @@ object Streams {
  * a good source, English (or multi-language) audio, and a bitrate Wi-Fi carries comfortably.
  */
 object Best {
-    private const val MAX_MBPS = 30.0   // above this an old stick on Wi-Fi tends to buffer
+    // Bitrate for an old 1080p stick on Wi-Fi: 6-15 Mbps looks as good as it gets on its screen and
+    // streams comfortably; above 15 is marked down progressively, above 25 heavily.
+    private const val SWEET_LOW = 6.0
+    private const val SWEET_HIGH = 15.0
+    private const val HEAVY = 25.0
 
     private val camWords = Regex("""\b(CAM|CAMRIP|HDCAM|TS|HDTS|TELESYNC|TC|TELECINE|SCR|SCREENER|DVDSCR)\b""")
     fun isCam(up: String) = camWords.containsMatchIn(up)
@@ -476,7 +480,7 @@ object Best {
 
         var sc = when (s.rank) { 3 -> 300.0; 2 -> 200.0; 1 -> 80.0; else -> 160.0 }
         sc += when {
-            "REMUX" in s.tags -> 30.0
+            "REMUX" in s.tags -> 10.0          // best source, but huge files for no visible gain on this stick
             "BluRay" in s.tags -> 24.0
             "WEB-DL" in s.tags || "WEBRip" in s.tags -> 20.0
             "HDTV" in s.tags -> 4.0
@@ -506,8 +510,12 @@ object Best {
         if (s.cached == true) sc += 10.0
         if (s.sizeMb > 0) {
             val mbps = s.sizeMb * 8 / (minutes * 60)
-            if (mbps > MAX_MBPS) sc -= 80.0 + (mbps - MAX_MBPS) * 2
-            else sc += minOf(18.0, mbps / 6.0 * 8)          // more bitrate for the same picture: better
+            sc += when {
+                mbps < SWEET_LOW -> mbps / SWEET_LOW * 14            // small files: a little softer
+                mbps <= SWEET_HIGH -> 14.0 + (mbps - SWEET_LOW) / (SWEET_HIGH - SWEET_LOW) * 6  // the sweet spot
+                mbps <= HEAVY -> 20.0 - (mbps - SWEET_HIGH) * 3      // 15-25: fading out
+                else -> -10.0 - (mbps - HEAVY) * 6                    // over 25: likely to buffer
+            }
         }
         return sc
     }
