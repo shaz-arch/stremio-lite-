@@ -12,6 +12,42 @@ object Search {
 
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
 
+    // ---- recent searches (last 8, newest first) ----
+
+    private fun prefs(c: android.content.Context) = c.getSharedPreferences("search", android.content.Context.MODE_PRIVATE)
+
+    fun recent(c: android.content.Context): List<String> =
+        prefs(c).getString("recent", "")!!.split('\n').filter { it.isNotBlank() }
+
+    private fun remember(c: android.content.Context, q: String) {
+        val list = (listOf(q) + recent(c).filter { !it.equals(q, ignoreCase = true) }).take(8)
+        prefs(c).edit().putString("recent", list.joinToString("\n")).apply()
+    }
+
+    /** Home's Search line: type a new search, or press OK on a recent one. */
+    fun menu(app: MainActivity): Screen {
+        lateinit var screen: Screen
+        fun build(): List<Row> {
+            val rows = mutableListOf(Row("New search…", "☰", action = { start(app) }))
+            val recent = recent(app)
+            if (recent.isNotEmpty()) {
+                rows += Row("──── Recent searches ────")
+                recent.forEach { q -> rows += Row(q, "►", action = { remember(app, q); app.push(results(app, q)) }) }
+                rows += Row("────────────────────")
+                rows += Row("Clear recent searches", action = {
+                    prefs(app).edit().remove("recent").apply()
+                    screen.rows = build()
+                    screen.moveTo = 0
+                    app.refresh(screen)
+                })
+            }
+            return rows
+        }
+        screen = Screen("Search", build())
+        screen.onShow = { screen.rows = build(); app.refresh(screen) }
+        return screen
+    }
+
     /** Opens the TV keyboard, then the results screen. */
     fun start(app: MainActivity) {
         val input = EditText(app).apply {
@@ -28,6 +64,7 @@ object Search {
             dialog.dismiss()
             if (q.length >= 2) {
                 lastQuery = q
+                remember(app, q)
                 app.push(results(app, q))
             }
         }

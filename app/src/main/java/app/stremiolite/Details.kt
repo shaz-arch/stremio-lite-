@@ -171,7 +171,23 @@ object Details {
         return v.id to Streams.playBest(app, f.type, v.id, "${f.name} ${epLabel(v)}", f.runtime, watchFor(f, v), at)
     }
 
-    private fun epLabel(v: Video) = "S${v.season.toString().padStart(2, '0')}E${v.episode.toString().padStart(2, '0')}"
+    /** Full details for a title from whichever add-on can describe it (background threads only). */
+    fun loadFull(type: String, id: String): Full {
+        val from = Home.allAddons().firstOrNull { it.supports("meta", type, id) }
+            ?: throw IllegalStateException("none of your add-ons can describe this title")
+        return fetch(from, type, id)
+    }
+
+    /** One episode's screen, and playing it, for lists outside the show's own screens (New episodes). */
+    fun episodeScreen(app: MainActivity, f: Full, v: Video): Screen =
+        episode(app, f, if (v.season > 0) "Season ${v.season}" else "Specials", v)
+
+    fun playEpisode(app: MainActivity, f: Full, v: Video): Screen =
+        Streams.playBest(app, f.type, v.id, "${f.name} ${epLabel(v)}", f.runtime, watchFor(f, v), History.resumeAt(app, v.id))
+
+    fun isUpcoming(date: String) = upcoming(date)
+
+    fun epLabel(v: Video) = "S${v.season.toString().padStart(2, '0')}E${v.episode.toString().padStart(2, '0')}"
 
     private fun ordered(f: Full) = f.videos.filter { it.season > 0 }.sortedWith(compareBy({ it.season }, { it.episode }))
 

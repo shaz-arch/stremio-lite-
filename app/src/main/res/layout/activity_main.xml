@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Padding keeps everything inside the TV's safe area (overscan) -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/dos_blue"
@@ -37,6 +38,7 @@
     </LinearLayout>
 
     <View
+        android:id="@+id/rule_top"
         android:layout_width="match_parent"
         android:layout_height="3dp"
         android:layout_marginTop="6dp"
@@ -76,6 +78,7 @@
     </LinearLayout>
 
     <View
+        android:id="@+id/rule_bottom"
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:layout_marginTop="6dp"

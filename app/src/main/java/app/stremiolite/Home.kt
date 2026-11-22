@@ -28,7 +28,7 @@ object Home {
         val status = Row("")
         lateinit var screen: Screen
 
-        val search = Row("Search", "☰  ►", action = { Search.start(app) })
+        val search = Row("Search", "☰  ►", opens = { Search.menu(app) })
         val tools = listOf(
             Row("────────────────────"),
             Row("Settings", opens = { Settings.screen(app) }),
@@ -64,6 +64,7 @@ object Home {
                 search,
                 Row("Continue watching", if (cw.isEmpty()) "nothing yet" else "${cw.size}  ►", opens = { continueScreen(app) }),
                 Row("Library", if (lib.isEmpty()) "empty" else "${lib.size}  ►", opens = { libraryScreen(app) }),
+                Row("New episodes", opens = { NewEpisodes.screen(app) }),
                 Row("Watched", opens = { watchedScreen(app) }),
                 Row("────────────────────"),
             ))
@@ -118,8 +119,9 @@ object Home {
      * in add-on order then catalogue order, so it matches the Stremio home layout.
      */
     private fun homeRows(app: MainActivity, list: List<Addon>): List<Row> {
+        val hidden = Settings.hiddenRows(app)
         val pairs = list.filter { !it.isLocal }.flatMap { a ->
-            a.catalogs.filter { it.required.isEmpty() }.map { c -> a to c }
+            a.catalogs.filter { it.required.isEmpty() && Settings.rowKey(a, it) !in hidden }.map { c -> a to c }
         }
         // The add-on with the most rows (AIOMetadata) gets no name tag; others are labelled.
         val main = pairs.groupingBy { it.first }.eachCount().maxByOrNull { it.value }?.key

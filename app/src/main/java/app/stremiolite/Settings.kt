@@ -44,13 +44,59 @@ object Settings {
 
     fun autoNext(c: Context): Boolean = prefs(c).getBoolean("autoNext", true)
 
+    // ---- Home rows hidden on this device ----
+
+    fun rowKey(a: Addon, c: Addon.Catalog) = "${a.name}|${c.type}|${c.id}"
+
+    fun hiddenRows(c: Context): Set<String> = prefs(c).getStringSet("hiddenRows", emptySet()) ?: emptySet()
+
+    private fun setHidden(c: Context, key: String, hide: Boolean) {
+        val now = hiddenRows(c).toMutableSet()
+        if (hide) now += key else now -= key
+        prefs(c).edit().putStringSet("hiddenRows", now).apply()
+    }
+
+    /** Every catalogue row from the add-ons, each switchable between shown and hidden on Home. */
+    private fun rowsScreen(app: MainActivity): Screen {
+        lateinit var screen: Screen
+        fun build(): List<Row> {
+            val pairs = Home.allAddons().filter { !it.isLocal }.flatMap { a -> a.catalogs.filter { it.required.isEmpty() }.map { a to it } }
+            if (pairs.isEmpty()) return listOf(Row("Your rows are still loading. Go back and try again in a moment."))
+            val hidden = hiddenRows(app)
+            val rows = mutableListOf(
+                Row("OK switches a row between shown and hidden"),
+                Row("Show all rows", action = { prefs(app).edit().remove("hiddenRows").apply(); screen.rows = build(); app.refresh(screen) }),
+                Row("────────────────────"),
+            )
+            pairs.forEach { (a, c) ->
+                val key = rowKey(a, c)
+                lateinit var r: Row
+                r = Row("${c.name}  ·  ${Catalogs.typeLabel(c.type)}", if (key in hidden) "hidden" else "shown", action = {
+                    val hide = key !in hiddenRows(app)
+                    setHidden(app, key, hide)
+                    r.detail = if (hide) "hidden" else "shown"
+                    app.refresh(screen)
+                })
+                rows += r
+            }
+            return rows
+        }
+        screen = Screen("Hide Home rows", build())
+        screen.position = 3
+        return screen
+    }
+
     fun screen(app: MainActivity): Screen {
         lateinit var screen: Screen
         lateinit var playerRow: Row
         lateinit var langRow: Row
         lateinit var nextRow: Row
+        lateinit var themeRow: Row
+        lateinit var sizeRow: Row
 
         fun show() {
+            themeRow.detail = "◄ ${Look.theme(app).name} ►"
+            sizeRow.detail = "◄ ${Look.size(app).name} ►"
             playerRow.detail = "◄ ${player(app).name} ►"
             langRow.detail = "◄ ${subtitleLanguage(app).name} ►"
             nextRow.detail = "◄ ${if (autoNext(app)) "On" else "Off"} ►"
@@ -65,6 +111,8 @@ object Settings {
                 Updates.install(app)
             }
         })
+        themeRow = Row("Theme", action = { Look.nextTheme(app); app.applyLook(); show() })
+        sizeRow = Row("Text size", action = { Look.nextSize(app); app.applyLook(); show() })
         nextRow = Row("Auto-play next episode", action = {
             prefs(app).edit().putBoolean("autoNext", !autoNext(app)).apply()
             show()
@@ -84,6 +132,9 @@ object Settings {
             "Settings",
             listOf(
                 Row("Press OK on a line to change it"), Row("────────────────────"), playerRow, langRow, nextRow,
+                Row("────────────────────"),
+                themeRow, sizeRow,
+                Row("Hide Home rows", "►", opens = { rowsScreen(app) }),
                 Row("────────────────────"),
                 Row(info("App version", BuildConfig.VERSION_NAME)),
                 updateRow,

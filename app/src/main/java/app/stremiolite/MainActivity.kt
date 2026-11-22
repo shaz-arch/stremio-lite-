@@ -39,7 +39,7 @@ class MainActivity : Activity() {
         counterView = findViewById(R.id.counter)
         list = findViewById(R.id.list)
         sideImage = findViewById(R.id.side_image)
-        adapter = RowAdapter(layoutInflater)
+        adapter = RowAdapter(layoutInflater, this)
         list.adapter = adapter
 
         list.setOnItemClickListener { _, _, position, _ -> choose(position) }
@@ -52,6 +52,7 @@ class MainActivity : Activity() {
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
+        applyLook()
         Net.init(this)
         push(if (Account.authKey(this) != null) Home.screen(this) else SignIn.screen(this))
     }
@@ -172,7 +173,7 @@ class MainActivity : Activity() {
     fun columns(): Int {
         val paint = android.graphics.Paint().apply {
             typeface = android.graphics.Typeface.MONOSPACE
-            textSize = 20f * resources.displayMetrics.scaledDensity
+            textSize = Look.size(this@MainActivity).sp * resources.displayMetrics.scaledDensity
         }
         val rowPadding = 24f * resources.displayMetrics.density
         val width = (if (list.width > 0) list.width else resources.displayMetrics.widthPixels) - rowPadding
@@ -188,6 +189,26 @@ class MainActivity : Activity() {
     }
 
     fun isTop(screen: Screen) = stack.lastOrNull() === screen
+
+    /** Applies the chosen theme and text size to the whole screen. */
+    fun applyLook() {
+        val t = Look.theme(this)
+        val sp = Look.size(this).sp
+        window.decorView.setBackgroundColor(t.background)
+        findViewById<View>(R.id.root).setBackgroundColor(t.background)
+        findViewById<View>(R.id.rule_top).setBackgroundColor(t.bar)
+        findViewById<View>(R.id.rule_bottom).setBackgroundColor(t.bar)
+        titleView.setTextColor(t.title)
+        titleView.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, sp + 2)
+        counterView.setTextColor(t.dim)
+        counterView.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, sp)
+        findViewById<TextView>(R.id.footer).apply {
+            setTextColor(t.dim)
+            setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, (sp * 0.8f).coerceAtLeast(14f))
+        }
+        list.selector = android.graphics.drawable.ColorDrawable(t.bar)
+        adapter.notifyDataSetChanged()
+    }
 
     fun refreshTop() {
         stack.lastOrNull()?.let { refresh(it) }
@@ -316,7 +337,7 @@ class MainActivity : Activity() {
 
     // ---- list adapter -------------------------------------------------------
 
-    private class RowAdapter(private val inflater: LayoutInflater) : BaseAdapter() {
+    private class RowAdapter(private val inflater: LayoutInflater, private val context: android.content.Context) : BaseAdapter() {
         var rows: List<Row> = emptyList()
 
         override fun getCount() = rows.size
@@ -329,6 +350,16 @@ class MainActivity : Activity() {
             }
             val holder = view.tag as Holder
             val row = rows[position]
+            val t = Look.theme(context)
+            val sp = Look.size(context).sp
+            if (holder.sp != sp || holder.theme !== t) {
+                holder.label.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, sp)
+                holder.detail.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, sp)
+                holder.label.setTextColor(t.label)
+                holder.detail.setTextColor(t.detail)
+                holder.sp = sp
+                holder.theme = t
+            }
             holder.label.text = row.label
             holder.detail.text = when {
                 row.detail.isNotEmpty() -> row.detail
@@ -338,6 +369,9 @@ class MainActivity : Activity() {
             return view
         }
 
-        private class Holder(val label: TextView, val detail: TextView)
+        private class Holder(val label: TextView, val detail: TextView) {
+            var sp = 0f
+            var theme: Look.Theme? = null
+        }
     }
 }
