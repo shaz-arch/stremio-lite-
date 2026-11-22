@@ -16,6 +16,19 @@ object Updates {
         private set
     private var checked = false
 
+    /** From Settings: check now and say what was found. */
+    fun checkNow(app: MainActivity, done: () -> Unit) {
+        app.toast("Checking for updates…")
+        Net.async({ JSONObject(Net.get(LATEST)).optString("tag_name") }) { r ->
+            val n = r.getOrNull()?.removePrefix("build-")?.toIntOrNull()
+            when {
+                n == null -> app.toast("Couldn't check: ${r.exceptionOrNull()?.let { Net.describe(it) } ?: "no answer"}")
+                n > BuildConfig.VERSION_CODE -> { available = n; done() }
+                else -> app.toast("You're on the latest build (${BuildConfig.VERSION_CODE}).")
+            }
+        }
+    }
+
     fun check(done: () -> Unit) {
         if (checked) return
         checked = true

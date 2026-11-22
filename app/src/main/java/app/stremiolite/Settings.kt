@@ -56,6 +56,15 @@ object Settings {
             nextRow.detail = "◄ ${if (autoNext(app)) "On" else "Off"} ►"
             app.refresh(screen)
         }
+        lateinit var updateRow: Row
+        updateRow = Row("Check for updates", action = {
+            Updates.checkNow(app) {
+                updateRow.label = "Install build ${Updates.available}"
+                updateRow.detail = "►"
+                app.refresh(screen)
+                Updates.install(app)
+            }
+        })
         nextRow = Row("Auto-play next episode", action = {
             prefs(app).edit().putBoolean("autoNext", !autoNext(app)).apply()
             show()
@@ -73,7 +82,12 @@ object Settings {
         })
         screen = Screen(
             "Settings",
-            listOf(Row("Press OK on a line to change it"), Row("────────────────────"), playerRow, langRow, nextRow),
+            listOf(
+                Row("Press OK on a line to change it"), Row("────────────────────"), playerRow, langRow, nextRow,
+                Row("────────────────────"),
+                Row(info("App version", BuildConfig.VERSION_NAME)),
+                updateRow,
+            ),
         )
         screen.position = 2
         screen.onShow = { show() }

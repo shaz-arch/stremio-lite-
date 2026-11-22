@@ -225,6 +225,9 @@ object Streams {
         var played = false
         var picked: Stream? = null
         val tried = mutableSetOf<Stream>()
+        var askedAt = 0L
+        var subsGraceStarted = false
+        var subsGraceOver = false
         val minutes = Best.minutes(runtime) ?: if (type == "movie") 110.0 else 45.0
 
         fun rows(): List<Row> {
@@ -273,7 +276,12 @@ object Streams {
 
         fun update() {
             if (picked != null) return
-            val waitingSubs = !subs.done
+            // Once the streams are in, give subtitles one more second at most.
+            if (fetch.done && !subs.done && !subsGraceStarted) {
+                subsGraceStarted = true
+                Net.later(1_000, Runnable { subsGraceOver = true; update() })
+            }
+            val waitingSubs = !subs.done && !subsGraceOver
             if (!fetch.done || waitingSubs) {
                 status.label = "Finding the best stream… ${fetch.answered} of ${fetch.addons.size} add-ons, ${fetch.found.size} streams" +
                     if (fetch.done && waitingSubs) " · getting subtitles" else ""
@@ -293,14 +301,15 @@ object Streams {
             picked = best
             val sub = subs.chosen?.let { " · subtitles " + Subtitles.languageName(it.lang) } ?: ""
             val from = if (startAt > 0) " from ${History.clock(startAt)}" else ""
-            status.label = "Playing in a moment$from…$sub"
+            val took = (System.currentTimeMillis() - (if (askedAt > 0) askedAt else fetch.started)) / 100 / 10.0
+            status.label = "Found in $took s. Playing$from…$sub"
             pickRow.label = best.summary
             pickRow.detail = best.addon
             screen.rows = rows()
             screen.moveTo = 0
             app.refresh(screen)
             // A short pause so you can read the pick, and press Back if it's wrong.
-            Net.later(1_500, start)
+            Net.later(1_000, start)
         }
 
         screen = Screen("Play: $title", listOf(status))
@@ -308,8 +317,11 @@ object Streams {
             active = true
             if (!started) {
                 started = true
+                askedAt = System.currentTimeMillis()
                 subs = SubPick(app, type, id) { update() }
                 fetch = fetchFor(type, id).listen { update() }
+                // An early fetch started before Play best was pressed: count from when it began.
+                askedAt = minOf(askedAt, fetch.started)
                 update()
             } else if (played) {
                 status.label = "Played. Press OK below to play again or choose another."

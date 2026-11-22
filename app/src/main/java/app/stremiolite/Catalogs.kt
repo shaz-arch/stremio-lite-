@@ -85,7 +85,11 @@ object Catalogs {
 
         fun rebuild() {
             val rows = items.mapTo(ArrayList<Row>(items.size + 2)) { m ->
-                Row(m.name, detail(m), opens = { Details.screen(app, a, m) }, play = { app.push(Details.screen(app, a, m, autoPlay = true)) })
+                Row(m.name, detail(m), opens = { Details.screen(app, a, m) }, play = {
+                    // A film's stream request needs nothing from its details: start it right away.
+                    if (m.type == "movie") Streams.prefetch(app, m.type, m.id)
+                    app.push(Details.screen(app, a, m, autoPlay = true))
+                })
             }
             when {
                 error != null -> {
