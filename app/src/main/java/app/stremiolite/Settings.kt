@@ -1,6 +1,8 @@
 package app.stremiolite
 
 import android.content.Context
+import org.json.JSONArray
+import org.json.JSONObject
 
 /** The two choices people actually need: which player, and which subtitle language. */
 object Settings {
@@ -47,6 +49,53 @@ object Settings {
 
     // ---- Home rows hidden on this device ----
 
+    // ---- settings that follow the account ------------------------------------------------
+    // Kept as one hidden record on the Stremio account (like the waiting list), so the phone and the
+    // stick share them. The player and text size stay per device: a phone and a TV want different ones.
+
+    private const val SYNC_ID = "stremiolite:settings"
+    private val INT_KEYS = listOf("subLang", "theme", "clock")
+    private val BOOL_KEYS = listOf("autoNext", "hideWatched")
+
+    /** Sends this device's shared settings to the account. */
+    fun syncOut(c: Context) {
+        val p = prefs(c)
+        val now = System.currentTimeMillis()
+        val o = JSONObject().put("updated", now)
+        INT_KEYS.forEach { k -> if (p.contains(k)) o.put(k, p.getInt(k, 0)) }
+        BOOL_KEYS.forEach { k -> if (p.contains(k)) o.put(k, p.getBoolean(k, false)) }
+        o.put("hiddenRows", JSONArray(hiddenRows(c).toList()))
+        p.edit().putLong("syncedAt", now).apply()
+        val item = History.rawRemote(c, SYNC_ID)?.let { runCatching { JSONObject(it) }.getOrNull() } ?: Sync.newItem(SYNC_ID, "other", "{}")
+        item.put("name", o.toString()).put("removed", true).put("temp", false).put("_mtime", Sync.iso(now))
+        History.putRemote(c, item)
+    }
+
+    /** Takes the account's settings if they're newer than this device's. Returns true if anything changed. */
+    fun syncIn(c: Context): Boolean {
+        val p = prefs(c)
+        val raw = History.rawRemote(c, SYNC_ID)
+        if (raw == null) {
+            // Nothing on the account yet: this device's settings become the shared ones.
+            if (p.getLong("syncedAt", 0) == 0L) syncOut(c)
+            return false
+        }
+        val o = runCatching { JSONObject(JSONObject(raw).optString("name")) }.getOrNull() ?: return false
+        val updated = o.optLong("updated")
+        if (updated <= p.getLong("syncedAt", 0)) return false
+        // The first time a device joins, keep the rows it had hidden as well as the account's.
+        val first = p.getLong("syncedAt", 0) == 0L
+        val remoteHidden = o.optJSONArray("hiddenRows")?.let { a -> (0 until a.length()).map { a.optString(it) }.toSet() } ?: emptySet()
+        val hidden = if (first) remoteHidden + hiddenRows(c) else remoteHidden
+        val e = p.edit()
+        INT_KEYS.forEach { k -> if (o.has(k)) e.putInt(k, o.optInt(k)) }
+        BOOL_KEYS.forEach { k -> if (o.has(k)) e.putBoolean(k, o.optBoolean(k)) }
+        e.putStringSet("hiddenRows", hidden)
+        e.putLong("syncedAt", updated).apply()
+        if (hidden != remoteHidden) syncOut(c)
+        return true
+    }
+
     /** Lists show watched films with a ✓, or leave them out. */
     fun hideWatched(c: Context) = prefs(c).getBoolean("hideWatched", false)
 
@@ -58,6 +107,7 @@ object Settings {
         val now = hiddenRows(c).toMutableSet()
         if (hide) now += key else now -= key
         prefs(c).edit().putStringSet("hiddenRows", now).apply()
+        syncOut(c)
     }
 
     /** Every catalogue row from the add-ons, each switchable between shown and hidden on Home. */
@@ -69,7 +119,7 @@ object Settings {
             val hidden = hiddenRows(app)
             val rows = mutableListOf(
                 Row("OK switches a row between shown and hidden"),
-                Row("Show all rows", action = { prefs(app).edit().remove("hiddenRows").apply(); screen.rows = build(); app.refresh(screen) }),
+                Row("Show all rows", action = { prefs(app).edit().remove("hiddenRows").apply(); syncOut(app); screen.rows = build(); app.refresh(screen) }),
                 Row("────────────────────"),
             )
             pairs.forEach { (a, c) ->
@@ -122,9 +172,10 @@ object Settings {
         themeRow = Row("Theme", action = { Look.nextTheme(app); app.applyLook(); show() })
         sizeRow = Row("Text size", action = { Look.nextSize(app); app.applyLook(); show() })
         clockRow = Row("Clock", action = { Look.nextClock(app); app.updateClock(); show() })
-        watchedRow = Row("Watched films in lists", action = { prefs(app).edit().putBoolean("hideWatched", !hideWatched(app)).apply(); show() })
+        watchedRow = Row("Watched films in lists", action = { prefs(app).edit().putBoolean("hideWatched", !hideWatched(app)).apply(); syncOut(app); show() })
         nextRow = Row("Auto-play next episode", action = {
             prefs(app).edit().putBoolean("autoNext", !autoNext(app)).apply()
+            syncOut(app)
             show()
         })
 
@@ -136,6 +187,7 @@ object Settings {
         langRow = Row("Subtitle language", action = {
             val next = (languages.indexOf(subtitleLanguage(app)) + 1) % languages.size
             prefs(app).edit().putInt("subLang", next).apply()
+            syncOut(app)
             show()
         })
         screen = Screen(

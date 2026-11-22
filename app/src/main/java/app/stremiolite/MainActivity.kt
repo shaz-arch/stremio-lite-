@@ -68,6 +68,13 @@ class MainActivity : Activity() {
 
         applyLook()
         Waiting.schedule(this)
+        History.onPulled = {
+            if (Settings.syncIn(this)) {
+                applyLook()
+                Home.redraw()
+                refreshTop()
+            }
+        }
         Net.init(this)
         push(
             when {

@@ -36,7 +36,10 @@ object Look {
     fun theme(c: Context): Theme = themes.getOrElse(prefs(c).getInt("theme", 0)) { themes[0] }
     fun size(c: Context): Size = sizes.getOrElse(prefs(c).getInt("textSize", 1)) { sizes[1] }
 
-    fun nextTheme(c: Context) = prefs(c).edit().putInt("theme", (themes.indexOf(theme(c)) + 1) % themes.size).apply()
+    fun nextTheme(c: Context) {
+        prefs(c).edit().putInt("theme", (themes.indexOf(theme(c)) + 1) % themes.size).apply()
+        Settings.syncOut(c)
+    }
     fun nextSize(c: Context) = prefs(c).edit().putInt("textSize", (sizes.indexOf(size(c)) + 1) % sizes.size).apply()
 
     /** Clock in the bottom-right corner; the pattern is for java.text.SimpleDateFormat, empty = off. */
@@ -51,5 +54,8 @@ object Look {
     )
 
     fun clock(c: Context): Clock = clocks.getOrElse(prefs(c).getInt("clock", 0)) { clocks[0] }
-    fun nextClock(c: Context) = prefs(c).edit().putInt("clock", (clocks.indexOf(clock(c)) + 1) % clocks.size).apply()
+    fun nextClock(c: Context) {
+        prefs(c).edit().putInt("clock", (clocks.indexOf(clock(c)) + 1) % clocks.size).apply()
+        Settings.syncOut(c)
+    }
 }

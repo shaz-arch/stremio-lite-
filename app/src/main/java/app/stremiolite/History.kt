@@ -402,6 +402,9 @@ object History {
      * Fetches the account's library (at most every few minutes unless [force]). [changed] runs only if
      * Continue watching, the Library or the Watched list actually changed, so screens aren't redrawn for nothing.
      */
+    /** Runs after every successful pull (e.g. to pick up settings changed on another device). */
+    var onPulled: (() -> Unit)? = null
+
     fun pull(c: Context, force: Boolean = false, changed: (() -> Unit)? = null) {
         ensure(c)
         val key = Account.authKey(c) ?: return
@@ -419,6 +422,7 @@ object History {
                     save()
                     changed?.invoke()
                 }
+                onPulled?.invoke()
             }
         }
     }

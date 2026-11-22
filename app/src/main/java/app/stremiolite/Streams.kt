@@ -34,6 +34,35 @@ object Streams {
     ) {
         val summary: String
             get() = listOf(quality.padEnd(5), tags, size, provider).filter { it.isNotBlank() }.joinToString("  ")
+
+        /** The release group (e.g. "NTB" in "Show.S01E02.1080p.WEB-DL-NTB.mkv"), if one can be seen. */
+        val group: String by lazy {
+            val file = Regex("""-([A-Z0-9]{2,15})\.(MKV|MP4|AVI|M4V|TS)\b""").findAll(text).lastOrNull()?.groupValues?.get(1)
+            file ?: Regex("""-([A-Z0-9]{2,15})(?=\s|$|\])""").findAll(text).lastOrNull()?.groupValues?.get(1) ?: ""
+        }
+
+        /** What a later episode should try to match. */
+        val source: String get() = tags.split(' ').firstOrNull { it in setOf("REMUX", "BluRay", "WEB-DL", "WEBRip", "HDTV") } ?: ""
+    }
+
+    /** The release last played for each show, so the next episode keeps the same look and timing. */
+    class Pref(val group: String, val quality: String, val source: String)
+
+    private fun bingePrefs(c: android.content.Context) = Profiles.prefsFor(c, "binge")
+
+    fun lastFor(c: android.content.Context, showId: String): Pref? {
+        val v = bingePrefs(c).getString(showId, null) ?: return null
+        val p = v.split('|')
+        return if (p.size >= 3) Pref(p[0], p[1], p[2]) else null
+    }
+
+    private fun remember(c: android.content.Context, showId: String, s: Stream) {
+        val prefs = bingePrefs(c)
+        val e = prefs.edit().putString(showId, "${s.group}|${s.quality}|${s.source}")
+        // Keep it small: the 40 most recent shows.
+        val all = prefs.all.keys.filter { it != showId }
+        if (all.size > 40) all.take(all.size - 40).forEach { e.remove(it) }
+        e.apply()
     }
 
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
@@ -236,6 +265,9 @@ object Streams {
         val tried = mutableSetOf<Stream>()
         var askedAt = 0L
         val minutes = Best.minutes(runtime) ?: if (type == "movie") 110.0 else 45.0
+        // Episodes: prefer the same release as the last episode played (steady quality, subtitles in sync).
+        val showId = watch?.id?.takeIf { type == "series" }
+        val prefer = showId?.let { lastFor(app, it) }
 
         fun rows(): List<Row> {
             val list = mutableListOf(status)
@@ -255,6 +287,7 @@ object Streams {
             if (s != null && active && !played) {
                 played = true
                 tried += s
+                showId?.let { remember(app, it, s) }
                 app.onPlayerFailed = { retry() }
                 Player.play(app, s.url, title, listOfNotNull(subs.chosen), watch = watch, startAt = freshStart(app, watch, startAt))
             }
@@ -262,7 +295,7 @@ object Streams {
 
         // The stream died straight away: count down to the next-best one (up to 3 more tries).
         retry = {
-            val next = if (tried.size >= 4) null else Best.pick(fetch.found.filter { it !in tried }, minutes)
+            val next = if (tried.size >= 4) null else Best.pick(fetch.found.filter { it !in tried }, minutes, prefer)
             if (next == null) {
                 status.label = "That stream didn't start, and there's no other good one. Choose below."
                 screen.rows = rows()
@@ -294,7 +327,7 @@ object Streams {
                 app.refresh(screen)
                 return
             }
-            val best = Best.pick(fetch.found, minutes)
+            val best = Best.pick(fetch.found, minutes, prefer)
             if (best == null) {
                 status.label = if (fetch.found.isEmpty()) "No playable streams found." else "No stream suits this device. Choose one below."
                 val r = rows().toMutableList()
@@ -496,6 +529,19 @@ object Best {
     }
 
     /** A score, or null when the stream shouldn't be auto-played at all. */
+    /**
+     * A nudge towards the release the last episode used: enough to choose it over a similar
+     * stream, never enough to pick a worse resolution or anything score() rules out.
+     */
+    fun match(s: Streams.Stream, prefer: Streams.Pref?): Double {
+        if (prefer == null) return 0.0
+        var b = 0.0
+        if (prefer.group.isNotEmpty() && s.group == prefer.group) b += 40.0
+        if (s.quality == prefer.quality) b += 15.0
+        if (prefer.source.isNotEmpty() && s.source == prefer.source) b += 10.0
+        return b
+    }
+
     fun score(s: Streams.Stream, minutes: Double): Double? {
         val up = s.text
         if (isCam(up)) return null
@@ -545,8 +591,8 @@ object Best {
         return sc
     }
 
-    fun pick(streams: List<Streams.Stream>, minutes: Double): Streams.Stream? =
-        streams.mapNotNull { s -> score(s, minutes)?.let { s to it } }
+    fun pick(streams: List<Streams.Stream>, minutes: Double, prefer: Streams.Pref? = null): Streams.Stream? =
+        streams.mapNotNull { s -> score(s, minutes)?.let { s to it + match(s, prefer) } }
             .maxWithOrNull(compareBy<Pair<Streams.Stream, Double>>({ it.second }, { -it.first.order }))
             ?.first
 }

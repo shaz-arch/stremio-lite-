@@ -342,6 +342,7 @@ object Home {
                 }
         val edit = if (a.isLocal) emptyList() else listOf(
             Row("Edit this add-on's settings on your phone", "QR  ►", opens = { editQr(a) }),
+            Row("Show its install link (to keep a copy)", "QR  ►", opens = { linkQr(a) }),
             Row("Remove from this account", "►", opens = { removeScreen(app, a) }),
         )
         return Screen(a.name, edit + head + cats)
@@ -360,6 +361,24 @@ object Home {
             }),
         ),
     )
+
+    /** The add-on's install link as a QR code: photograph it, or scan it to reinstall elsewhere. */
+    private fun linkQr(a: Addon): Screen {
+        val s = Screen(
+            "Install link: ${a.name.substringBefore('|').trim()}",
+            listOf(
+                Row("Scan or photograph this to keep a copy of the link."),
+                Row("It reinstalls this exact setup if it's ever removed."),
+                Row(""),
+                Row("Keep it private: the link alone lets anyone"),
+                Row("use this setup (but not change it)."),
+                Row(""),
+                Row(info("Server", a.host)),
+            ),
+        )
+        s.image = Qr.make(a.transportUrl)
+        return s
+    }
 
     /** A QR code for the add-on's own configure page, so the phone opens the right config. */
     private fun editQr(a: Addon): Screen {
