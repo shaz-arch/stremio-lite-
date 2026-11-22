@@ -124,7 +124,9 @@ object Catalogs {
             if (!loading && !ended) {
                 loading = true
                 rebuild()
-                val first = fetched == 0
+                // Personal lists (MDBList, Trakt, Letterboxd…) change as you add to them: always fetch fresh.
+                val personal = listOf("mdblist.", "trakt.", "letterboxd.", "simkl.").any { c.id.startsWith(it) }
+                val first = fetched == 0 && !personal
                 val url = pageUrl(a, c, fetched)
                 Net.async({ fetch(url, useCache = first) }) { r ->
                     loading = false
