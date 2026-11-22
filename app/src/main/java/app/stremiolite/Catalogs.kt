@@ -85,7 +85,7 @@ object Catalogs {
 
         fun rebuild() {
             val rows = items.mapTo(ArrayList<Row>(items.size + 2)) { m ->
-                Row(m.name, detail(m), opens = { Details.screen(app, a, m) })
+                Row(m.name, detail(m), opens = { Details.screen(app, a, m) }, play = { app.push(Details.screen(app, a, m, autoPlay = true)) })
             }
             when {
                 error != null -> {

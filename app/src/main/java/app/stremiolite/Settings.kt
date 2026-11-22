@@ -42,16 +42,24 @@ object Settings {
     fun subtitleLanguage(c: Context): Language =
         languages.getOrElse(prefs(c).getInt("subLang", 1)) { languages[1] }
 
+    fun autoNext(c: Context): Boolean = prefs(c).getBoolean("autoNext", true)
+
     fun screen(app: MainActivity): Screen {
         lateinit var screen: Screen
         lateinit var playerRow: Row
         lateinit var langRow: Row
+        lateinit var nextRow: Row
 
         fun show() {
             playerRow.detail = "◄ ${player(app).name} ►"
             langRow.detail = "◄ ${subtitleLanguage(app).name} ►"
+            nextRow.detail = "◄ ${if (autoNext(app)) "On" else "Off"} ►"
             app.refresh(screen)
         }
+        nextRow = Row("Auto-play next episode", action = {
+            prefs(app).edit().putBoolean("autoNext", !autoNext(app)).apply()
+            show()
+        })
 
         playerRow = Row("Player", action = {
             val next = (players.indexOf(player(app)) + 1) % players.size
@@ -65,7 +73,7 @@ object Settings {
         })
         screen = Screen(
             "Settings",
-            listOf(Row("Press OK on a line to change it"), Row("────────────────────"), playerRow, langRow),
+            listOf(Row("Press OK on a line to change it"), Row("────────────────────"), playerRow, langRow, nextRow),
         )
         screen.position = 2
         screen.onShow = { show() }

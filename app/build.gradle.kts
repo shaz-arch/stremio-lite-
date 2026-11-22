@@ -11,8 +11,10 @@ android {
         applicationId = "app.stremiolite"
         minSdk = 22          // Android 5.1: every Fire TV Stick that runs Stremio
         targetSdk = 35
-        versionCode = 10
-        versionName = "1.3.0"
+        // CI passes the GitHub build number, so the app can tell when a newer build is out.
+        val build = (project.findProperty("buildNumber") as String?)?.toIntOrNull() ?: 1
+        versionCode = build
+        versionName = "1.4.0 (build $build)"
     }
 
     buildTypes {
@@ -31,6 +33,9 @@ android {
     }
     kotlinOptions {
         jvmTarget = "17"
+    }
+    buildFeatures {
+        buildConfig = true
     }
     lint {
         checkReleaseBuilds = false

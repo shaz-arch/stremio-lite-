@@ -101,7 +101,8 @@ object Details {
         )
     }
 
-    fun screen(app: MainActivity, from: Addon, item: Catalogs.Meta): Screen {
+    /** [autoPlay]: go straight on to playing (Play/Pause on a list), via the same resume/next logic. */
+    fun screen(app: MainActivity, from: Addon, item: Catalogs.Meta, autoPlay: Boolean = false): Screen {
         // Start with what the catalogue already knows, so there's something to read at once.
         val quick = Catalogs.preview(app, item)
         val loadingRow = Row("Loading full details…")
@@ -122,6 +123,14 @@ object Details {
                         full = loaded
                         if (loaded.videos.isNotEmpty()) History.applyAccountWatched(app, loaded.id, stremioOrder(loaded))
                         quick.rows = rows(app, loaded)
+                        val target = mainVideo(app, loaded)
+                        if (autoPlay && target != null && app.isTop(quick)) {
+                            app.refresh(quick)
+                            app.push(target.second)
+                            return@async
+                        }
+                        // Fetch the streams you'd most likely play next, so Play best is quick.
+                        target?.first?.let { Streams.prefetch(app, loaded.type, it) }
                     }.onFailure { e ->
                         loadingRow.label = "Couldn't load full details: ${Net.describe(e).let { d -> if (d == e.javaClass.simpleName) e.message ?: d else d }}"
                     }
@@ -133,9 +142,30 @@ object Details {
     }
 
     /** Opens a title from Continue watching or the Library, where only the basics were saved. */
-    fun screenFor(app: MainActivity, id: String, type: String, name: String, year: String): Screen? {
+    fun screenFor(app: MainActivity, id: String, type: String, name: String, year: String, autoPlay: Boolean = false): Screen? {
         val from = Home.allAddons().firstOrNull { it.supports("meta", type, id) } ?: Home.allAddons().firstOrNull() ?: return null
-        return screen(app, from, Catalogs.Meta(id, type, name, year, "", "", emptyList(), ""))
+        return screen(app, from, Catalogs.Meta(id, type, name, year, "", "", emptyList(), ""), autoPlay)
+    }
+
+    /**
+     * What "play this title" means: a film (resuming if started); for a show, the episode in progress,
+     * the next one, or the first one not yet watched. Returns its video id and the Play best screen.
+     */
+    private fun mainVideo(app: MainActivity, f: Full): Pair<String, Screen>? {
+        val isShow = f.videos.any { it.season > 0 || it.episode > 0 } && f.type != "movie"
+        if (!isShow) {
+            if (f.videos.isNotEmpty()) return null   // a collection: pick a part yourself
+            val w = watchFor(f, null)
+            val at = History.resumeAt(app, f.id)
+            return f.id to Streams.playBest(app, f.type, f.id, f.name, f.runtime, w, at)
+        }
+        val list = ordered(f).filter { !upcoming(it.released) }
+        val v = History.item(app, f.id)?.let { item -> list.firstOrNull { it.id == item.videoId } }
+            ?: list.firstOrNull { History.progress(app, it.id)?.done != true }
+            ?: list.firstOrNull()
+            ?: return null
+        val at = History.resumeAt(app, v.id)
+        return v.id to Streams.playBest(app, f.type, v.id, "${f.name} ${epLabel(v)}", f.runtime, watchFor(f, v), at)
     }
 
     private fun epLabel(v: Video) = "S${v.season.toString().padStart(2, '0')}E${v.episode.toString().padStart(2, '0')}"
@@ -279,7 +309,13 @@ object Details {
                 upcoming(v.released) -> "${v.released}  upcoming"
                 else -> v.released
             }
-            Row("$num  $title", listOf(mark(app, v), date).filter { it.isNotEmpty() }.joinToString("   "), opens = { episode(app, f, seasonName, v) })
+            Row(
+                "$num  $title", listOf(mark(app, v), date).filter { it.isNotEmpty() }.joinToString("   "),
+                opens = { episode(app, f, seasonName, v) },
+                play = {
+                    app.push(Streams.playBest(app, f.type, v.id, "${f.name} ${epLabel(v)}", f.runtime, watchFor(f, v), History.resumeAt(app, v.id)))
+                },
+            )
         }
         val screen = Screen("${f.name} › $seasonName", build())
         // Start on the first episode not yet watched.
@@ -309,6 +345,7 @@ object Details {
         screen.onShow = {
             screen.rows = build()
             app.refresh(screen)
+            Streams.prefetch(app, f.type, v.id)
         }
         return screen
     }

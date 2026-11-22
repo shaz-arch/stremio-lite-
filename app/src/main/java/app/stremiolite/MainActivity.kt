@@ -61,16 +61,35 @@ class MainActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode != Player.REQUEST_PLAY) return
-        val watch = History.takePending(this) ?: return
+        val (watch, launched) = History.takePending(this)
         val extras = data?.extras
         fun num(vararg keys: String): Long? = keys.firstNotNullOfOrNull { k -> (extras?.get(k) as? Number)?.toLong() }
         val position = num("extra_position", "position")?.takeIf { it >= 0 }
         val duration = num("extra_duration", "duration")?.takeIf { it > 0 }
         val completed = extras?.getString("end_by") == "playback_completion"
-        History.record(this, watch, position, duration, completed)
+
+        // Back within 15 seconds without getting past 5: the stream didn't play.
+        val elapsed = System.currentTimeMillis() - launched
+        val failed = !completed && launched > 0 && elapsed < 15_000 && (position ?: 0) < 5_000
+        val retry = onPlayerFailed
+        onPlayerFailed = null
+        if (failed) {
+            // Don't overwrite the saved position; let Play best try its next choice.
+            if (retry?.invoke() == true) return
+        } else if (watch != null) {
+            History.record(this, watch, position, duration, completed)
+            val finished = completed || History.isFinished(position ?: 0, duration ?: 0)
+            if (finished && watch.nextVideoId != null && Settings.autoNext(this)) {
+                push(Binge.upNext(this, watch))
+                return
+            }
+        }
         refreshTop()
         stack.lastOrNull()?.onShow?.invoke()
     }
+
+    /** Set by Play best before starting the player; returns true if it is trying another stream. */
+    var onPlayerFailed: (() -> Boolean)? = null
 
     override fun onDestroy() {
         stack.lastOrNull()?.onHide?.invoke()
@@ -122,6 +141,16 @@ class MainActivity : Activity() {
         val width = (if (list.width > 0) list.width else resources.displayMetrics.widthPixels) - rowPadding
         return ((width / paint.measureText("M")).toInt() - 1).coerceIn(30, 120)
     }
+
+    /** Swaps the top screen for another (the up-next countdown handing over to playback). */
+    fun replaceTop(screen: Screen) {
+        stack.removeAt(stack.lastIndex).onHide?.invoke()
+        stack.add(screen)
+        render()
+        screen.onShow?.invoke()
+    }
+
+    fun isTop(screen: Screen) = stack.lastOrNull() === screen
 
     fun refreshTop() {
         stack.lastOrNull()?.let { refresh(it) }
@@ -233,6 +262,13 @@ class MainActivity : Activity() {
             }
             KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
                 if (event.action == KeyEvent.ACTION_DOWN) jumpPage(1)
+                return true
+            }
+            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY -> {
+                if (event.action == KeyEvent.ACTION_UP) {
+                    val row = stack.lastOrNull()?.rows?.getOrNull(list.selectedItemPosition)
+                    (row?.play ?: row?.action)?.invoke()
+                }
                 return true
             }
             KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_SEARCH -> {

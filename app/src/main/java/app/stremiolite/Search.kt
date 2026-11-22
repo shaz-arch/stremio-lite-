@@ -70,7 +70,7 @@ object Search {
                 if (metas.isEmpty()) return@forEachIndexed
                 rows += Row("──── ${c.name} · ${Catalogs.typeLabel(c.type)} ────")
                 metas.take(25).forEach { m ->
-                    rows += Row(m.name, Catalogs.detail(m), opens = { Details.screen(app, a, m) })
+                    rows += Row(m.name, Catalogs.detail(m), opens = { Details.screen(app, a, m) }, play = { app.push(Details.screen(app, a, m, autoPlay = true)) })
                 }
             }
             if (answered >= sources.size && rows.size == 2 + errors.size && sources.isNotEmpty()) {

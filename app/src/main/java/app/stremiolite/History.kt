@@ -202,6 +202,8 @@ object History {
     // ---- writing ---------------------------------------------------------------------------
 
     /** Counts as finished near the end: the last 8%, or the last 2 minutes (Stremio uses 90%). */
+    fun isFinished(pos: Long, dur: Long) = finished(pos, dur)
+
     private fun finished(pos: Long, dur: Long) = dur > 0 && (pos >= dur * 0.92 || dur - pos < 120_000)
 
     /**
@@ -388,13 +390,16 @@ object History {
 
     fun setPending(c: Context, w: Watch?) {
         c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putString("pending", w?.toJson()?.toString()).apply()
+            .putString("pending", w?.toJson()?.toString())
+            .putLong("launched", System.currentTimeMillis()).apply()
     }
 
-    fun takePending(c: Context): Watch? {
+    /** What was playing (if it should be filed) and when the player was started. */
+    fun takePending(c: Context): Pair<Watch?, Long> {
         val p = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val s = p.getString("pending", null) ?: return null
-        p.edit().remove("pending").apply()
-        return runCatching { Watch.from(JSONObject(s)) }.getOrNull()
+        val s = p.getString("pending", null)
+        val launched = p.getLong("launched", 0)
+        p.edit().remove("pending").remove("launched").apply()
+        return (s?.let { runCatching { Watch.from(JSONObject(it)) }.getOrNull() }) to launched
     }
 }

@@ -129,7 +129,7 @@ object DemoMenus {
     }
 
     fun about() = Screen("About", listOf(
-        Row(info("Stremio Lite", BuildConfigLite.VERSION)),
+        Row(info("Stremio Lite", BuildConfig.VERSION_NAME)),
         Row("Version 1 complete: all six steps built."),
         Row("Source: github.com/shaz-arch/stremio-lite-"),
     ))
@@ -155,5 +155,5 @@ object DemoMenus {
 
 /** Kept by hand so the build needs no BuildConfig generation. */
 object BuildConfigLite {
-    const val VERSION = "1.3.0"
+    val VERSION: String get() = BuildConfig.VERSION_NAME
 }

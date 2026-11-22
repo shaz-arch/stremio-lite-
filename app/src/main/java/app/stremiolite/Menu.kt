@@ -15,6 +15,8 @@ class Row(
     var detail: String = "",
     val opens: (() -> Screen)? = null,
     val action: (() -> Unit)? = null,
+    /** What the Play/Pause button does on this line (start or resume watching straight away). */
+    val play: (() -> Unit)? = null,
 )
 
 /** One text screen: a title and a vertical list of rows. */

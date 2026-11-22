@@ -38,8 +38,35 @@ object Streams {
 
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
 
-    /** One round of asking the stream add-ons; [onChange] runs on the main thread after each answer. */
-    class Fetch(type: String, id: String, private val onChange: () -> Unit) {
+    // ---- fetching early --------------------------------------------------------------------
+
+    private const val FRESH_MS = 5 * 60_000L
+    private val early = LinkedHashMap<String, Fetch>()
+
+    /** Starts asking for a title's streams (and subtitles) before you press play. */
+    fun prefetch(app: MainActivity, type: String, id: String) {
+        val key = "$type/$id"
+        val have = early[key]
+        if (have != null && System.currentTimeMillis() - have.started < FRESH_MS) return
+        early.remove(key)
+        early[key] = Fetch(type, id)
+        while (early.size > 3) early.remove(early.keys.first())
+        Subtitles.prefetch(app, type, id)
+    }
+
+    /** A recent early fetch for this title, or a new one. */
+    private fun fetchFor(type: String, id: String): Fetch {
+        val key = "$type/$id"
+        early[key]?.let { if (System.currentTimeMillis() - it.started < FRESH_MS) return it }
+        return Fetch(type, id).also { early[key] = it }
+    }
+
+    /** One round of asking the stream add-ons; every listener runs on the main thread after each answer. */
+    class Fetch(type: String, id: String) {
+        val started = System.currentTimeMillis()
+        val listeners = mutableListOf<() -> Unit>()
+        private fun onChange() = listeners.toList().forEach { it() }
+
         val addons = Home.allAddons().filter { it.supports("stream", type, id) }
         val found = mutableListOf<Stream>()
         val notes = mutableListOf<String>()
@@ -75,6 +102,11 @@ object Streams {
             if (addons.isEmpty()) Net.later(0, Runnable { onChange() })
         }
 
+        fun listen(l: () -> Unit): Fetch {
+            listeners += l
+            return this
+        }
+
         fun hiddenLine(): String? {
             val hidden = mutableListOf<String>()
             if (hiddenTorrent > 0) hidden += "$hiddenTorrent torrent-only"
@@ -92,11 +124,15 @@ object Streams {
         var userPicked = false
 
         init {
-            if (!done) Subtitles.fetch(type, id) { list, finished ->
-                subs = list.toList()
-                done = finished
-                if (!userPicked) chosen = subs.firstOrNull { Subtitles.matches(it, lang) }
-                onChange()
+            if (!done) {
+                val f = Subtitles.get(app, type, id)
+                val apply = {
+                    subs = f.found.toList()
+                    done = f.done
+                    if (!userPicked) chosen = subs.firstOrNull { Subtitles.matches(it, lang) }
+                }
+                apply()
+                f.listen { apply(); onChange() }
             }
         }
 
@@ -165,7 +201,7 @@ object Streams {
             if (!started) {
                 started = true
                 subs = SubPick(app, type, id) { rebuild() }
-                fetch = Fetch(type, id) { rebuild() }
+                fetch = fetchFor(type, id).listen { rebuild() }
                 rebuild()
             }
         }
@@ -188,6 +224,7 @@ object Streams {
         var active = false
         var played = false
         var picked: Stream? = null
+        val tried = mutableSetOf<Stream>()
         val minutes = Best.minutes(runtime) ?: if (type == "movie") 110.0 else 45.0
 
         fun rows(): List<Row> {
@@ -201,11 +238,36 @@ object Streams {
             return list
         }
 
+        lateinit var retry: () -> Boolean
         val start = Runnable {
             val s = picked
             if (s != null && active && !played) {
                 played = true
-                Player.play(app, s.url, title, listOfNotNull(subs.chosen), watch = watch, startAt = startAt)
+                tried += s
+                app.onPlayerFailed = { retry() }
+                Player.play(app, s.url, title, listOfNotNull(subs.chosen), watch = watch, startAt = freshStart(app, watch, startAt))
+            }
+        }
+
+        // The stream died straight away: count down to the next-best one (up to 3 more tries).
+        retry = {
+            val next = if (tried.size >= 4) null else Best.pick(fetch.found.filter { it !in tried }, minutes)
+            if (next == null) {
+                status.label = "That stream didn't start, and there's no other good one. Choose below."
+                screen.rows = rows()
+                app.refresh(screen)
+                false
+            } else {
+                picked = next
+                played = false
+                status.label = "That stream didn't start. Trying the next one in 3 seconds… (Back to stop)"
+                pickRow.label = next.summary
+                pickRow.detail = next.addon
+                screen.rows = rows()
+                screen.position = 0
+                app.refresh(screen)
+                Net.later(3_000, start)
+                true
             }
         }
 
@@ -247,7 +309,7 @@ object Streams {
             if (!started) {
                 started = true
                 subs = SubPick(app, type, id) { update() }
-                fetch = Fetch(type, id) { update() }
+                fetch = fetchFor(type, id).listen { update() }
                 update()
             } else if (played) {
                 status.label = "Played. Press OK below to play again or choose another."

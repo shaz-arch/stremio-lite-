@@ -57,7 +57,10 @@ object Home {
             // Search, then what you're watching and what you've saved, then the catalogue rows.
             val cw = History.continueWatching(app)
             val lib = History.library(app)
-            rows.addAll(0, listOf(
+            Updates.available?.let { n ->
+                rows.add(0, Row("Update available: build $n. Press OK to install", "►", action = { Updates.install(app) }))
+            }
+            rows.addAll(if (Updates.available != null) 1 else 0, listOf(
                 search,
                 Row("Continue watching", if (cw.isEmpty()) "nothing yet" else "${cw.size}  ►", opens = { continueScreen(app) }),
                 Row("Library", if (lib.isEmpty()) "empty" else "${lib.size}  ►", opens = { libraryScreen(app) }),
@@ -72,6 +75,7 @@ object Home {
         screen = Screen(title = "Stremio Lite", rows = listOf(Row("Loading your rows…")) + tools)
         screen.onShow = {
             History.pull(app) { rebuild() }
+            Updates.check { rebuild() }
             if (addons == null) {
                 // Show the saved list straight away, then refresh it from the account.
                 runCatching { Stremio.parseAddons(Account.addonCache(app).readText()) }
@@ -139,7 +143,7 @@ object Home {
                 }
                 Row(e.name, detail, opens = {
                     Details.screenFor(app, e.id, e.type, e.name, e.year) ?: Screen(e.name, listOf(Row("Your add-ons are still loading. Try again in a moment.")))
-                })
+                }, play = { Details.screenFor(app, e.id, e.type, e.name, e.year, autoPlay = true)?.let { app.push(it) } })
             }
         }
         screen = Screen("Continue watching", build())
@@ -158,7 +162,7 @@ object Home {
             return list.map { s ->
                 Row(s.name, listOf(s.year, Catalogs.typeLabel(s.type).removeSuffix("s")).filter { it.isNotBlank() }.joinToString("  "), opens = {
                     Details.screenFor(app, s.id, s.type, s.name, s.year) ?: Screen(s.name, listOf(Row("Your add-ons are still loading. Try again in a moment.")))
-                })
+                }, play = { Details.screenFor(app, s.id, s.type, s.name, s.year, autoPlay = true)?.let { app.push(it) } })
             }
         }
         screen = Screen("Library", build())
