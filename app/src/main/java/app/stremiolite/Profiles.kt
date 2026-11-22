@@ -40,14 +40,28 @@ object Profiles {
     }
 
     /** Adds a profile (or updates one already signed in to the same account) and makes it current. */
+    /** Set by "Sign in again": the next sign-in renews this profile instead of making a new one. */
+    var renewing: String? = null
+
+    /** Stremio's reply when a saved sign-in has been ended (signed out elsewhere, password changed). */
+    fun isExpired(e: Throwable) = e is Stremio.ApiError && e.message?.contains("session", ignoreCase = true) == true
+
+    /** Opens the sign-in screen to renew profile [id]'s sign-in. */
+    fun signInAgain(app: MainActivity, id: String): Screen {
+        renewing = id
+        return SignIn.screen(app, addingProfile = true)
+    }
+
     fun add(c: Context, name: String, authKey: String, email: String): Profile {
         val list = all(c).toMutableList()
-        val same = list.firstOrNull { (email.isNotEmpty() && it.email.equals(email, true)) || it.authKey == authKey }
+        val renew = renewing?.let { r -> list.firstOrNull { it.id == r } }
+        renewing = null
+        val same = renew ?: list.firstOrNull { (email.isNotEmpty() && it.email.equals(email, true)) || it.authKey == authKey }
         val id = same?.id ?: "p" + System.currentTimeMillis().toString(36)
         if (same == null) current(c)?.let { copySettings(c, it.id, id) }
         val label = name.ifBlank { same?.name ?: email.substringBefore('@').ifBlank { "Profile ${list.size + 1}" } }
         list.removeAll { it.id == id }
-        list += Profile(id, label, authKey, email)
+        list += Profile(id, label, authKey, email.ifEmpty { same?.email ?: "" })
         write(c, list)
         select(c, id)
         return list.last()
@@ -233,11 +247,17 @@ object Profiles {
      * AIOMetadata setups), the big add-ons are copied in slimmed form; the app still reads
      * their full row lists live from the add-on.
      */
+    /** Says which side of a copy failed: "from" (reading) or "to" (writing). */
+    private class CopyError(val profileName: String, cause: Throwable) : Exception(cause.message, cause)
+
     private fun copyAddons(fromKey: String, toKey: String) {
-        val addons = JSONObject(Stremio.addonsJson(fromKey)).optJSONArray("addons") ?: JSONArray()
+        val addons = try {
+            JSONObject(Stremio.addonsJson(fromKey)).optJSONArray("addons") ?: JSONArray()
+        } catch (e: Exception) { throw CopyError("from", e) }
         try {
             Stremio.setAddons(toKey, addons)
         } catch (e: Stremio.ApiError) {
+            if (isExpired(e)) throw CopyError("to", e)
             if (e.message?.contains("size", ignoreCase = true) != true) throw e
             for (i in 0 until addons.length()) {
                 val o = addons.optJSONObject(i) ?: continue
@@ -246,6 +266,19 @@ object Profiles {
             Stremio.setAddons(toKey, addons)
         }
     }
+
+    /** Shown when a profile's saved sign-in no longer works. */
+    fun expiredScreen(app: MainActivity, p: Profile) = Screen(
+        "Sign-in expired",
+        listOf(
+            Row("${p.name}'s sign-in has ended on Stremio's side."),
+            Row("This happens after signing out elsewhere or changing the password."),
+            Row("Signing in again keeps the profile, its settings and history."),
+            Row("────────────────────"),
+            Row("Sign ${p.name} in again", "►", opens = { signInAgain(app, p.id) }),
+            Row("Not now", action = { app.back() }),
+        ),
+    )
 
     private fun manageScreen(app: MainActivity): Screen {
         lateinit var screen: Screen
@@ -278,12 +311,18 @@ object Profiles {
                             r.onSuccess {
                                 app.toast("Copied ${o.name}'s add-ons into ${p.name}")
                                 if (current(app)?.id == p.id) { Home.forget(); runCatching { Account.addonCache(app).delete() } }
-                            }.onFailure { app.toast("Couldn't copy: ${Net.describe(it)}") }
+                            }.onFailure { e ->
+                                val who = (e as? CopyError)?.profileName?.let { side -> if (side == "from") o else p }
+                                if (who != null && isExpired(e.cause ?: e)) {
+                                    app.push(expiredScreen(app, who))
+                                } else app.toast("Couldn't copy: ${Net.describe(e.cause ?: e)}")
+                            }
                         }
                     })
                 })
             })
         }
+        rows += Row("Sign ${p.name} in again", "►", opens = { signInAgain(app, p.id) })
         rows += Row("────────────────────")
         rows += Row("Remove ${p.name} from this stick", action = {
             val wasCurrent = current(app)?.id == p.id

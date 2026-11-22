@@ -55,6 +55,9 @@ object Home {
                 list != null && rows.isEmpty() -> "No catalogue rows found in your add-ons."
                 else -> ""
             }
+            val expired = loadError?.contains("session", ignoreCase = true) == true
+            status.action = if (expired) ({ Profiles.current(app)?.let { app.push(Profiles.signInAgain(app, it.id)) } }) else null
+            if (expired) status.label = "Your sign-in has expired. Press OK to sign in again"
             if (status.label.isNotEmpty()) rows.add(0, status)
             // Search, then what you're watching and what you've saved, then the catalogue rows.
             val cw = History.continueWatching(app)
