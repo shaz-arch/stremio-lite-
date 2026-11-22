@@ -46,6 +46,8 @@ object Home {
             Row("Settings", opens = { Settings.screen(app) }),
             addonsRow,
             Row("Reload my rows and add-ons", action = { if (!loading) load(app, screen) }),
+            Row("Share my setup with another phone", "►", opens = { Share.screen(app) }),
+            Row("Add a setup someone shared", action = { Share.askPaste(app) }),
             Row("Device check", opens = { DemoMenus.deviceCheck(app) }),
             Row("About", opens = { DemoMenus.about() }),
             who,
@@ -95,6 +97,8 @@ object Home {
             History.pull(app) { rebuild() }
             Updates.check { rebuild() }
             Waiting.checkSoon(app) { rebuild() }
+            // A shared setup opened before signing in: offer it now.
+            Share.takePending()?.let { p -> Net.later(300) { app.push(Share.receive(app, p)) } }
             if (addons == null) {
                 // Show the saved list straight away, then refresh it from the account.
                 runCatching { Account.addonCache(app).readText() }.onSuccess { text ->
@@ -293,7 +297,7 @@ object Home {
     }
 
     /** Paste an add-on's link (https:// or stremio://). Replaces an installed copy of the same add-on. */
-    private fun askInstall(app: MainActivity, stickRows: Boolean) {
+    fun askInstall(app: MainActivity, stickRows: Boolean) {
         val key = Account.authKey(app) ?: return
         val input = android.widget.EditText(app).apply {
             hint = "https://…/manifest.json"

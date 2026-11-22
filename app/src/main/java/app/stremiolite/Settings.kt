@@ -57,14 +57,32 @@ object Settings {
     private val INT_KEYS = listOf("subLang", "theme", "clock")
     private val BOOL_KEYS = listOf("autoNext", "hideWatched")
 
+    /** The shared settings as JSON (also what "Share my setup" sends). */
+    fun exportShared(c: Context): JSONObject {
+        val p = prefs(c)
+        val o = JSONObject()
+        INT_KEYS.forEach { k -> if (p.contains(k)) o.put(k, p.getInt(k, 0)) }
+        BOOL_KEYS.forEach { k -> if (p.contains(k)) o.put(k, p.getBoolean(k, false)) }
+        o.put("hiddenRows", JSONArray(hiddenRows(c).toList()))
+        return o
+    }
+
+    /** Takes shared settings from someone's setup: their options, plus their hidden rows and [alsoHide]. */
+    fun importShared(c: Context, o: JSONObject, alsoHide: Set<String>) {
+        val e = prefs(c).edit()
+        INT_KEYS.forEach { k -> if (o.has(k)) e.putInt(k, o.optInt(k)) }
+        BOOL_KEYS.forEach { k -> if (o.has(k)) e.putBoolean(k, o.optBoolean(k)) }
+        val theirs = o.optJSONArray("hiddenRows")?.let { a -> (0 until a.length()).map { a.optString(it) }.toSet() } ?: emptySet()
+        e.putStringSet("hiddenRows", hiddenRows(c) + theirs + alsoHide)
+        e.apply()
+        syncOut(c)
+    }
+
     /** Sends this device's shared settings to the account. */
     fun syncOut(c: Context) {
         val p = prefs(c)
         val now = System.currentTimeMillis()
-        val o = JSONObject().put("updated", now)
-        INT_KEYS.forEach { k -> if (p.contains(k)) o.put(k, p.getInt(k, 0)) }
-        BOOL_KEYS.forEach { k -> if (p.contains(k)) o.put(k, p.getBoolean(k, false)) }
-        o.put("hiddenRows", JSONArray(hiddenRows(c).toList()))
+        val o = exportShared(c).put("updated", now)
         p.edit().putLong("syncedAt", now).apply()
         val item = History.rawRemote(c, SYNC_ID)?.let { runCatching { JSONObject(it) }.getOrNull() } ?: Sync.newItem(SYNC_ID, "other", "{}")
         item.put("name", o.toString()).put("removed", true).put("temp", false).put("_mtime", Sync.iso(now))

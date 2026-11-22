@@ -83,6 +83,14 @@ class MainActivity : Activity() {
                 else -> SignIn.screen(this)
             }
         )
+        Share.open(this, intent?.data)
+    }
+
+    /** A "Share my setup" link opened while the app was already running. */
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        Share.open(this, intent.data)
     }
 
     /** The player has closed: file how far it got (VLC: extra_position/extra_duration; MX-style: position/duration). */
