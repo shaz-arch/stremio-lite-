@@ -152,6 +152,9 @@ object Waiting {
             Thread {
                 val ready = runCatching { checkNow(applicationContext) }.getOrDefault(emptyList())
                 notify(applicationContext, ready)
+                // New episodes and seasons for followed shows (Library, Continue watching, your watchlist).
+                val alerts = runCatching { NewEpisodes.checkNow(applicationContext) }.getOrDefault(emptyList())
+                NewEpisodes.notify(applicationContext, alerts)
                 jobFinished(params, false)
             }.start()
             return true

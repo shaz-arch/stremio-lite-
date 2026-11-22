@@ -22,7 +22,6 @@ object Share {
     private const val SCHEME = "stremiolean"
     private const val STREAMS_CONFIGURE = "https://aiostreams.elfhosted.com/stremio/configure"
     private const val STREAMS_CONFIG_FILE = "https://raw.githubusercontent.com/shaz-arch/stremio-lite-/main/setup/aiostreams-config.json"
-    private val PERSONAL_IDS = listOf("mdblist.watchlist", "trakt.watchlist", "simkl.watchlist")
 
     /** A setup link that arrived before anyone was signed in. */
     private var pending: JSONObject? = null
@@ -36,7 +35,7 @@ object Share {
         val streams = all.filter { "stream" in it.resources }
         val share = all - streams.toSet()
         val personal = Home.rowAddons(all).flatMap { a ->
-            a.catalogs.filter { c -> PERSONAL_IDS.any { c.id.startsWith(it) } }.map { Settings.rowKey(a, it) }
+            a.catalogs.filter { c -> Folders.isPersonal(c) }.map { Settings.rowKey(a, it) }
         }
         return JSONObject()
             .put("v", 1)

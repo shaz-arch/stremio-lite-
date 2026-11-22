@@ -61,4 +61,9 @@ object Folders {
             Entry(a, c, folder, rest)
         }
     }
+
+    /** Your own list rows (MDBList/Trakt/Simkl watchlists, or any row named "watchlist"). */
+    fun isPersonal(c: Addon.Catalog) =
+        listOf("mdblist.watchlist", "trakt.watchlist", "simkl.watchlist").any { c.id.startsWith(it) } ||
+            c.name.contains("watchlist", ignoreCase = true)
 }

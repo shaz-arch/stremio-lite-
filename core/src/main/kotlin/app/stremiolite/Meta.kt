@@ -29,6 +29,8 @@ class Full(
     val description: String,
     val videos: List<Video>,
     val source: String,
+    /** e.g. "Continuing", "Ended" (when the add-on says). */
+    val status: String = "",
 )
 
 
@@ -113,9 +115,31 @@ object MetaParse {
             description = m.optString("description"),
             videos = videos,
             source = source,
+            status = m.optString("status"),
         )
     }
 
+
+    /** Title details from the first add-on that can describe it (blocking). */
+    fun fetch(addons: List<Addon>, type: String, id: String): Full {
+        val candidates = addons.filter { it.supports("meta", type, id) }
+        if (candidates.isEmpty()) throw IllegalStateException("none of your add-ons can describe this title")
+        var last: Throwable? = null
+        for (a in candidates) {
+            try {
+                val url = a.base + "/meta/" + enc(type) + "/" + enc(id) + ".json"
+                val m = JSONObject(Http.get(url)).optJSONObject("meta") ?: continue
+                return full(m, a.name)
+            } catch (e: Exception) { last = e }
+        }
+        throw last ?: IllegalStateException("no details found")
+    }
+
+    /** One page of a catalogue row (blocking). */
+    fun page(a: Addon, c: Addon.Catalog, skip: Int = 0): List<Meta> =
+        parse(Http.get(a.base + "/catalog/" + enc(c.type) + "/" + enc(c.id) + (if (skip > 0) "/skip=$skip" else "") + ".json"))
+
+    private fun enc(s: String) = java.net.URLEncoder.encode(s, "UTF-8").replace("+", "%20")
 
     fun epLabel(v: Video) = "S${v.season.toString().padStart(2, '0')}E${v.episode.toString().padStart(2, '0')}"
 

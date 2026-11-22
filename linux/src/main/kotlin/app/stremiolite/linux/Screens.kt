@@ -180,6 +180,7 @@ object Home {
             rows += Row("Search", "/  ►", opens = null, action = { Search.start() })
             rows += Row("Continue watching", if (cw.isEmpty()) "nothing yet" else "${cw.size}  ►", opens = { continueScreen() })
             rows += Row("Library", if (lib.isEmpty()) "empty" else "${lib.size}  ►", opens = { libraryScreen() })
+            rows += Row("New episodes", opens = { NewEpisodes.screen() })
             if (waiting.isNotEmpty()) rows += Row("Waiting for streams", Waiting.summary(), opens = { Waiting.screen() })
             rows += Row("────────────────────")
             if (list != null) {
@@ -743,5 +744,63 @@ object Waiting {
                 if (e.ready > 0) "ready  ►" else "waiting  ►", opens = { Details.screenFor(e.id, e.type, e.name) })
         }
         return Screen("Waiting for streams", rows.ifEmpty { listOf(Row("Nothing waiting.")) })
+    }
+}
+
+// ============================================================================================
+// New episodes: Library, Continue watching and your watchlist rows (rules shared with Android)
+// ============================================================================================
+
+object NewEpisodes {
+    private class Found(val show: Full, val ep: Video)
+
+    fun screen(): Screen {
+        val status = Row("Finding the shows you follow…")
+        lateinit var s: Screen
+        fun build(list: List<Found>) {
+            val rows = mutableListOf(status)
+            list.forEach { f ->
+                val season = if (app.stremiolite.Releases.opensSeason(f.ep)) "new season · " else ""
+                val watched = if (f.ep.id in Lib.watchedEpisodes(f.show.id, MetaParse.stremioOrder(f.show))) "✓ " else ""
+                rows += Row("${f.show.name}  ${MetaParse.epLabel(f.ep)}  ${f.ep.title}".trim(), watched + season + f.ep.released,
+                    opens = { Details.screenFor(f.show.id, "series", f.show.name) },
+                    play = {
+                        val w = Details.watchFor(f.show, f.ep)
+                        App.push(Play.best("series", f.ep.id, "${f.show.name} ${MetaParse.epLabel(f.ep)}", w, Lib.resumeAt(f.show.id, f.ep.id)))
+                    })
+            }
+            s.rows = rows
+            App.refresh()
+        }
+        s = Screen("New episodes", listOf(status))
+        var started = false
+        s.onShow = {
+            if (!started) {
+                started = true
+                val mine = (Lib.library() + Lib.continueWatching()).filter { it.type == "series" }.map { it.id to it.name }
+                App.async({ (mine + app.stremiolite.Releases.fromPersonalRows(Home.all())).distinctBy { it.first }.take(60) }) { r ->
+                    val shows = r.getOrDefault(mine)
+                    if (shows.isEmpty()) { status.label = "Follow shows to see new episodes here: add them to your Library or your watchlist."; build(emptyList()); return@async }
+                    val results = mutableListOf<Found>()
+                    var answered = 0
+                    status.label = "Checking ${shows.size} shows…"
+                    build(emptyList())
+                    shows.forEach { (id, _) ->
+                        App.async({ MetaParse.fetch(Home.all(), "series", id) }) { rr ->
+                            answered++
+                            rr.onSuccess { show -> app.stremiolite.Releases.recent(show).forEach { results += Found(show, it) } }
+                            val sorted = results.sortedWith(compareByDescending<Found> { it.ep.released }.thenBy { it.show.name }.thenBy { it.ep.episode })
+                            status.label = when {
+                                answered < shows.size -> "Checking ${shows.size} shows… $answered done"
+                                sorted.isEmpty() -> "No new episodes in the last ${app.stremiolite.Releases.DAYS} days (${shows.size} shows followed)."
+                                else -> "Out in the last ${app.stremiolite.Releases.DAYS} days · ${shows.size} shows followed · p plays"
+                            }
+                            build(sorted)
+                        }
+                    }
+                }
+            }
+        }
+        return s
     }
 }
