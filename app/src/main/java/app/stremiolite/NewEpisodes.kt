@@ -23,6 +23,14 @@ object NewEpisodes {
 
     private class Found(val show: Full, val ep: Video)
 
+    /** Shows you follow (ids and names). Reading your list rows needs the network, so call this in the background. */
+    fun followed(c: Context, addons: List<Addon>): List<Pair<String, String>> {
+        val mine = History.library(c).filter { it.type == "series" }.map { it.id to it.name } +
+            History.continueWatching(c).filter { it.type == "series" }.map { it.id to it.name }
+        val lists = runCatching { Releases.fromPersonalRows(addons) }.getOrDefault(emptyList())
+        return (mine + lists).distinctBy { it.first }.take(MAX_SHOWS)
+    }
+
     // ---- the followed shows' episode lists, fetched once an hour and shared by
     //      New episodes, the Calendar and the counts on Home ---------------------------------
 
