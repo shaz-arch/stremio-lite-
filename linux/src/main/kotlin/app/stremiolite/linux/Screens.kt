@@ -260,9 +260,21 @@ object Home {
         }
     }
 
+    /** 1:38:52 or 38:52, like the phone and stick. */
+    private fun clock(ms: Long): String {
+        val t = ms / 1000
+        return if (t >= 3600) "%d:%02d:%02d".format(t / 3600, (t % 3600) / 60, t % 60) else "%d:%02d".format(t / 60, t % 60)
+    }
+
     private fun continueScreen(): Screen {
         val rows = Lib.continueWatching().map { i ->
-            val left = if (i.upNext) "next episode" else if (i.duration > 0) "${((i.duration - i.offset) / 60_000).coerceAtLeast(1)} min left" else ""
+            // Same as the phone and stick: "S01E02  1:38:52 left", or "next: S01E03".
+            val ep = i.videoId.split(':').let { p -> if (p.size >= 3) { val se = p[p.size - 2].toIntOrNull(); val e = p.last().toIntOrNull(); if (se != null && e != null) "S%02dE%02d".format(se, e) else "" } else "" }
+            val left = when {
+                i.upNext -> "next: $ep".trim().removeSuffix(":")
+                i.duration > 0 -> listOf(ep, "${clock((i.duration - i.offset).coerceAtLeast(0))} left").filter { it.isNotEmpty() }.joinToString("  ")
+                else -> ep
+            }
             Row(i.name, left + "  ►", opens = { Details.screenFor(i.id, i.type, i.name) }, play = { App.push(Details.screenFor(i.id, i.type, i.name, autoPlay = true)) })
         }
         val clear = if (rows.isEmpty()) emptyList() else listOf(
