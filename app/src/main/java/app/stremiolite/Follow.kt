@@ -10,6 +10,8 @@ object Follow {
     /** Followed shows; [lists]: shows from your own list rows (fetched in the background). */
     fun shows(c: Context, lists: List<Pair<String, String>> = emptyList()) = Following.shows(History.infos(c), record(c), lists)
 
+    fun stopped(c: Context) = Following.stopped(record(c))
+
     fun isFollowed(c: Context, id: String) = Following.isFollowed(id, History.infos(c), record(c))
 
     fun follow(c: Context, id: String, name: String) = History.putRemote(c, Following.follow(record(c), id, name))

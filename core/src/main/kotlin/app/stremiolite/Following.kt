@@ -59,6 +59,19 @@ object Following {
         return (auto + c.follow.map { it.key to it.value } + fromLists).distinctBy { it.first }.filter { it.first !in c.unfollow }
     }
 
+    /** Shows you've stopped following (kept stopped even if they're in a list row). */
+    fun stopped(record: JSONObject?): Set<String> = read(record).unfollow
+
+    /** Ended, with nothing more announced. */
+    fun ended(show: Full) = show.status.equals("Ended", true) && Releases.upcoming(show, 3650).isEmpty()
+
+    /** The right-hand text for a show that's waiting: its next episode and day, or that it's all out. */
+    fun nextText(show: Full): String {
+        Releases.upcoming(show, 3650).firstOrNull()?.let { return "${MetaParse.epLabel(it)} ${Releases.dayName(it.released)}" }
+        if (ended(show)) return "ended · all out"
+        return "no date yet"
+    }
+
     fun isFollowed(id: String, infos: List<LibraryItems.Info>, record: JSONObject?): Boolean {
         val c = read(record)
         if (id in c.unfollow) return false
@@ -70,8 +83,9 @@ object Following {
         val out = show.videos.filter { it.season > 0 && it.released.length == 10 && it.released <= Releases.day() }
         val inProgress = info != null && info.offset > 0
         val seen = out.count { it.id in watched }
-        // An ended show with nothing more coming has nothing to wait for (it stays in Continue watching).
-        if (show.status.equals("Ended", true) && Releases.upcoming(show, 3650).isEmpty()) return Section.FINISHED
+        // Only an ended show you've watched to the end drops off. One you haven't started, or are
+        // part-way through, stays: there's still something to watch.
+        if (ended(show) && out.isNotEmpty() && seen == out.size) return Section.FINISHED
         return when {
             seen == 0 && !inProgress -> Section.NOT_STARTED
             out.isNotEmpty() && out.all { it.id in watched } -> Section.CAUGHT_UP

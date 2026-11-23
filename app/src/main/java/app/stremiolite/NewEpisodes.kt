@@ -52,6 +52,7 @@ object NewEpisodes {
         checked = 0
         Net.async({ followed(app, Home.allAddons()) }) { r ->
             val shows = r.getOrDefault(emptyList())
+            if (r.isSuccess) lastFollowed = shows
             followedCount = shows.size
             val got = mutableListOf<Full>()
             fun finish() {
@@ -71,6 +72,18 @@ object NewEpisodes {
     }
 
     private var progressHook: (() -> Unit)? = null
+
+    /** Every followed show from the last full check, including your list rows (which need the network to read). */
+    @Volatile private var lastFollowed: List<Pair<String, String>> = emptyList()
+
+    /**
+     * The one list of followed shows that every screen and count uses: started and chosen shows
+     * (read now, so a new follow shows at once) plus list-row shows from the last check, minus stopped ones.
+     */
+    fun followedNow(c: Context): List<Pair<String, String>> {
+        val stopped = Follow.stopped(c)
+        return (Follow.shows(c) + lastFollowed).distinctBy { it.first }.filter { it.first !in stopped }
+    }
 
     private val fetching = HashSet<String>()
     private val failed = HashSet<String>()

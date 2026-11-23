@@ -212,7 +212,7 @@ object Home {
             rows += Row("Import a setup from another account", "►", opens = { Share.importScreen() })
             rows += Row("Device check", opens = { DeviceCheck.screen() })
             rows += Row("About", opens = { about() })
-            rows += Row(info("Profile", Profiles.current()?.name ?: "…"))
+            rows += Row("Profile", Profiles.current()?.name ?: "…")
             rows += Row("Switch profile", "►", opens = { Profiles.chooser() })
             rows += Row("Sign out of this profile", opens = { signOut() })
             s.rows = rows
@@ -864,7 +864,8 @@ object Waiting {
         App.toast("Removed from Waiting for streams")
     }
 
-    private fun following() = Follow.shows()
+    /** The same followed list New episodes and the Calendar use (with your list rows). */
+    private fun following() = NewEpisodes.followedNow()
 
     fun summary(): String {
         val l = list()
@@ -872,7 +873,10 @@ object Waiting {
         // Ended shows with nothing more coming aren't counted (same as the phone and stick).
         val followed = following()
         val ids = followed.map { it.first }.toSet()
-        val finished = NewEpisodes.shows().filter { it.id in ids && app.stremiolite.Following.section(it, emptySet(), null) == app.stremiolite.Following.Section.FINISHED }.map { it.id }.toSet()
+        val infos = Lib.infos().associateBy { it.id }
+        val finished = NewEpisodes.shows().filter {
+            it.id in ids && app.stremiolite.Following.section(it, Lib.watchedEpisodes(it.id, MetaParse.stremioOrder(it)), infos[it.id]) == app.stremiolite.Following.Section.FINISHED
+        }.map { it.id }.toSet()
         val shows = followed.count { it.first !in finished }
         if (l.isEmpty() && shows == 0) return "empty"
         return listOfNotNull(
@@ -908,7 +912,7 @@ object Waiting {
             val shows = NewEpisodes.shows().filter { it.id in ids }
             val watchedOf = shows.associate { it.id to Lib.watchedEpisodes(it.id, MetaParse.stremioOrder(it)) }
             val by = shows.groupBy { app.stremiolite.Following.section(it, watchedOf[it.id] ?: emptySet(), infos[it.id]) }
-            fun next(sh: Full) = R.upcoming(sh, 3650).firstOrNull()?.let { "${MetaParse.epLabel(it)} ${R.dayName(it.released)}" } ?: "no date yet"
+            fun next(sh: Full) = app.stremiolite.Following.nextText(sh)
             fun section(title: String, list: List<Full>?, detail: (Full) -> String) {
                 if (list.isNullOrEmpty()) return
                 rows += Row("──── $title ────")
@@ -961,6 +965,7 @@ object NewEpisodes {
         val mine = Follow.shows()
         App.async({ Follow.shows(app.stremiolite.Releases.fromPersonalRows(Home.all())).take(60) }) { r ->
             val shows = r.getOrDefault(mine)
+            if (r.isSuccess) lastFollowed = shows
             followed = shows.size
             val got = mutableListOf<Full>()
             fun finish() {
@@ -981,6 +986,14 @@ object NewEpisodes {
 
     fun shows(): List<Full> = fulls
     fun isLoading() = loading
+
+    @Volatile private var lastFollowed: List<Pair<String, String>> = emptyList()
+
+    /** Started and chosen shows (read now) plus list-row shows from the last check, minus stopped ones. */
+    fun followedNow(): List<Pair<String, String>> {
+        val stopped = Follow.stopped()
+        return (Follow.shows() + lastFollowed).distinctBy { it.first }.filter { it.first !in stopped }
+    }
 
     private val fetching = HashSet<String>()
     private val failed = HashSet<String>()
@@ -1083,6 +1096,7 @@ object Follow {
     private fun record() = Lib.raw(app.stremiolite.Following.ID)
     fun shows(lists: List<Pair<String, String>> = emptyList()) = app.stremiolite.Following.shows(Lib.infos(), record(), lists)
     fun isFollowed(id: String) = app.stremiolite.Following.isFollowed(id, Lib.infos(), record())
+    fun stopped() = app.stremiolite.Following.stopped(record())
     fun follow(id: String, name: String) = Lib.put(app.stremiolite.Following.follow(record(), id, name))
     fun unfollow(id: String) = Lib.put(app.stremiolite.Following.unfollow(record(), id))
 }

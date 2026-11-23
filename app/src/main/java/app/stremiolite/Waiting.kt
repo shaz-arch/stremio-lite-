@@ -69,8 +69,15 @@ object Waiting {
         schedule(app)
     }
 
-    /** Shows you follow (started, chosen, not stopped). */
-    private fun following(c: Context) = Follow.shows(c)
+    /** Shows you follow: the same list New episodes and the Calendar use. */
+    private fun following(c: Context) = NewEpisodes.followedNow(c)
+
+    /** Episodes of [show] you've watched, from the account plus this device. */
+    private fun watchedOf(c: Context, show: Full, infos: Map<String, LibraryItems.Info>): Set<String> {
+        val order = MetaParse.stremioOrder(show)
+        return (infos[show.id]?.let { Sync.decodeWatched(it.watchedField, order) } ?: emptySet()) +
+            show.videos.filter { History.progress(c, it.id)?.done == true }.map { it.id }
+    }
 
     fun remove(c: Context, id: String) = save(c, list(c).filter { it.id != id })
 
@@ -177,7 +184,8 @@ object Waiting {
         val l = list(c)
         val followed = following(c)
         val ids = followed.map { it.first }.toSet()
-        val finishedIds = NewEpisodes.shows().filter { it.id in ids && Following.section(it, emptySet(), null) == Following.Section.FINISHED }.map { it.id }.toSet()
+        val infos = History.infos(c).associateBy { it.id }
+        val finishedIds = NewEpisodes.shows().filter { it.id in ids && Following.section(it, watchedOf(c, it, infos), infos[it.id]) == Following.Section.FINISHED }.map { it.id }.toSet()
         val shows = followed.count { it.first !in finishedIds }
         if (l.isEmpty() && shows == 0) return "empty"
         val ready = l.count { it.ready > 0 }
@@ -248,11 +256,7 @@ object Waiting {
         val coming = if (NewEpisodes.isLoading()) emptySet() else NewEpisodes.ensure(app, followed) { ready() }
         val infos = History.infos(app).associateBy { it.id }
         val ids = followed.map { it.first }.toSet()
-        val watchedOf = NewEpisodes.shows().filter { it.id in ids }.associate { show ->
-            val order = MetaParse.stremioOrder(show)
-            show.id to ((infos[show.id]?.let { Sync.decodeWatched(it.watchedField, order) } ?: emptySet()) +
-                show.videos.filter { History.progress(app, it.id)?.done == true }.map { it.id })
-        }
+        val watchedOf = NewEpisodes.shows().filter { it.id in ids }.associate { show -> show.id to watchedOf(app, show, infos) }
         val bySection = NewEpisodes.shows().filter { it.id in ids }.groupBy { show ->
             Following.section(show, watchedOf[show.id] ?: emptySet(), infos[show.id])
         }
@@ -265,7 +269,7 @@ object Waiting {
                 })
             }
         }
-        fun next(sh: Full) = Releases.upcoming(sh, 3650).firstOrNull()?.let { "${Details.epLabel(it)} ${Releases.dayName(it.released)}" } ?: "no date yet"
+        fun next(sh: Full) = Following.nextText(sh)
         section("Caught up: waiting for more", bySection[Following.Section.CAUGHT_UP]) { next(it) }
         section("Watching", bySection[Following.Section.WATCHING]) { sh ->
             Following.progressText(sh, watchedOf[sh.id] ?: emptySet(), infos[sh.id])

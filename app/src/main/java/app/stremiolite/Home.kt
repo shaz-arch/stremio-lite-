@@ -32,8 +32,8 @@ object Home {
 
     fun screen(app: MainActivity): Screen {
         // Just the profile's name (the email stays in Switch profile).
-        fun whoText() = info("Profile", Profiles.current(app)?.name ?: "…")
-        val who = Row(whoText())
+        fun whoText() = Profiles.current(app)?.name ?: "…"
+        val who = Row("Profile", whoText())
         val addonsRow = Row("Your add-ons", "", opens = { addonList(app) })
         val status = Row("")
         lateinit var screen: Screen
@@ -56,7 +56,7 @@ object Home {
         fun rebuild() {
             val list = addons
             addonsRow.detail = if (list != null) "${list.size}  ►" else ""
-            who.label = whoText()
+            who.detail = whoText()
             screen.tag = Profiles.current(app)?.name ?: ""
             val rows = mutableListOf<Row>()
             if (list != null) rows += homeRows(app, list)
@@ -96,7 +96,7 @@ object Home {
         screen.onShow = {
             // A renamed profile shows its new name in the title straight away.
             screen.tag = Profiles.current(app)?.name ?: ""
-            who.label = whoText()
+            who.detail = whoText()
             History.pull(app) { rebuild() }
             Updates.check { rebuild() }
             Waiting.checkSoon(app) { rebuild() }
