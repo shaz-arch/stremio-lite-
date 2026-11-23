@@ -79,8 +79,9 @@ object Home {
                 search,
                 Row("Continue watching", if (cw.isEmpty()) "nothing yet" else "${cw.size}  ►", opens = { continueScreen(app) }),
                 Row("Library", if (lib.isEmpty()) "empty" else "${lib.size}  ►", opens = { libraryScreen(app) }),
-                Row("New episodes", opens = { NewEpisodes.screen(app) }),
-                Row("Watched", opens = { watchedScreen(app) }),
+                Row("New episodes", NewEpisodes.recentCount()?.let { if (it == 0) "none  ►" else "$it  ►" } ?: "", opens = { NewEpisodes.screen(app) }),
+                Row("Calendar", NewEpisodes.weekCount()?.let { if (it == 0) "nothing this week  ►" else "$it this week  ►" } ?: "", opens = { NewEpisodes.calendar(app) }),
+                Row("Watched", History.watched(app).size.let { if (it == 0) "" else "$it  ►" }, opens = { watchedScreen(app) }),
                 Row("Waiting for streams", Waiting.summary(app), opens = { Waiting.screen(app) }),
                 Row("────────────────────"),
             ))
@@ -94,6 +95,8 @@ object Home {
             History.pull(app) { rebuild() }
             Updates.check { rebuild() }
             Waiting.checkSoon(app) { rebuild() }
+            // Counts for New episodes and the Calendar: checked quietly once an hour.
+            if (!NewEpisodes.fresh()) Net.later(4_000) { if (addons != null) NewEpisodes.load(app) { rebuild() } }
             // A shared setup opened before signing in: offer it now.
             Share.takePending()?.let { p -> Net.later(300) { app.push(Share.receive(app, p)) } }
             if (addons == null) {

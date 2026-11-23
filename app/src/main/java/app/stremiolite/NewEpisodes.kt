@@ -23,90 +23,139 @@ object NewEpisodes {
 
     private class Found(val show: Full, val ep: Video)
 
-    private var found: List<Found> = emptyList()
-    private var foundAt = 0L
+    // ---- the followed shows' episode lists, fetched once an hour and shared by
+    //      New episodes, the Calendar and the counts on Home ---------------------------------
 
-    /** Shows you follow (ids and names). Reading your list rows needs the network, so call this in the background. */
-    fun followed(c: Context, addons: List<Addon>): List<Pair<String, String>> {
-        val mine = History.library(c).filter { it.type == "series" }.map { it.id to it.name } +
-            History.continueWatching(c).filter { it.type == "series" }.map { it.id to it.name }
-        val lists = runCatching { Releases.fromPersonalRows(addons) }.getOrDefault(emptyList())
-        return (mine + lists).distinctBy { it.first }.take(MAX_SHOWS)
+    private var fulls: List<Full> = emptyList()
+    private var fullsAt = 0L
+    private var followedCount = 0
+    private var loading = false
+    private var checked = 0
+    private val waiting = mutableListOf<() -> Unit>()
+
+    /** True once the shows have been checked in the last hour. */
+    fun fresh() = System.currentTimeMillis() - fullsAt < KEEP_MS
+
+    /** Fetches the followed shows (if not fresh), then runs [done]. [progress] runs as each show arrives. */
+    fun load(app: MainActivity, force: Boolean = false, progress: (() -> Unit)? = null, done: () -> Unit) {
+        if (!force && fresh()) { done(); return }
+        waiting += done
+        progressHook = progress ?: progressHook
+        if (loading) return
+        loading = true
+        checked = 0
+        Net.async({ followed(app, Home.allAddons()) }) { r ->
+            val shows = r.getOrDefault(emptyList())
+            followedCount = shows.size
+            val got = mutableListOf<Full>()
+            fun finish() {
+                fulls = got.toList(); fullsAt = System.currentTimeMillis(); loading = false
+                val list = waiting.toList(); waiting.clear(); list.forEach { it() }
+            }
+            if (shows.isEmpty()) { finish(); return@async }
+            shows.forEach { (id, _) ->
+                Net.async({ Details.loadFull("series", id) }) { rr ->
+                    checked++
+                    rr.getOrNull()?.let { got += it }
+                    progressHook?.invoke()
+                    if (checked >= shows.size) finish()
+                }
+            }
+        }
     }
+
+    private var progressHook: (() -> Unit)? = null
+
+    /** Episodes out in the last week (null until checked). */
+    fun recentCount(): Int? = if (fullsAt == 0L) null else fulls.sumOf { Releases.recent(it).size }
+
+    /** Episodes due in the next 7 days (null until checked). */
+    fun weekCount(): Int? = if (fullsAt == 0L) null else fulls.sumOf { Releases.upcoming(it, 7).size }
+
+    private val pretty = SimpleDateFormat("EEE d MMM", Locale.UK)
+    private val iso = SimpleDateFormat("yyyy-MM-dd", Locale.UK)
+
+    private fun epRow(app: MainActivity, f: Found, detail: String) = Row(
+        "${f.show.name}  ${Details.epLabel(f.ep)}  ${f.ep.title}".trim(), detail,
+        opens = { Details.episodeScreen(app, f.show, f.ep) },
+        play = { app.push(Details.playEpisode(app, f.show, f.ep)) },
+    )
 
     fun screen(app: MainActivity): Screen {
         val status = Row("")
         lateinit var screen: Screen
-        val pretty = SimpleDateFormat("EEE d MMM", Locale.UK)
-        val iso = SimpleDateFormat("yyyy-MM-dd", Locale.UK)
-
-        fun build(list: List<Found>): List<Row> {
+        fun build() {
             val rows = mutableListOf(status)
+            val list = fulls.flatMap { sh -> Releases.recent(sh).map { Found(sh, it) } }
+                .sortedWith(compareByDescending<Found> { it.ep.released }.thenBy { it.show.name }.thenBy { it.ep.episode })
+            status.label = when {
+                loading -> "Checking $followedCount shows… $checked done"
+                followedCount == 0 -> "Follow shows to see new episodes here: on a show, choose 'Tell me about new episodes and seasons'."
+                list.isEmpty() -> "No new episodes in the last ${Releases.DAYS} days ($followedCount shows followed)."
+                else -> "Out in the last ${Releases.DAYS} days · $followedCount shows followed · ▶ plays"
+            }
             list.forEach { f ->
                 val date = runCatching { pretty.format(iso.parse(f.ep.released)!!) }.getOrDefault(f.ep.released)
                 val watched = if (History.progress(app, f.ep.id)?.done == true) "✓  " else ""
                 val season = if (Releases.opensSeason(f.ep)) "new season · " else ""
-                rows += Row(
-                    "${f.show.name}  ${Details.epLabel(f.ep)}  ${f.ep.title}".trim(), watched + season + date,
-                    opens = { Details.episodeScreen(app, f.show, f.ep) },
-                    play = { app.push(Details.playEpisode(app, f.show, f.ep)) },
-                )
+                rows += epRow(app, f, watched + season + date)
             }
-            return rows
-        }
-
-        fun show(list: List<Found>, done: Boolean, checked: Int, total: Int) {
-            status.label = when {
-                !done -> "Checking $total shows… $checked done"
-                total == 0 -> "Follow shows to see new episodes here: add them to your Library or your watchlist."
-                list.isEmpty() -> "No new episodes in the last ${Releases.DAYS} days ($total shows followed)."
-                else -> "Out in the last ${Releases.DAYS} days · $total shows followed · ▶ plays"
-            }
-            screen.rows = build(list)
+            rows += Row("────────────────────")
+            rows += Row("Calendar: coming up", "►", opens = { calendar(app) })
+            screen.rows = rows
             app.refresh(screen)
         }
-
-        fun check() {
-            if (System.currentTimeMillis() - foundAt < KEEP_MS) { show(found, true, 0, followedCount); return }
-            status.label = "Finding the shows you follow…"
-            screen.rows = build(emptyList()); app.refresh(screen)
-            Net.async({ followed(app, Home.allAddons()) }) { r ->
-                val shows = r.getOrDefault(emptyList())
-                followedCount = shows.size
-                if (shows.isEmpty()) { show(emptyList(), true, 0, 0); return@async }
-                val results = mutableListOf<Found>()
-                var answered = 0
-                show(emptyList(), false, 0, shows.size)
-                shows.forEach { (id, _) ->
-                    Net.async({ Details.loadFull("series", id) }) { rr ->
-                        answered++
-                        rr.onSuccess { s -> Releases.recent(s).forEach { results += Found(s, it) } }
-                        val sorted = results.sortedWith(compareByDescending<Found> { it.ep.released }.thenBy { it.show.name }.thenBy { it.ep.episode })
-                        val done = answered >= shows.size
-                        if (done) { found = sorted; foundAt = System.currentTimeMillis() }
-                        show(sorted, done, answered, shows.size)
-                    }
-                }
-            }
-        }
-
         screen = Screen("New episodes", listOf(status))
         var started = false
         screen.onShow = {
             if (!started) {
                 started = true
-                // Android 13+: ask once so the 6-hourly check can tell you about new episodes.
-                if (Build.VERSION.SDK_INT >= 33 && Waiting.isPhone(app) &&
-                    app.checkSelfPermission("android.permission.POST_NOTIFICATIONS") != android.content.pm.PackageManager.PERMISSION_GRANTED
-                ) app.requestPermissions(arrayOf("android.permission.POST_NOTIFICATIONS"), 8)
-                Waiting.schedule(app)
-                check()
-            } else { screen.rows = build(found); app.refresh(screen) }
+                Waiting.askToNotify(app)
+                status.label = "Finding the shows you follow…"
+                load(app, progress = { if (app.isTop(screen)) build() }) { build() }
+            }
+            build()
         }
         return screen
     }
 
-    private var followedCount = 0
+    /** Episodes due in the next 30 days for the shows you follow, by day. */
+    fun calendar(app: MainActivity): Screen {
+        val status = Row("")
+        lateinit var screen: Screen
+        fun build() {
+            val rows = mutableListOf(status)
+            val list = fulls.flatMap { sh -> Releases.upcoming(sh).map { Found(sh, it) } }
+                .sortedWith(compareBy<Found> { it.ep.released }.thenBy { it.show.name }.thenBy { it.ep.season }.thenBy { it.ep.episode })
+            status.label = when {
+                loading -> "Checking $followedCount shows… $checked done"
+                followedCount == 0 -> "Follow shows to see what's coming: on a show, choose 'Tell me about new episodes and seasons'."
+                list.isEmpty() -> "Nothing dated in the next 30 days ($followedCount shows followed)."
+                else -> "Next 30 days · $followedCount shows followed"
+            }
+            var lastDay = ""
+            list.forEach { f ->
+                if (f.ep.released != lastDay) {
+                    lastDay = f.ep.released
+                    rows += Row("──── ${Releases.dayName(lastDay)} ────")
+                }
+                rows += epRow(app, f, if (Releases.opensSeason(f.ep)) "new season" else "")
+            }
+            screen.rows = rows
+            app.refresh(screen)
+        }
+        screen = Screen("Calendar", listOf(status))
+        var started = false
+        screen.onShow = {
+            if (!started) {
+                started = true
+                status.label = "Finding the shows you follow…"
+                load(app, progress = { if (app.isTop(screen)) build() }) { build() }
+            }
+            build()
+        }
+        return screen
+    }
 
     // ---- background check (phones) ---------------------------------------------------------
 

@@ -21,6 +21,24 @@ object Releases {
     fun recent(show: Full, from: String = day(DAYS), to: String = day()): List<Video> =
         show.videos.filter { it.season > 0 && it.released.length == 10 && it.released >= from && it.released <= to }
 
+    /** Episodes (not specials) due after today and within [days] days, soonest first. */
+    fun upcoming(show: Full, days: Int = 30): List<Video> {
+        val today = day()
+        val until = day(-days)
+        return show.videos.filter { it.season > 0 && it.released.length == 10 && it.released > today && it.released <= until }
+            .sortedBy { it.released }
+    }
+
+    /** "Today", "Tomorrow" or e.g. "Fri 28 Nov" for a "yyyy-MM-dd" date. */
+    fun dayName(date: String): String {
+        if (date == day()) return "Today"
+        if (date == day(-1)) return "Tomorrow"
+        return runCatching {
+            val f = SimpleDateFormat("yyyy-MM-dd", Locale.UK).apply { timeZone = TimeZone.getTimeZone("UTC") }
+            SimpleDateFormat("EEE d MMM", Locale.UK).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(f.parse(date)!!)
+        }.getOrDefault(date)
+    }
+
     /** The first episode of a season after the first. */
     fun opensSeason(v: Video) = v.season > 1 && v.episode == 1
 
