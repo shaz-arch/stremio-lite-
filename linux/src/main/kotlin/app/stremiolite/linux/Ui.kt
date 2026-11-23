@@ -324,7 +324,7 @@ object App {
         // Footer: keys (or a prompt / message) and the clock
         g.foregroundColor = t.bar
         g.putString(left, h - 2, "─".repeat(inner.coerceAtLeast(0)))
-        val clock = SimpleDateFormat("EEE dd/MM HH:mm", Locale.UK).format(Date())
+        val clock = Look.clock().pattern.let { if (it.isEmpty()) "" else SimpleDateFormat(it, Locale.UK).format(Date()) }
         val p = prompt
         val msg = toast?.first
         when {
@@ -345,7 +345,7 @@ object App {
                 g.putString(left, h - 1, fit("↑↓ move  Enter open  p play  ←→ page  Esc back  / search  q quit", inner - width(clock) - 2))
             }
         }
-        if (p == null) {
+        if (p == null && clock.isNotEmpty()) {
             g.foregroundColor = t.dim
             g.putString(w - 2 - width(clock), h - 1, clock)
         }

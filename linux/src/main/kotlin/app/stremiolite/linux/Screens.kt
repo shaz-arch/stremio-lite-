@@ -352,18 +352,24 @@ object Catalogs {
         val placeKey = "cat:${a.transportUrl}|${c.type}|${c.id}"
         var pending: Int? = App.place(placeKey)?.takeIf { it in 1..400 }
 
+        // "Watched films in lists: Hide them" leaves out films marked watched.
+        fun visible(): List<Meta> = if (Prefs.hideWatched) items.filter { !(it.type == "movie" && Lib.filmWatched(it.id)) } else items
+
         fun rebuild() {
-            val rows = items.mapTo(ArrayList(items.size + 2)) { row(a, it) }
+            val shown = visible()
+            val rows = shown.mapTo(ArrayList(shown.size + 2)) { row(a, it) }
             when {
                 error != null -> { rows += Row("Couldn't load: $error"); rows += Row("Try again", action = { error = null; loadMore() }) }
                 loading -> rows += Row(if (items.isEmpty()) "Loading…" else "Loading more…")
                 ended -> rows += Row(if (items.isEmpty()) "This row is empty." else "──── end of list: ${items.size} titles ────")
             }
             s.rows = rows
+            // With watched films hidden a page can come back nearly empty: keep the screen filled.
+            if (shown.size < LOAD_AHEAD && !loading && !ended && error == null && items.isNotEmpty()) App.later(0) { loadMore() }
             pending?.let { want ->
                 when {
-                    want < items.size -> { s.moveTo = want; pending = null }
-                    ended || error != null -> { s.moveTo = (items.size - 1).coerceAtLeast(0); pending = null }
+                    want < shown.size -> { s.moveTo = want; pending = null }
+                    ended || error != null -> { s.moveTo = (shown.size - 1).coerceAtLeast(0); pending = null }
                     !loading -> App.later(0) { loadMore() }
                 }
             }
@@ -391,7 +397,7 @@ object Catalogs {
         s = Screen(title, listOf(Row("Loading…")), tag = MetaParse.typeLabel(c.type))
         s.key = placeKey
         s.onShow = { if (items.isEmpty() && !loading && error == null && !ended) loadMore() else if (items.isNotEmpty()) rebuild() }
-        s.onSelect = { pos -> if (pos >= items.size - LOAD_AHEAD && error == null) loadMore() }
+        s.onSelect = { pos -> if (pos >= visible().size - LOAD_AHEAD && error == null) loadMore() }
         return s
     }
 }
@@ -654,28 +660,35 @@ object Settings {
     fun screen(): Screen {
         lateinit var s: Screen
         fun build() {
+            // Same order as the phone and stick. Text size is the terminal's own (kitty: ctrl+shift+= / -).
             s.rows = listOf(
                 Row("Enter on a line to change it"),
                 Row("────────────────────"),
+                Row("Player", Prefs.player, action = {
+                    App.ask("Player command (e.g. mpv)", Prefs.player) { v -> if (!v.isNullOrBlank()) { Prefs.player = v.trim(); build() } }
+                }),
+                Row("Player options", Prefs.playerArgs.ifEmpty { "none" }, action = {
+                    App.ask("Extra options (e.g. --fs --volume=80)", Prefs.playerArgs) { v -> if (v != null) { Prefs.playerArgs = v.trim(); build() } }
+                }),
                 Row("Subtitle language", "◄ ${Prefs.language().name} ►", action = {
                     Prefs.subLang = (Prefs.subLang + 1) % app.stremiolite.Languages.all.size; Prefs.syncOut(); build()
                 }),
                 Row("Auto-play next episode", "◄ ${if (Prefs.autoNext) "On" else "Off"} ►", action = {
                     Prefs.autoNext = !Prefs.autoNext; Prefs.syncOut(); build()
                 }),
+                Row("────────────────────"),
                 Row("Theme", "◄ ${Look.theme().name} ►", action = {
                     Prefs.theme = (Prefs.theme + 1) % themes.size; Prefs.syncOut(); build()
                 }),
+                Row("Clock", "◄ ${Look.clock().name} ►", action = {
+                    Prefs.clock = (Look.clocks.indexOf(Look.clock()) + 1) % Look.clocks.size; Prefs.syncOut(); build()
+                }),
+                Row("Watched films in lists", "◄ ${if (Prefs.hideWatched) "Hide them" else "Show with ✓"} ►", action = {
+                    Prefs.hideWatched = !Prefs.hideWatched; Prefs.syncOut(); build()
+                }),
                 Row("Hide rows", "►", opens = { rowsScreen() }),
                 Row("────────────────────"),
-                Row("Player command", Prefs.player, action = {
-                    App.ask("Player command (e.g. mpv)", Prefs.player) { v -> if (!v.isNullOrBlank()) { Prefs.player = v.trim(); build() } }
-                }),
-                Row("Extra player options", Prefs.playerArgs.ifEmpty { "none" }, action = {
-                    App.ask("Extra options (e.g. --fs --volume=80)", Prefs.playerArgs) { v -> if (v != null) { Prefs.playerArgs = v.trim(); build() } }
-                }),
-                Row("────────────────────"),
-                Row(info("Version", "build ${Updates.current}")),
+                Row(info("App version", "build ${Updates.current}")),
                 Row("Check for updates", action = { Updates.checkNow() }),
             )
             App.refresh()

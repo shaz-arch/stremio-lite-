@@ -70,6 +70,12 @@ object Prefs {
     var autoNext: Boolean
         get() = data().optBoolean("autoNext", true)
         set(v) { data().put("autoNext", v); save() }
+    var clock: Int
+        get() = data().optInt("clock", 0)
+        set(v) { data().put("clock", v); save() }
+    var hideWatched: Boolean
+        get() = data().optBoolean("hideWatched", false)
+        set(v) { data().put("hideWatched", v); save() }
     var player: String
         get() = data().optString("player", "mpv").ifBlank { "mpv" }
         set(v) { data().put("player", v); save() }
@@ -99,18 +105,20 @@ object Prefs {
         if (o.has("theme")) d.put("theme", o.optInt("theme"))
         if (o.has("subLang")) d.put("subLang", o.optInt("subLang"))
         if (o.has("autoNext")) d.put("autoNext", o.optBoolean("autoNext"))
+        if (o.has("clock")) d.put("clock", o.optInt("clock"))
+        if (o.has("hideWatched")) d.put("hideWatched", o.optBoolean("hideWatched"))
         o.optJSONArray("hiddenRows")?.let { d.put("hiddenRows", it) }
         d.put("syncedAt", updated)
         save()
         return true
     }
 
-    /** Sends theme, subtitle language, auto-next and hidden rows, keeping anything else the record holds. */
+    /** Sends theme, clock, subtitle language, auto-next, watched-films choice and hidden rows, keeping anything else the record holds. */
     fun syncOut() {
         val now = System.currentTimeMillis()
         val raw = Lib.raw(SYNC_ID)
         val o = raw?.let { runCatching { JSONObject(it.optString("name")) }.getOrNull() } ?: JSONObject()
-        o.put("theme", theme).put("subLang", subLang).put("autoNext", autoNext)
+        o.put("theme", theme).put("subLang", subLang).put("autoNext", autoNext).put("clock", clock).put("hideWatched", hideWatched)
             .put("hiddenRows", JSONArray(hiddenRows.toList())).put("updated", now)
         syncedAt = now
         val item = raw ?: Sync.newItem(SYNC_ID, "other", "{}")
@@ -121,6 +129,19 @@ object Prefs {
 
 object Look {
     fun theme(): Theme = themes.getOrElse(Prefs.theme) { themes[0] }
+
+    /** The same clock choices as the phone and stick (shared through the account); empty pattern = off. */
+    class Clock(val name: String, val pattern: String)
+
+    val clocks = listOf(
+        Clock("Day/month, 24 h", "dd/MM HH:mm"),
+        Clock("Weekday, day/month, 24 h", "EEE dd/MM HH:mm"),
+        Clock("Time only, 24 h", "HH:mm"),
+        Clock("Day/month, 12 h", "dd/MM h:mm a"),
+        Clock("Off", ""),
+    )
+
+    fun clock(): Clock = clocks.getOrElse(Prefs.clock) { clocks[0] }
 }
 
 /** The release last played per show, so the next episode keeps the same look and timing. */
