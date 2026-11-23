@@ -18,13 +18,16 @@ android {
     }
 
     // One fixed key for every build, so each new version installs over the last.
-    // (A GitHub secret SIGNING_PASSWORD overrides the built-in password if you ever move the key out.)
+    // The key is never in the repo: CI writes it from the GitHub secrets SIGNING_KEY (base64) and SIGNING_PASSWORD.
+    val keyFile = System.getenv("SIGNING_KEY_FILE")?.let { file(it) }
     signingConfigs {
         create("fixed") {
-            storeFile = rootProject.file("signing/stremio-lite.jks")
-            storePassword = System.getenv("SIGNING_PASSWORD") ?: "03818f3fe24f9ddb7d608e5b0a975dd0"
-            keyAlias = "stremiolite"
-            keyPassword = System.getenv("SIGNING_PASSWORD") ?: "03818f3fe24f9ddb7d608e5b0a975dd0"
+            if (keyFile != null && keyFile.isFile) {
+                storeFile = keyFile
+                storePassword = System.getenv("SIGNING_PASSWORD")
+                keyAlias = "stremonino"
+                keyPassword = System.getenv("SIGNING_PASSWORD")
+            }
         }
     }
 
@@ -33,7 +36,8 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
-            signingConfig = signingConfigs.getByName("fixed")
+            // Without the key (a local build), the release APK is left unsigned rather than signed with a public key.
+            if (keyFile != null && keyFile.isFile) signingConfig = signingConfigs.getByName("fixed")
         }
     }
 
