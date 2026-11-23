@@ -168,27 +168,31 @@ object Details {
     private fun libraryRows(app: MainActivity, f: Full): List<Row> {
         val rows = mutableListOf<Row>()
         lateinit var lib: Row
-        // For shows, the Library is what "following" means: new episodes and seasons are checked for.
-        val show = f.type == "series"
-        fun libLabel(inLib: Boolean) = when {
-            show && inLib -> "Following: new episodes and seasons ✓ (stop)"
-            show -> "Tell me about new episodes and seasons"
-            inLib -> "Remove from library"
-            else -> "Add to library"
-        }
-        lib = Row(libLabel(History.inLibrary(app, f.id)), action = {
+        lib = Row(if (History.inLibrary(app, f.id)) "Remove from library" else "Add to library", action = {
             val added = History.toggleLibrary(app, History.Saved(f.id, f.type, f.name, f.year))
-            lib.label = libLabel(added)
-            app.toast(when {
-                show && added -> "Following ${f.name}: you'll be told when new episodes play (also in your Library)"
-                show -> "Stopped following ${f.name} (removed from your Library)"
-                added -> "Added to library"
-                else -> "Removed from library"
-            })
-            if (show && added) Waiting.askToNotify(app)
+            lib.label = if (added) "Remove from library" else "Add to library"
+            app.toast(if (added) "Added to library" else "Removed from library")
             app.refreshTop()
         })
         rows += lib
+        if (f.type == "series") {
+            // Following is separate from the Library: shows you've started are followed automatically.
+            lateinit var fol: Row
+            fun folLabel() = if (Follow.isFollowed(app, f.id)) "Following new episodes and seasons ✓ (stop)" else "Tell me about new episodes and seasons"
+            fol = Row(folLabel(), action = {
+                if (Follow.isFollowed(app, f.id)) {
+                    Follow.unfollow(app, f.id)
+                    app.toast("Stopped following ${f.name}")
+                } else {
+                    Follow.follow(app, f.id, f.name)
+                    Waiting.askToNotify(app)
+                    app.toast("Following ${f.name}: you'll be told when new episodes play")
+                }
+                fol.label = folLabel()
+                app.refreshTop()
+            })
+            rows += fol
+        }
         if (f.type == "movie" && History.marks(app)[f.id] == "✓") rows += Row("Remove from watched", action = {
             History.unwatch(app, f.id, f.type, f.id, "", emptyList())
             app.toast("${f.name} is no longer marked as watched")

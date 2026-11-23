@@ -336,6 +336,12 @@ object History {
         send(c)
     }
 
+    /** Every title record on the account, read (for following: which shows you've started). */
+    fun infos(c: Context): List<LibraryItems.Info> {
+        ensure(c)
+        return remote.values.mapNotNull { runCatching { LibraryItems.read(JSONObject(it)) }.getOrNull() }.filter { it.type != "other" }
+    }
+
     /** The account's copy of one record (e.g. the waiting list), as JSON text. */
     fun rawRemote(c: Context, id: String): String? {
         ensure(c)

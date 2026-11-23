@@ -515,24 +515,23 @@ object Details {
         }
         rows += Row("────────────────────")
         lateinit var lib: Row
-        val show = f.type == "series"
-        fun libLabel(inLib: Boolean) = when {
-            show && inLib -> "Following: new episodes and seasons ✓ (stop)"
-            show -> "Tell me about new episodes and seasons"
-            inLib -> "Remove from library"
-            else -> "Add to library"
-        }
-        lib = Row(libLabel(Lib.inLibrary(f.id)), action = {
+        lib = Row(if (Lib.inLibrary(f.id)) "Remove from library" else "Add to library", action = {
             val added = Lib.toggleLibrary(f.id, f.type, f.name)
-            lib.label = libLabel(added)
-            App.toast(when {
-                show && added -> "Following ${f.name}: your phone tells you when new episodes play (also in your Library)"
-                show -> "Stopped following ${f.name}"
-                added -> "Added to library"
-                else -> "Removed from library"
-            })
+            lib.label = if (added) "Remove from library" else "Add to library"
+            App.toast(if (added) "Added to library" else "Removed from library")
         })
         rows += lib
+        if (f.type == "series") {
+            lateinit var fol: Row
+            fun folLabel() = if (Follow.isFollowed(f.id)) "Following new episodes and seasons ✓ (stop)" else "Tell me about new episodes and seasons"
+            fol = Row(folLabel(), action = {
+                if (Follow.isFollowed(f.id)) { Follow.unfollow(f.id); App.toast("Stopped following ${f.name}") }
+                else { Follow.follow(f.id, f.name); App.toast("Following ${f.name}: your phone tells you when new episodes play") }
+                fol.label = folLabel()
+                App.refresh()
+            })
+            rows += fol
+        }
         if (f.type == "movie" && Lib.filmWatched(f.id)) rows += Row("Remove from watched", action = {
             Lib.unwatch(f.id, f.type, f.id, emptyList()); App.toast("${f.name} is no longer marked as watched"); App.top()?.onShow?.invoke()
         })
@@ -754,7 +753,7 @@ object Waiting {
         App.toast("Removed from Waiting for streams")
     }
 
-    private fun following() = Lib.library().filter { it.type == "series" }
+    private fun following() = Follow.shows()
 
     fun summary(): String {
         val l = list()
@@ -776,10 +775,33 @@ object Waiting {
             rows += Row((if (e.ready > 0) "● " else "") + e.name + if (e.year.isNotEmpty()) " (${e.year})" else "",
                 if (e.ready > 0) "ready  ►" else "waiting  ►", opens = { Details.screenFor(e.id, e.type, e.name) })
         }
-        rows += Row("──── Shows: following for new episodes ────")
-        val shows = following().sortedBy { it.name }
-        if (shows.isEmpty()) rows += Row("None. On a show, choose 'Tell me about new episodes and seasons'.")
-        shows.forEach { sh -> rows += Row(sh.name, "following  ►", opens = { Details.screenFor(sh.id, sh.type, sh.name) }) }
+        val followed = following()
+        if (followed.isEmpty()) {
+            rows += Row("──── Shows ────")
+            rows += Row("None yet. Shows you start watching are followed automatically.")
+        } else if (NewEpisodes.shows().isEmpty()) {
+            rows += Row("──── Shows: ${followed.size} followed ────")
+            rows += Row("Checking where you're up to… (open this again in a moment)")
+            NewEpisodes.load { App.refresh() }
+        } else {
+            val R = app.stremiolite.Releases
+            val infos = Lib.infos().associateBy { it.id }
+            val ids = followed.map { it.first }.toSet()
+            val shows = NewEpisodes.shows().filter { it.id in ids }
+            val watchedOf = shows.associate { it.id to Lib.watchedEpisodes(it.id, MetaParse.stremioOrder(it)) }
+            val by = shows.groupBy { app.stremiolite.Following.section(it, watchedOf[it.id] ?: emptySet(), infos[it.id]) }
+            fun next(sh: Full) = R.upcoming(sh, 3650).firstOrNull()?.let { "${MetaParse.epLabel(it)} ${R.dayName(it.released)}" } ?: "no date yet"
+            fun section(title: String, list: List<Full>?, detail: (Full) -> String) {
+                if (list.isNullOrEmpty()) return
+                rows += Row("──── $title ────")
+                list.sortedBy { it.name }.forEach { sh -> rows += Row(sh.name, detail(sh) + "  ►", opens = { Details.screenFor(sh.id, "series", sh.name) }) }
+            }
+            section("Caught up: waiting for more", by[app.stremiolite.Following.Section.CAUGHT_UP]) { next(it) }
+            section("Watching", by[app.stremiolite.Following.Section.WATCHING]) { sh ->
+                "${R.recent(sh, "0000-00-00").count { it.id !in (watchedOf[sh.id] ?: emptySet()) }} to watch"
+            }
+            section("Not started", by[app.stremiolite.Following.Section.NOT_STARTED]) { next(it) }
+        }
         rows += Row("Episodes out in the last week", "►", opens = { NewEpisodes.screen() })
         return Screen("Waiting for streams", rows)
     }
@@ -810,8 +832,8 @@ object NewEpisodes {
         if (loading) return
         loading = true
         checked = 0
-        val mine = (Lib.library() + Lib.continueWatching()).filter { it.type == "series" }.map { it.id to it.name }
-        App.async({ (mine + app.stremiolite.Releases.fromPersonalRows(Home.all())).distinctBy { it.first }.take(60) }) { r ->
+        val mine = Follow.shows()
+        App.async({ Follow.shows(app.stremiolite.Releases.fromPersonalRows(Home.all())).take(60) }) { r ->
             val shows = r.getOrDefault(mine)
             followed = shows.size
             val got = mutableListOf<Full>()
@@ -830,6 +852,9 @@ object NewEpisodes {
             }
         }
     }
+
+    fun shows(): List<Full> = fulls
+    fun isLoading() = loading
 
     fun recentCount(): Int? = if (fullsAt == 0L) null else fulls.sumOf { app.stremiolite.Releases.recent(it).size }
     fun weekCount(): Int? = if (fullsAt == 0L) null else fulls.sumOf { app.stremiolite.Releases.upcoming(it, 7).size }
@@ -852,7 +877,7 @@ object NewEpisodes {
                 .sortedWith(compareByDescending<Found> { it.ep.released }.thenBy { it.show.name }.thenBy { it.ep.episode })
             status.label = when {
                 loading -> "Checking $followed shows… $checked done"
-                followed == 0 -> "Follow shows to see new episodes here: on a show, choose 'Tell me about new episodes and seasons'."
+                followed == 0 -> "Start watching a show, or on a show choose 'Tell me about new episodes and seasons', to see its new episodes here."
                 list.isEmpty() -> "No new episodes in the last ${R.DAYS} days ($followed shows followed)."
                 else -> "Out in the last ${R.DAYS} days · $followed shows followed · p plays"
             }
@@ -884,7 +909,7 @@ object NewEpisodes {
                 .sortedWith(compareBy<Found> { it.ep.released }.thenBy { it.show.name }.thenBy { it.ep.season }.thenBy { it.ep.episode })
             status.label = when {
                 loading -> "Checking $followed shows… $checked done"
-                followed == 0 -> "Follow shows to see what's coming: on a show, choose 'Tell me about new episodes and seasons'."
+                followed == 0 -> "Start watching a show, or on a show choose 'Tell me about new episodes and seasons', to see what's coming."
                 list.isEmpty() -> "Nothing dated in the next 30 days ($followed shows followed)."
                 else -> "Next 30 days · $followed shows followed"
             }
@@ -905,4 +930,13 @@ object NewEpisodes {
         }
         return s
     }
+}
+
+/** Following shows for new episodes and seasons (rules in the shared Following), apart from the Library. */
+object Follow {
+    private fun record() = Lib.raw(app.stremiolite.Following.ID)
+    fun shows(lists: List<Pair<String, String>> = emptyList()) = app.stremiolite.Following.shows(Lib.infos(), record(), lists)
+    fun isFollowed(id: String) = app.stremiolite.Following.isFollowed(id, Lib.infos(), record())
+    fun follow(id: String, name: String) = Lib.put(app.stremiolite.Following.follow(record(), id, name))
+    fun unfollow(id: String) = Lib.put(app.stremiolite.Following.unfollow(record(), id))
 }

@@ -25,10 +25,8 @@ object NewEpisodes {
 
     /** Shows you follow (ids and names). Reading your list rows needs the network, so call this in the background. */
     fun followed(c: Context, addons: List<Addon>): List<Pair<String, String>> {
-        val mine = History.library(c).filter { it.type == "series" }.map { it.id to it.name } +
-            History.continueWatching(c).filter { it.type == "series" }.map { it.id to it.name }
         val lists = runCatching { Releases.fromPersonalRows(addons) }.getOrDefault(emptyList())
-        return (mine + lists).distinctBy { it.first }.take(MAX_SHOWS)
+        return Follow.shows(c, lists).take(MAX_SHOWS)
     }
 
     // ---- the followed shows' episode lists, fetched once an hour and shared by
@@ -74,6 +72,13 @@ object NewEpisodes {
 
     private var progressHook: (() -> Unit)? = null
 
+    /** The followed shows' details from the last check. */
+    fun shows(): List<Full> = fulls
+
+    fun followedTotal() = followedCount
+
+    fun isLoading() = loading
+
     /** Episodes out in the last week (null until checked). */
     fun recentCount(): Int? = if (fullsAt == 0L) null else fulls.sumOf { Releases.recent(it).size }
 
@@ -98,7 +103,7 @@ object NewEpisodes {
                 .sortedWith(compareByDescending<Found> { it.ep.released }.thenBy { it.show.name }.thenBy { it.ep.episode })
             status.label = when {
                 loading -> "Checking $followedCount shows… $checked done"
-                followedCount == 0 -> "Follow shows to see new episodes here: on a show, choose 'Tell me about new episodes and seasons'."
+                followedCount == 0 -> "Start watching a show, or on a show choose 'Tell me about new episodes and seasons', to see its new episodes here."
                 list.isEmpty() -> "No new episodes in the last ${Releases.DAYS} days ($followedCount shows followed)."
                 else -> "Out in the last ${Releases.DAYS} days · $followedCount shows followed · ▶ plays"
             }
@@ -137,7 +142,7 @@ object NewEpisodes {
                 .sortedWith(compareBy<Found> { it.ep.released }.thenBy { it.show.name }.thenBy { it.ep.season }.thenBy { it.ep.episode })
             status.label = when {
                 loading -> "Checking $followedCount shows… $checked done"
-                followedCount == 0 -> "Follow shows to see what's coming: on a show, choose 'Tell me about new episodes and seasons'."
+                followedCount == 0 -> "Start watching a show, or on a show choose 'Tell me about new episodes and seasons', to see what's coming."
                 list.isEmpty() -> "Nothing dated in the next 30 days ($followedCount shows followed)."
                 else -> "Next 30 days · $followedCount shows followed"
             }

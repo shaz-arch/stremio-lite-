@@ -69,8 +69,8 @@ object Waiting {
         schedule(app)
     }
 
-    /** Shows you follow (in your Library), for the "Following" part of the list. */
-    private fun following(c: Context) = History.library(c).filter { it.type == "series" }
+    /** Shows you follow (started, chosen, not stopped). */
+    private fun following(c: Context) = Follow.shows(c)
 
     fun remove(c: Context, id: String) = save(c, list(c).filter { it.id != id })
 
@@ -216,21 +216,57 @@ object Waiting {
                 val label = (if (e.ready > 0) "● " else "") + e.name + if (e.year.isNotEmpty()) " (${e.year})" else ""
                 rows += Row(label, if (e.ready > 0) "ready  ►" else "waiting  ►", opens = { entry(app, e) })
             }
-            // Shows: followed through the Library; new episodes and seasons are checked for.
-            val shows = following(app)
-            rows += Row("──── Shows: following for new episodes ────")
-            if (shows.isEmpty()) rows += Row("None. On a show, choose 'Tell me about new episodes and seasons'.")
-            shows.sortedBy { it.name }.forEach { sh ->
-                rows += Row(sh.name + if (sh.year.isNotEmpty()) " (${sh.year})" else "", "following  ►", opens = {
-                    Details.screenFor(app, sh.id, sh.type, sh.name, sh.year) ?: Screen(sh.name, listOf(Row("Your add-ons are still loading. Try again in a moment.")))
-                })
-            }
+            // Shows you follow, by where you're up to (details from the shared hourly check).
+            rows += showSections(app)
             rows += Row("Episodes out in the last week", "►", opens = { NewEpisodes.screen(app) })
             return rows
         }
         screen = Screen("Waiting for streams", build())
         screen.onShow = { screen.rows = build(); app.refresh(screen) }
         return screen
+    }
+
+    private fun showSections(app: MainActivity): List<Row> {
+        val rows = mutableListOf<Row>()
+        val followed = following(app)
+        if (followed.isEmpty()) {
+            rows += Row("──── Shows ────")
+            rows += Row("None yet. Shows you start watching are followed automatically.")
+            return rows
+        }
+        if (!NewEpisodes.fresh() && NewEpisodes.shows().isEmpty()) {
+            rows += Row("──── Shows: ${followed.size} followed ────")
+            rows += Row(if (NewEpisodes.isLoading()) "Checking where you're up to…" else "Checking where you're up to… (back and in again to refresh)")
+            NewEpisodes.load(app) { app.refreshTop() }
+            return rows
+        }
+        val infos = History.infos(app).associateBy { it.id }
+        val ids = followed.map { it.first }.toSet()
+        val watchedOf = NewEpisodes.shows().filter { it.id in ids }.associate { show ->
+            val order = MetaParse.stremioOrder(show)
+            show.id to ((infos[show.id]?.let { Sync.decodeWatched(it.watchedField, order) } ?: emptySet()) +
+                show.videos.filter { History.progress(app, it.id)?.done == true }.map { it.id })
+        }
+        val bySection = NewEpisodes.shows().filter { it.id in ids }.groupBy { show ->
+            Following.section(show, watchedOf[show.id] ?: emptySet(), infos[show.id])
+        }
+        fun section(title: String, list: List<Full>?, detail: (Full) -> String) {
+            if (list.isNullOrEmpty()) return
+            rows += Row("──── $title ────")
+            list.sortedBy { it.name }.forEach { sh ->
+                rows += Row(sh.name, detail(sh) + "  ►", opens = {
+                    Details.screenFor(app, sh.id, sh.type, sh.name, sh.year) ?: Screen(sh.name, listOf(Row("Your add-ons are still loading.")))
+                })
+            }
+        }
+        fun next(sh: Full) = Releases.upcoming(sh, 3650).firstOrNull()?.let { "${Details.epLabel(it)} ${Releases.dayName(it.released)}" } ?: "no date yet"
+        section("Caught up: waiting for more", bySection[Following.Section.CAUGHT_UP]) { next(it) }
+        section("Watching", bySection[Following.Section.WATCHING]) { sh ->
+            val left = Releases.recent(sh, "0000-00-00").count { it.id !in (watchedOf[sh.id] ?: emptySet()) }
+            "$left to watch"
+        }
+        section("Not started", bySection[Following.Section.NOT_STARTED]) { next(it) }
+        return rows
     }
 
     private fun entry(app: MainActivity, e: Entry): Screen = Screen(
