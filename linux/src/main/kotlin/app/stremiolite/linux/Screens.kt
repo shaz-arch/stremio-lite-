@@ -984,10 +984,11 @@ object Waiting {
         if (followed.isEmpty()) {
             rows += Row("──── Shows ────")
             rows += Row("None yet. Shows you start watching are followed automatically.")
-        } else if (NewEpisodes.shows().isEmpty()) {
+        } else if (NewEpisodes.shows().isEmpty() && !NewEpisodes.fresh()) {
+            // Only when a check is actually due: a fresh-but-empty result would otherwise redraw for ever.
             rows += Row("──── Shows: ${followed.size} followed ────")
             rows += Row("Checking where you're up to…")
-            NewEpisodes.load { if (App.top()?.title == "Waiting for streams") App.replaceTop(screen()) }
+            NewEpisodes.load { App.post { if (App.top()?.title == "Waiting for streams" && NewEpisodes.shows().isNotEmpty()) App.replaceTop(screen()) } }
         } else {
             val R = app.stremiolite.Releases
             val coming = NewEpisodes.ensure(followed) { if (App.top()?.title == "Waiting for streams") App.replaceTop(screen()) }
