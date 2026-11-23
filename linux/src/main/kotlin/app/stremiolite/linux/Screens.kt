@@ -608,8 +608,10 @@ object Details {
         }
         val collection = !isShow(f) && f.videos.isNotEmpty()
         rows += Row("────────────────────")
-        if (!collection) rows += libraryRows(f)
-        rows += Row("────────────────────")
+        if (!collection) {
+            rows += libraryRows(f)
+            rows += Row("────────────────────")
+        }
         rows += Row(info("Type", if (collection) "Collection" else if (f.type == "movie") "Movie" else if (f.type == "series") "Series" else f.type))
         if (f.year.isNotBlank()) rows += Row(info("Year", f.year))
         if (f.rating.isNotBlank()) rows += Row(info("IMDb rating", "★ ${f.rating}"))
