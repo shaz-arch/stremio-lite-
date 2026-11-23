@@ -374,20 +374,15 @@ object Lib {
         App.async({
             if (whole) Sync.pull(key) to true
             else {
-                val meta = Sync.meta(key)
+                // Any trouble with the change list: just do a full pull, as before.
+                val meta = runCatching { Sync.meta(key) }.getOrNull()
                 if (meta == null) Sync.pull(key) to true
                 else {
                     val want = Sync.changed(meta, known, keep)
-                    val gone = known.keys.filter { it !in meta && it !in keep }
                     when {
-                        want.isEmpty() && gone.isEmpty() -> null
+                        want.isEmpty() -> null
                         want.size > 150 -> Sync.pull(key) to true
-                        else -> {
-                            // Changed records, plus empty stand-ins for removed ones (marked by "_gone").
-                            val arr = if (want.isEmpty()) JSONArray() else Sync.pullIds(key, want)
-                            gone.forEach { arr.put(JSONObject().put("_id", it).put("_gone", true)) }
-                            arr to false
-                        }
+                        else -> Sync.pullIds(key, want) to false   // only changed records; nothing is dropped
                     }
                 }
             }
@@ -414,7 +409,7 @@ object Lib {
                         val o = arr.optJSONObject(i) ?: continue
                         val id = o.optString("_id")
                         if (id.isEmpty() || id in unsent) continue
-                        if (o.optBoolean("_gone")) records.remove(id) else records[id] = o
+                        records[id] = o
                     }
                 }
                 save()

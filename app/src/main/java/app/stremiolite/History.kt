@@ -462,20 +462,22 @@ object History {
         Net.async({
             if (whole) compute(Sync.pull(key), skip, doneIds, logIds)
             else {
-                val meta = Sync.meta(key)
+                // Any trouble with the change list: just do a full pull, as before.
+                val meta = runCatching { Sync.meta(key) }.getOrNull()
                 if (meta == null) compute(Sync.pull(key), skip, doneIds, logIds)
                 else {
                     val want = Sync.changed(meta, copy.mapValues { Sync.mtimeOf(it.value) }, skip)
-                    val gone = copy.keys.any { it !in meta && it !in skip }
                     when {
-                        want.isEmpty() && !gone -> null                       // nothing changed: no work at all
+                        want.isEmpty() -> null                                // nothing changed: no work at all
                         want.size > 150 -> compute(Sync.pull(key), skip, doneIds, logIds)
                         else -> {
-                            val fresh = if (want.isEmpty()) JSONArray() else Sync.pullIds(key, want)
+                            // Nothing is ever dropped here (Stremio marks removals on the record itself;
+                            // the full pull at start and on Reload tidies anything else).
+                            val fresh = Sync.pullIds(key, want)
                             val byId = HashMap<String, JSONObject>()
                             for (i in 0 until fresh.length()) fresh.optJSONObject(i)?.let { byId[it.optString("_id")] = it }
                             val merged = JSONArray()
-                            copy.forEach { (id, raw) -> if (id in meta && id !in byId) runCatching { merged.put(JSONObject(raw)) } }
+                            copy.forEach { (id, raw) -> if (id !in byId) runCatching { merged.put(JSONObject(raw)) } }
                             byId.values.forEach { merged.put(it) }
                             compute(merged, skip, doneIds, logIds)
                         }
