@@ -125,8 +125,15 @@ object App {
 
     fun refresh() { dirty = true }
 
-    fun toast(msg: String) {
-        toast = msg to System.currentTimeMillis() + 4_000
+    /** Shown on every screen, bottom-right before the clock (e.g. "⬆ build 70"). */
+    var badge = ""
+        set(v) { field = v; dirty = true }
+
+    /** Run after the screen closes (used to restart into a new build). */
+    var afterExit: (() -> Unit)? = null
+
+    fun toast(msg: String, ms: Long = 4_000) {
+        toast = msg to System.currentTimeMillis() + ms
         dirty = true
     }
 
@@ -174,6 +181,7 @@ object App {
         } finally {
             term.stopScreen()
         }
+        afterExit?.invoke()
     }
 
     // ---- keys -------------------------------------------------------------------------------
@@ -324,7 +332,8 @@ object App {
         // Footer: keys (or a prompt / message) and the clock
         g.foregroundColor = t.bar
         g.putString(left, h - 2, "─".repeat(inner.coerceAtLeast(0)))
-        val clock = Look.clock().pattern.let { if (it.isEmpty()) "" else SimpleDateFormat(it, Locale.UK).format(Date()) }
+        val time = Look.clock().pattern.let { if (it.isEmpty()) "" else SimpleDateFormat(it, Locale.UK).format(Date()) }
+        val clock = listOf(badge, time).filter { it.isNotEmpty() }.joinToString("  ")
         val p = prompt
         val msg = toast?.first
         when {

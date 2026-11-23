@@ -169,6 +169,7 @@ object Home {
         fun build() {
             val list = addons
             val rows = mutableListOf<Row>()
+            Updates.homeRow()?.let { rows += it; rows += Row("────────────────────") }
             status.label = when {
                 loading && list == null -> "Loading your rows…"
                 error != null && list == null -> "Couldn't load your rows: $error"

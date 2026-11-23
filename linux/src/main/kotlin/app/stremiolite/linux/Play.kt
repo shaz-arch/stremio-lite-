@@ -366,32 +366,71 @@ object Updates {
     }
     var available: Int? = null
         private set
+    /** A newer build already downloaded over this one: restarting starts it. */
+    var installed: Int? = null
+        private set
     private var lastCheck = 0L
+    private var scheduled = false
+    private val listeners = mutableListOf<() -> Unit>()
 
+    private fun latest(): Int? = JSONObject(Http.get(LATEST)).optString("tag_name").removePrefix("build-").toIntOrNull()
+
+    /** Checks now and then every 30 minutes, whichever screen is open. [done] runs when an update turns up. */
     fun check(done: () -> Unit) {
+        if (done !in listeners) listeners += done
+        if (!scheduled) {
+            scheduled = true
+            fun tick() { checkQuietly(); App.later(30 * 60_000L) { tick() } }
+            tick()
+        }
+    }
+
+    private fun checkQuietly() {
         val now = System.currentTimeMillis()
-        if (now - lastCheck < 30 * 60_000) return
+        if (now - lastCheck < 25 * 60_000) return
         lastCheck = now
-        App.async({ JSONObject(Http.get(LATEST)).optString("tag_name").removePrefix("build-").toIntOrNull() }) { r ->
-            val n = r.getOrNull()
-            if (n != null && n > current && current > 0) {
-                if (available != n) App.toast("Update available: build $n. Settings → Check for updates to install it")
+        App.async({ latest() }) { r ->
+            val n = r.getOrNull() ?: return@async
+            if (n > current && current > 0 && n != available && n != installed) {
                 available = n
-                done()
+                App.badge = "⬆ build $n"
+                App.toast("Update available: build $n. It's at the top of Home: Enter installs it", 12_000)
+                listeners.forEach { it() }
             }
         }
     }
 
     fun checkNow() {
         App.toast("Checking for updates…")
-        App.async({ JSONObject(Http.get(LATEST)).optString("tag_name").removePrefix("build-").toIntOrNull() }) { r ->
+        App.async({ latest() }) { r ->
             val n = r.getOrNull()
             when {
                 n == null -> App.toast("Couldn't check: ${r.exceptionOrNull()?.let { Net.describe(it) } ?: "no answer"}")
+                n == installed -> restartRow(n)
                 n <= current -> App.toast("You're on the latest build ($current).")
                 else -> install(n)
             }
         }
+    }
+
+    /** Home's top line while an update is waiting or downloaded. */
+    fun homeRow(): Row? {
+        installed?.let { n -> return Row("Build $n is installed. Enter restarts into it", "►", action = { restart() }) }
+        available?.let { n -> return Row("Update available: build $n. Enter installs it", "►", action = { install(n) }) }
+        return null
+    }
+
+    private fun restartRow(n: Int) = App.toast("Build $n is installed: choose the top line on Home to restart into it", 8_000)
+
+    /** Closes the app and starts the new build in this terminal. */
+    fun restart() {
+        val java = ProcessHandle.current().info().command().orElse("java")
+        val me = runCatching { File(Updates::class.java.protectionDomain.codeSource.location.toURI()) }.getOrNull() ?: return
+        App.afterExit = {
+            val code = runCatching { ProcessBuilder(java, "-jar", me.path).inheritIO().start().waitFor() }.getOrDefault(0)
+            kotlin.system.exitProcess(code)
+        }
+        App.quit()
     }
 
     /** Downloads the new jar over the running one; it takes effect next time the app starts. */
@@ -408,7 +447,12 @@ object Updates {
             if (tmp.length() < 100_000) throw IllegalStateException("download looks incomplete")
             if (!tmp.renameTo(me)) throw IllegalStateException("couldn't replace ${me.name}")
         }) { r ->
-            r.onSuccess { App.toast("Updated to build $n. Quit (q) and start it again to use it.") }
+            r.onSuccess {
+                installed = n; available = null
+                App.badge = "⬆ restart for build $n"
+                App.toast("Build $n downloaded. Enter on Home's top line restarts into it", 10_000)
+                listeners.forEach { it() }
+            }
                 .onFailure { App.toast("Update failed: ${Net.describe(it)}") }
         }
     }
