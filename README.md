@@ -57,7 +57,7 @@ Needs Java 17+ and mpv. On Arch:
     stremonino
 
 Keys: ↑↓ (or j/k) move · Enter open · p play · ←→ / PgUp PgDn page · Esc back · / search · q quit.
-Settings live in `~/.config/stremonino`. Updates: Settings → Check for updates.
+Settings live in `~/.config/stremonino`. Updates: it checks every 30 minutes; when one's out, the top line of Home installs it and restarts.
 
 ## Building
 
