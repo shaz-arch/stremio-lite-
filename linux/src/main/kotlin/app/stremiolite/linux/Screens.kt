@@ -265,14 +265,30 @@ object Home {
             val left = if (i.upNext) "next episode" else if (i.duration > 0) "${((i.duration - i.offset) / 60_000).coerceAtLeast(1)} min left" else ""
             Row(i.name, left + "  ►", opens = { Details.screenFor(i.id, i.type, i.name) }, play = { App.push(Details.screenFor(i.id, i.type, i.name, autoPlay = true)) })
         }
-        return Screen("Continue watching", rows.ifEmpty { listOf(Row("Nothing yet.")) })
+        val clear = if (rows.isEmpty()) emptyList() else listOf(
+            Row("────────────────────"),
+            Row("Clear Continue watching", "►", opens = {
+                confirmScreen("Clear Continue watching?", "Removes all ${rows.size} from Continue watching on every device. Watched marks stay.", "Yes, clear all ${rows.size}") {
+                    Lib.clearContinue(); App.toast("Continue watching cleared"); App.resetTo(Home.screen())
+                }
+            }),
+        )
+        return Screen("Continue watching", rows.ifEmpty { listOf(Row("Nothing yet.")) } + clear)
     }
 
     private fun libraryScreen(): Screen {
         val rows = Lib.library().map { i ->
             Row(i.name, MetaParse.typeLabel(i.type) + "  ►", opens = { Details.screenFor(i.id, i.type, i.name) })
         }
-        return Screen("Library", rows.ifEmpty { listOf(Row("Your library is empty.")) })
+        val clear = if (rows.isEmpty()) emptyList() else listOf(
+            Row("────────────────────"),
+            Row("Clear Library", "►", opens = {
+                confirmScreen("Clear Library?", "Removes all ${rows.size} from your Library on every device. History and watched marks stay.", "Yes, clear all ${rows.size}") {
+                    Lib.clearLibrary(); App.toast("Library cleared"); App.resetTo(Home.screen())
+                }
+            }),
+        )
+        return Screen("Library", rows.ifEmpty { listOf(Row("Your library is empty.")) } + clear)
     }
 
     private fun watchedScreen(): Screen {
@@ -930,6 +946,18 @@ object Waiting {
             }
         }
         rows += Row("Episodes out in the last week", "►", opens = { NewEpisodes.screen() })
+        val filmList = list()
+        if (filmList.isNotEmpty() || followed.isNotEmpty()) rows += Row("────────────────────")
+        if (filmList.isNotEmpty()) rows += Row("Clear the films", "►", opens = {
+            confirmScreen("Clear the films?", "Stops waiting for all ${filmList.size} films, on every device.", "Yes, clear all ${filmList.size} films") {
+                save(emptyList()); App.toast("Films cleared"); App.back(); App.replaceTop(screen())
+            }
+        })
+        if (followed.isNotEmpty()) rows += Row("Stop following all shows", "►", opens = {
+            confirmScreen("Stop following all shows?", "Stops all ${followed.size} shows, on every device. They stay stopped even if you watch more; follow one again from its page.", "Yes, stop all ${followed.size}") {
+                Follow.unfollowAll(followed.map { it.first }); App.toast("Stopped following all shows"); App.back(); App.replaceTop(screen())
+            }
+        })
         val s = Screen("Waiting for streams", rows)
         // Changes made on another device (follows, the waiting list) are fetched on the way in.
         s.onShow = {
@@ -1106,4 +1134,11 @@ object Follow {
     fun stopped() = app.stremiolite.Following.stopped(record())
     fun follow(id: String, name: String) = Lib.put(app.stremiolite.Following.follow(record(), id, name))
     fun unfollow(id: String) = Lib.put(app.stremiolite.Following.unfollow(record(), id))
+
+    /** Stops following all of [ids] in one change. */
+    fun unfollowAll(ids: List<String>) {
+        var rec = record()
+        ids.forEach { rec = app.stremiolite.Following.unfollow(rec, it) }
+        rec?.let { Lib.put(it) }
+    }
 }

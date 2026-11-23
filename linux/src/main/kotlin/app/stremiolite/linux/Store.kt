@@ -308,6 +308,26 @@ object Lib {
         return !had
     }
 
+    /** Stores several changed records and sends them in one go. */
+    fun putAll(items: List<JSONObject>) {
+        ensure()
+        items.forEach { val id = it.optString("_id"); records[id] = it; unsent += id }
+        save()
+        send()
+    }
+
+    /** Empties Continue watching (resume points); watched marks stay. */
+    fun clearContinue() {
+        val now = Sync.iso(System.currentTimeMillis())
+        putAll(continueWatching().mapNotNull { i -> records[i.id]?.also { it.optJSONObject("state")?.put("timeOffset", 0); it.put("_mtime", now) } })
+    }
+
+    /** Empties the Library; history and watched marks stay. */
+    fun clearLibrary() {
+        val now = Sync.iso(System.currentTimeMillis())
+        putAll(library().mapNotNull { i -> records[i.id]?.also { it.put("removed", true).put("temp", false).put("_mtime", now) } })
+    }
+
     fun removeFromContinue(id: String) {
         ensure()
         val item = records[id] ?: return

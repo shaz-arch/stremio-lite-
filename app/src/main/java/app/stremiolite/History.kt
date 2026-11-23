@@ -336,6 +336,38 @@ object History {
         send(c)
     }
 
+    /** Empties Continue watching (the account's resume points); watched marks stay. One sync for all. */
+    fun clearContinue(c: Context) {
+        ensure(c)
+        val ids = items.map { it.id }
+        items.clear()
+        ids.forEach { id ->
+            remote[id]?.let { runCatching { JSONObject(it) }.getOrNull() }?.let { item ->
+                item.optJSONObject("state")?.put("timeOffset", 0)
+                item.put("_mtime", Sync.iso(System.currentTimeMillis()))
+                remote[id] = item.toString()
+                unsent += id
+            }
+        }
+        save()
+        send(c)
+    }
+
+    /** Empties the Library (titles stay in your history and watched marks). One sync for all. */
+    fun clearLibrary(c: Context) {
+        ensure(c)
+        val now = Sync.iso(System.currentTimeMillis())
+        library.toList().forEach { s ->
+            val item = remote[s.id]?.let { runCatching { JSONObject(it) }.getOrNull() } ?: Sync.newItem(s.id, s.type, s.name)
+            item.put("removed", true).put("temp", false).put("_mtime", now)
+            remote[s.id] = item.toString()
+            unsent += s.id
+        }
+        library.clear()
+        save()
+        send(c)
+    }
+
     /** Every title record on the account, read (for following: which shows you've started). */
     fun infos(c: Context): List<LibraryItems.Info> {
         ensure(c)

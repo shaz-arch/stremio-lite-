@@ -361,3 +361,15 @@ object App {
         term.refresh()
     }
 }
+
+
+/** An "are you sure?" screen: the cursor starts on "No", so a stray Enter changes nothing. */
+fun confirmScreen(title: String, question: String, yes: String, onYes: () -> Unit) = Screen(
+    title,
+    // One sentence per line, so nothing is cut off on a TV.
+    question.split(Regex("(?<=[.;]) ")).map { Row(it) } + listOf(
+        Row("────────────────────"),
+        Row("No, keep everything", action = { App.back() }),
+        Row(yes, action = onYes),
+    ),
+).also { it.pos = it.rows.size - 2 }

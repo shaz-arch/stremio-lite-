@@ -44,3 +44,15 @@ class Screen(
     var onSelect: ((Int) -> Unit)? = null
     var onHide: (() -> Unit)? = null
 }
+
+
+/** An "are you sure?" screen: the cursor starts on "No", so a stray OK changes nothing. */
+fun confirmScreen(app: MainActivity, title: String, question: String, yes: String, onYes: () -> Unit) = Screen(
+    title,
+    // One sentence per line, so nothing is cut off on a TV.
+    question.split(Regex("(?<=[.;]) ")).map { Row(it) } + listOf(
+        Row("────────────────────"),
+        Row("No, keep everything", action = { app.back() }),
+        Row(yes, action = onYes),
+    ),
+).also { it.position = it.rows.size - 2 }

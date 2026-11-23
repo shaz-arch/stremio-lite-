@@ -231,6 +231,19 @@ object Waiting {
             // Shows you follow, by where you're up to (details from the shared hourly check).
             rows += showSections(app) { if (app.isTop(screen)) { screen.rows = build(); app.refresh(screen) } }
             rows += Row("Episodes out in the last week", "►", opens = { NewEpisodes.screen(app) })
+            val films = list(app)
+            val shows = following(app)
+            if (films.isNotEmpty() || shows.isNotEmpty()) rows += Row("────────────────────")
+            if (films.isNotEmpty()) rows += Row("Clear the films", "►", opens = {
+                confirmScreen(app, "Clear the films?", "Stops waiting for all ${films.size} films, on every device.", "Yes, clear all ${films.size} films") {
+                    save(app, emptyList()); app.toast("Films cleared"); app.back()
+                }
+            })
+            if (shows.isNotEmpty()) rows += Row("Stop following all shows", "►", opens = {
+                confirmScreen(app, "Stop following all shows?", "Stops all ${shows.size} shows, on every device. They stay stopped even if you watch more; follow one again from its page.", "Yes, stop all ${shows.size}") {
+                    Follow.unfollowAll(app, shows.map { it.first }); app.toast("Stopped following all shows"); app.back()
+                }
+            })
             return rows
         }
         screen = Screen("Waiting for streams", build())

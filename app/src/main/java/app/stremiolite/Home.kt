@@ -184,6 +184,14 @@ object Home {
         fun build(): List<Row> {
             val list = History.continueWatching(app)
             if (list.isEmpty()) return listOf(Row("Nothing here yet. Films and episodes you start will appear here."))
+            val clear = listOf(
+                Row("────────────────────"),
+                Row("Clear Continue watching", "►", opens = {
+                    confirmScreen(app, "Clear Continue watching?", "Removes all ${list.size} from Continue watching on every device. Watched marks stay.", "Yes, clear all ${list.size}") {
+                        History.clearContinue(app); app.toast("Continue watching cleared"); app.back()
+                    }
+                }),
+            )
             return list.map { e ->
                 val detail = when {
                     e.upNext -> "next: " + e.label.substringBefore(' ')
@@ -194,7 +202,7 @@ object Home {
                 Row(e.name, detail, opens = {
                     Details.screenFor(app, e.id, e.type, e.name, e.year) ?: Screen(e.name, listOf(Row("Your add-ons are still loading. Try again in a moment.")))
                 }, play = { Details.screenFor(app, e.id, e.type, e.name, e.year, autoPlay = true)?.let { app.push(it) } })
-            }
+            } + clear
         }
         screen = Screen("Continue watching", build())
         screen.onShow = {
@@ -213,7 +221,14 @@ object Home {
                 Row(s.name, listOf(s.year, Catalogs.typeLabel(s.type).removeSuffix("s")).filter { it.isNotBlank() }.joinToString("  "), opens = {
                     Details.screenFor(app, s.id, s.type, s.name, s.year) ?: Screen(s.name, listOf(Row("Your add-ons are still loading. Try again in a moment.")))
                 }, play = { Details.screenFor(app, s.id, s.type, s.name, s.year, autoPlay = true)?.let { app.push(it) } })
-            }
+            } + listOf(
+                Row("────────────────────"),
+                Row("Clear Library", "►", opens = {
+                    confirmScreen(app, "Clear Library?", "Removes all ${list.size} from your Library on every device. History and watched marks stay.", "Yes, clear all ${list.size}") {
+                        History.clearLibrary(app); app.toast("Library cleared"); app.back()
+                    }
+                }),
+            )
         }
         screen = Screen("Library", build())
         screen.onShow = {
