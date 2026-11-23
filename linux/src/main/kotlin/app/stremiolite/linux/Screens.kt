@@ -166,6 +166,7 @@ object Home {
     fun screen(): Screen {
         lateinit var s: Screen
         val status = Row("")
+        var placed = false
         fun build() {
             val list = addons
             val rows = mutableListOf<Row>()
@@ -182,7 +183,8 @@ object Home {
             val lib = Lib.library()
             val waiting = Waiting.list()
             rows += Row("──── Watching ────")
-            rows += Row("Search", "/  ►", opens = null, action = { Search.start() })
+            val searchRow = Row("Search", "/  ►", opens = null, action = { Search.start() })
+            rows += searchRow
             rows += Row("Continue watching", if (cw.isEmpty()) "nothing yet" else "${cw.size}  ►", opens = { continueScreen() })
             rows += Row("Library", if (lib.isEmpty()) "empty" else "${lib.size}  ►", opens = { libraryScreen() })
             rows += Row("New episodes", NewEpisodes.recentCount()?.let { if (it == 0) "none  ►" else "$it  ►" } ?: "", opens = { NewEpisodes.screen() })
@@ -214,6 +216,8 @@ object Home {
             rows += Row("Switch profile", "►", opens = { Profiles.chooser() })
             rows += Row("Sign out of this profile", opens = { signOut() })
             s.rows = rows
+            // Open on Search, not on the "Watching" header above it.
+            if (!placed) { placed = true; s.moveTo = rows.indexOf(searchRow) }
             App.refresh()
         }
         rebuild = { build() }

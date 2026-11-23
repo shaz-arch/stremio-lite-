@@ -39,6 +39,7 @@ object Home {
         lateinit var screen: Screen
 
         val search = Row("Search", "☰  ►", opens = { Search.menu(app) })
+        var placed = false
         val tools = listOf(
             Row("──── App ────"),
             // Setup items (add-ons, export/import, device check, about) live inside Settings.
@@ -90,6 +91,8 @@ object Home {
                 Row("──── Browse ────"),
             ))
             screen.rows = rows + tools
+            // Open on Search, not on the "Watching" header above it.
+            if (!placed) { placed = true; screen.moveTo = screen.rows.indexOf(search) }
             app.refresh(screen)
         }
         rebuildHome = { rebuild() }
