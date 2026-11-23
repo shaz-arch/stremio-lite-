@@ -168,10 +168,24 @@ object Details {
     private fun libraryRows(app: MainActivity, f: Full): List<Row> {
         val rows = mutableListOf<Row>()
         lateinit var lib: Row
-        lib = Row(if (History.inLibrary(app, f.id)) "Remove from library" else "Add to library", action = {
+        // For shows, the Library is what "following" means: new episodes and seasons are checked for.
+        val show = f.type == "series"
+        fun libLabel(inLib: Boolean) = when {
+            show && inLib -> "Following: new episodes and seasons ✓ (stop)"
+            show -> "Tell me about new episodes and seasons"
+            inLib -> "Remove from library"
+            else -> "Add to library"
+        }
+        lib = Row(libLabel(History.inLibrary(app, f.id)), action = {
             val added = History.toggleLibrary(app, History.Saved(f.id, f.type, f.name, f.year))
-            lib.label = if (added) "Remove from library" else "Add to library"
-            app.toast(if (added) "Added to library" else "Removed from library")
+            lib.label = libLabel(added)
+            app.toast(when {
+                show && added -> "Following ${f.name}: you'll be told when new episodes play (also in your Library)"
+                show -> "Stopped following ${f.name} (removed from your Library)"
+                added -> "Added to library"
+                else -> "Removed from library"
+            })
+            if (show && added) Waiting.askToNotify(app)
             app.refreshTop()
         })
         rows += lib

@@ -57,13 +57,20 @@ object Waiting {
 
     fun add(app: MainActivity, e: Entry) {
         save(app, list(app).filter { it.id != e.id } + e)
-        // Android 13+: notifications need the user's OK (phones only; the stick shows it on Home).
+        askToNotify(app)
+        checkSoon(app, force = true)
+    }
+
+    /** Android 13+: notifications need the user's OK (phones only; the stick shows things on Home). */
+    fun askToNotify(app: MainActivity) {
         if (Build.VERSION.SDK_INT >= 33 && isPhone(app) &&
             app.checkSelfPermission("android.permission.POST_NOTIFICATIONS") != android.content.pm.PackageManager.PERMISSION_GRANTED
         ) app.requestPermissions(arrayOf("android.permission.POST_NOTIFICATIONS"), 7)
         schedule(app)
-        checkSoon(app, force = true)
     }
+
+    /** Shows you follow (in your Library), for the "Following" part of the list. */
+    private fun following(c: Context) = History.library(c).filter { it.type == "series" }
 
     fun remove(c: Context, id: String) = save(c, list(c).filter { it.id != id })
 
@@ -168,9 +175,14 @@ object Waiting {
     /** The Home line's right-hand text. */
     fun summary(c: Context): String {
         val l = list(c)
-        if (l.isEmpty()) return "empty"
+        val shows = following(c).size
+        if (l.isEmpty() && shows == 0) return "empty"
         val ready = l.count { it.ready > 0 }
-        return (if (ready > 0) "$ready ready · " else "") + "${l.size - ready} waiting  ►"
+        return listOfNotNull(
+            if (ready > 0) "$ready ready" else null,
+            if (l.size - ready > 0) "${l.size - ready} waiting" else null,
+            if (shows > 0) "$shows following" else null,
+        ).joinToString(" · ") + "  ►"
     }
 
     fun screen(app: MainActivity): Screen {
@@ -198,11 +210,22 @@ object Waiting {
                 }),
                 Row("────────────────────"),
             )
-            if (keep.isEmpty()) rows += Row("Nothing waiting. On a film, choose 'Tell me when a stream is available'.")
+            rows += Row("──── Films ────")
+            if (keep.isEmpty()) rows += Row("None. On a film, choose 'Tell me when a stream is available'.")
             keep.sortedWith(compareByDescending<Entry> { it.ready }.thenBy { it.name }).forEach { e ->
                 val label = (if (e.ready > 0) "● " else "") + e.name + if (e.year.isNotEmpty()) " (${e.year})" else ""
                 rows += Row(label, if (e.ready > 0) "ready  ►" else "waiting  ►", opens = { entry(app, e) })
             }
+            // Shows: followed through the Library; new episodes and seasons are checked for.
+            val shows = following(app)
+            rows += Row("──── Shows: following for new episodes ────")
+            if (shows.isEmpty()) rows += Row("None. On a show, choose 'Tell me about new episodes and seasons'.")
+            shows.sortedBy { it.name }.forEach { sh ->
+                rows += Row(sh.name + if (sh.year.isNotEmpty()) " (${sh.year})" else "", "following  ►", opens = {
+                    Details.screenFor(app, sh.id, sh.type, sh.name, sh.year) ?: Screen(sh.name, listOf(Row("Your add-ons are still loading. Try again in a moment.")))
+                })
+            }
+            rows += Row("Episodes out in the last week", "►", opens = { NewEpisodes.screen(app) })
             return rows
         }
         screen = Screen("Waiting for streams", build())

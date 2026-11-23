@@ -181,7 +181,7 @@ object Home {
             rows += Row("Continue watching", if (cw.isEmpty()) "nothing yet" else "${cw.size}  ►", opens = { continueScreen() })
             rows += Row("Library", if (lib.isEmpty()) "empty" else "${lib.size}  ►", opens = { libraryScreen() })
             rows += Row("New episodes", opens = { NewEpisodes.screen() })
-            if (waiting.isNotEmpty()) rows += Row("Waiting for streams", Waiting.summary(), opens = { Waiting.screen() })
+            rows += Row("Waiting for streams", Waiting.summary(), opens = { Waiting.screen() })
             rows += Row("────────────────────")
             if (list != null) {
                 val entries = Folders.entries(list, Prefs.hiddenRows)
@@ -513,10 +513,22 @@ object Details {
         }
         rows += Row("────────────────────")
         lateinit var lib: Row
-        lib = Row(if (Lib.inLibrary(f.id)) "Remove from library" else "Add to library", action = {
+        val show = f.type == "series"
+        fun libLabel(inLib: Boolean) = when {
+            show && inLib -> "Following: new episodes and seasons ✓ (stop)"
+            show -> "Tell me about new episodes and seasons"
+            inLib -> "Remove from library"
+            else -> "Add to library"
+        }
+        lib = Row(libLabel(Lib.inLibrary(f.id)), action = {
             val added = Lib.toggleLibrary(f.id, f.type, f.name)
-            lib.label = if (added) "Remove from library" else "Add to library"
-            App.toast(if (added) "Added to library" else "Removed from library")
+            lib.label = libLabel(added)
+            App.toast(when {
+                show && added -> "Following ${f.name}: your phone tells you when new episodes play (also in your Library)"
+                show -> "Stopped following ${f.name}"
+                added -> "Added to library"
+                else -> "Removed from library"
+            })
         })
         rows += lib
         if (f.type == "movie" && Lib.filmWatched(f.id)) rows += Row("Remove from watched", action = {
@@ -740,18 +752,34 @@ object Waiting {
         App.toast("Removed from Waiting for streams")
     }
 
+    private fun following() = Lib.library().filter { it.type == "series" }
+
     fun summary(): String {
         val l = list()
         val ready = l.count { it.ready > 0 }
-        return (if (ready > 0) "$ready ready · " else "") + "${l.size - ready} waiting  ►"
+        val shows = following().size
+        if (l.isEmpty() && shows == 0) return "empty"
+        return listOfNotNull(
+            if (ready > 0) "$ready ready" else null,
+            if (l.size - ready > 0) "${l.size - ready} waiting" else null,
+            if (shows > 0) "$shows following" else null,
+        ).joinToString(" · ") + "  ►"
     }
 
     fun screen(): Screen {
-        val rows = list().sortedWith(compareByDescending<Entry> { it.ready }.thenBy { it.name }).map { e ->
-            Row((if (e.ready > 0) "● " else "") + e.name + if (e.year.isNotEmpty()) " (${e.year})" else "",
+        val rows = mutableListOf(Row("──── Films ────"))
+        val films = list().sortedWith(compareByDescending<Entry> { it.ready }.thenBy { it.name })
+        if (films.isEmpty()) rows += Row("None. On a film, choose 'Tell me when a stream is available'.")
+        films.forEach { e ->
+            rows += Row((if (e.ready > 0) "● " else "") + e.name + if (e.year.isNotEmpty()) " (${e.year})" else "",
                 if (e.ready > 0) "ready  ►" else "waiting  ►", opens = { Details.screenFor(e.id, e.type, e.name) })
         }
-        return Screen("Waiting for streams", rows.ifEmpty { listOf(Row("Nothing waiting.")) })
+        rows += Row("──── Shows: following for new episodes ────")
+        val shows = following().sortedBy { it.name }
+        if (shows.isEmpty()) rows += Row("None. On a show, choose 'Tell me about new episodes and seasons'.")
+        shows.forEach { sh -> rows += Row(sh.name, "following  ►", opens = { Details.screenFor(sh.id, sh.type, sh.name) }) }
+        rows += Row("Episodes out in the last week", "►", opens = { NewEpisodes.screen() })
+        return Screen("Waiting for streams", rows)
     }
 }
 
