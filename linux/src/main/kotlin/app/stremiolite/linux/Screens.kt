@@ -680,6 +680,20 @@ object Details {
                 App.refresh()
             })
             rows += wait
+            // Played it but the picture wasn't great? Keep an eye out for a better release.
+            lateinit var better: Row
+            fun betterLabel() = if (Waiting.watchingForBetter(f.id)) "Watching for a better version ✓ (stop)" else "Tell me when a better version appears"
+            better = Row(betterLabel(), action = {
+                if (Waiting.watchingForBetter(f.id)) { Waiting.remove(f.id); better.label = betterLabel(); App.refresh() }
+                else {
+                    App.toast("Checking what's there now…")
+                    Waiting.addBetter(f.id, f.type, f.name, f.year) { have ->
+                        App.toast("Your phone will tell you when something better than $have appears", 8_000)
+                        better.label = betterLabel(); wait.label = label(); App.refresh()
+                    }
+                }
+            })
+            rows += better
         }
         return rows
     }
@@ -691,6 +705,8 @@ object Details {
         lateinit var s: Screen
         s = Screen(item.name, listOf(loading), tag = item.year)
         s.onShow = {
+            // Picks up where you got to on another device (resume point, watched marks).
+            Lib.pull(force = System.currentTimeMillis() - Lib.lastPull > 15_000) { full?.let { f -> if (App.isTop(s)) { s.rows = rows(f); App.refresh() } } }
             val f = full
             if (f != null) { s.rows = rows(f); App.refresh() }
             else if (!started) {
@@ -851,21 +867,44 @@ object Settings {
 object Waiting {
     private const val ID = "stremiolite:waiting"
 
-    class Entry(val id: String, val type: String, val name: String, val year: String, val ready: Long)
+    /** Same shape as the phone's: [better] entries wait for a release better than [have] (score [bar]). */
+    class Entry(
+        val id: String, val type: String, val name: String, val year: String, val ready: Long,
+        val better: Boolean = false, val bar: Double = 0.0, val have: String = "", val found: String = "",
+    )
 
     fun list(): List<Entry> {
         val name = Lib.raw(ID)?.optString("name") ?: return emptyList()
         val arr = runCatching { JSONArray(name) }.getOrNull() ?: return emptyList()
-        return (0 until arr.length()).mapNotNull { i -> arr.optJSONObject(i)?.let { Entry(it.optString("id"), it.optString("type"), it.optString("name"), it.optString("year"), it.optLong("ready")) } }
-            .filter { it.id.isNotEmpty() }
+        return (0 until arr.length()).mapNotNull { i ->
+            arr.optJSONObject(i)?.let {
+                Entry(it.optString("id"), it.optString("type"), it.optString("name"), it.optString("year"), it.optLong("ready"),
+                    it.optBoolean("better"), it.optDouble("bar", 0.0), it.optString("have"), it.optString("found"))
+            }
+        }.filter { it.id.isNotEmpty() }
     }
 
-    fun has(id: String) = list().any { it.id == id }
+    fun has(id: String) = list().any { it.id == id && !it.better }
+    fun watchingForBetter(id: String) = list().any { it.id == id && it.better }
+
+    /** Notes what Play best would pick now, then watches for something clearly better (the phone checks). */
+    fun addBetter(id: String, type: String, name: String, year: String, done: (String) -> Unit) {
+        App.async({ app.stremiolite.StreamParse.bestPlayable(Home.all(), type, id) }) { r ->
+            val now = r.getOrNull()
+            val have = now?.first?.summary?.replace(Regex("\\s+"), " ")?.trim() ?: "nothing playable yet"
+            save(list().filter { it.id != id } + Entry(id, type, name, year, 0, true, now?.second ?: 0.0, have, ""))
+            done(have)
+        }
+    }
 
     private fun save(list: List<Entry>) {
         val item = Lib.raw(ID) ?: app.stremiolite.Sync.newItem(ID, "other", "[]")
         val arr = JSONArray()
-        list.forEach { arr.put(JSONObject().put("id", it.id).put("type", it.type).put("name", it.name).put("year", it.year).put("ready", it.ready)) }
+        list.forEach {
+            val o = JSONObject().put("id", it.id).put("type", it.type).put("name", it.name).put("year", it.year).put("ready", it.ready)
+            if (it.better) o.put("better", true).put("bar", it.bar).put("have", it.have).put("found", it.found)
+            arr.put(o)
+        }
         item.put("name", arr.toString()).put("removed", true).put("temp", false).put("_mtime", app.stremiolite.Sync.iso(System.currentTimeMillis()))
         Lib.put(item)
     }
@@ -886,6 +925,7 @@ object Waiting {
     fun summary(): String {
         val l = list()
         val ready = l.count { it.ready > 0 }
+        val upgrades = l.count { it.ready == 0L && it.better }
         // Ended shows with nothing more coming aren't counted (same as the phone and stick).
         val followed = following()
         val ids = followed.map { it.first }.toSet()
@@ -897,7 +937,8 @@ object Waiting {
         if (l.isEmpty() && shows == 0) return "empty"
         return listOfNotNull(
             if (ready > 0) "$ready ready" else null,
-            if (l.size - ready > 0) "${l.size - ready} waiting" else null,
+            l.count { it.ready == 0L && !it.better }.takeIf { it > 0 }?.let { "$it waiting" },
+            if (upgrades > 0) "$upgrades for better" else null,
             if (shows > 0) "$shows following" else null,
         ).joinToString(" · ") + "  ►"
     }
@@ -905,12 +946,21 @@ object Waiting {
     fun screen(): Screen {
         val rows = mutableListOf(Row("──── Films ────"))
         // Films you've started (or finished) leave the list.
-        val films = list().filter { Lib.info(it.id)?.let { i -> i.continuing || i.filmWatched } != true }
+        val films = list().filter { !it.better && Lib.info(it.id)?.let { i -> i.continuing || i.filmWatched } != true }
             .sortedWith(compareByDescending<Entry> { it.ready }.thenBy { it.name })
         if (films.isEmpty()) rows += Row("None. On a film, choose 'Tell me when a stream is available'.")
         films.forEach { e ->
             rows += Row((if (e.ready > 0) "● " else "") + e.name + if (e.year.isNotEmpty()) " (${e.year})" else "",
                 if (e.ready > 0) "ready  ►" else "waiting  ►", opens = { Details.screenFor(e.id, e.type, e.name) })
+        }
+        val upgrades = list().filter { it.better }
+        if (upgrades.isNotEmpty()) {
+            rows += Row("──── Better versions ────")
+            upgrades.sortedWith(compareByDescending<Entry> { it.ready }.thenBy { it.name }).forEach { e ->
+                rows += Row((if (e.ready > 0) "● " else "") + e.name + if (e.year.isNotEmpty()) " (${e.year})" else "",
+                    (if (e.ready > 0) "found: ${e.found}" else "have: ${e.have}") + "  ►",
+                    opens = { Details.screenFor(e.id, e.type, e.name) })
+            }
         }
         val followed = following()
         if (followed.isEmpty()) {
@@ -946,11 +996,11 @@ object Waiting {
             }
         }
         rows += Row("Episodes out in the last week", "►", opens = { NewEpisodes.screen() })
-        val filmList = list()
+        val filmList = list().filter { !it.better }
         if (filmList.isNotEmpty() || followed.isNotEmpty()) rows += Row("────────────────────")
         if (filmList.isNotEmpty()) rows += Row("Clear the films", "►", opens = {
             confirmScreen("Clear the films?", "Stops waiting for all ${filmList.size} films, on every device.", "Yes, clear all ${filmList.size} films") {
-                save(emptyList()); App.toast("Films cleared"); App.back(); App.replaceTop(screen())
+                save(list().filter { it.better }); App.toast("Films cleared"); App.back(); App.replaceTop(screen())
             }
         })
         if (followed.isNotEmpty()) rows += Row("Stop following all shows", "►", opens = {

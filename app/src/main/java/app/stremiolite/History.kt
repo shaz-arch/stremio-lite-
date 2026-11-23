@@ -435,6 +435,9 @@ object History {
     /** Runs after every successful pull (e.g. to pick up settings changed on another device). */
     var onPulled: (() -> Unit)? = null
 
+    /** For screens showing resume points: fetches from the account unless that happened in the last 15 seconds. */
+    fun pullFresh(c: Context, changed: () -> Unit) = pull(c, force = System.currentTimeMillis() - lastPull > 15_000, changed = changed)
+
     fun pull(c: Context, force: Boolean = false, changed: (() -> Unit)? = null) {
         ensure(c)
         val key = Account.authKey(c) ?: return

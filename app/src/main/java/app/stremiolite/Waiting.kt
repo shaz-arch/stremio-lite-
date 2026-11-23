@@ -29,16 +29,30 @@ object Waiting {
     private const val JOB_ID = 4201
     private const val CHANNEL = "waiting"
 
-    /** [ready]: when a stream was first found (0 = still waiting). */
-    class Entry(val id: String, val type: String, val name: String, val year: String, val ready: Long) {
+    /**
+     * [ready]: when a stream was first found (0 = still waiting).
+     * [better]: waiting for a better version than [have] (a stream scoring [bar]); [found] is what turned up.
+     */
+    class Entry(
+        val id: String, val type: String, val name: String, val year: String, val ready: Long,
+        val better: Boolean = false, val bar: Double = 0.0, val have: String = "", val found: String = "",
+    ) {
         fun toJson(): JSONObject = JSONObject().put("id", id).put("type", type).put("name", name).put("year", year).put("ready", ready)
+            .apply { if (better) put("better", true).put("bar", bar).put("have", have).put("found", found) }
+
+        fun readyWith(now: Long, what: String) = Entry(id, type, name, year, now, better, bar, have, what)
     }
 
     private fun parse(raw: String?): List<Entry> {
         val name = raw?.let { runCatching { JSONObject(it).optString("name") }.getOrNull() } ?: return emptyList()
         val arr = runCatching { JSONArray(name) }.getOrNull() ?: return emptyList()
         return (0 until arr.length()).mapNotNull { i ->
-            arr.optJSONObject(i)?.let { Entry(it.optString("id"), it.optString("type"), it.optString("name"), it.optString("year"), it.optLong("ready")) }
+            arr.optJSONObject(i)?.let {
+                Entry(
+                    it.optString("id"), it.optString("type"), it.optString("name"), it.optString("year"), it.optLong("ready"),
+                    it.optBoolean("better"), it.optDouble("bar", 0.0), it.optString("have"), it.optString("found"),
+                )
+            }
         }.filter { it.id.isNotEmpty() }
     }
 
@@ -51,7 +65,23 @@ object Waiting {
 
     fun list(c: Context): List<Entry> = parse(History.rawRemote(c, ID))
 
-    fun has(c: Context, id: String) = list(c).any { it.id == id }
+    fun has(c: Context, id: String) = list(c).any { it.id == id && !it.better }
+
+    fun watchingForBetter(c: Context, id: String) = list(c).any { it.id == id && it.better }
+
+    /**
+     * "Tell me when a better version appears": notes what Play best would pick now (so the check
+     * knows what to beat), then adds the title to the list.
+     */
+    fun addBetter(app: MainActivity, id: String, type: String, name: String, year: String, done: (String) -> Unit) {
+        Net.async({ StreamParse.bestPlayable(Home.allAddons(), type, id) }) { r ->
+            val now = r.getOrNull()
+            val have = now?.first?.summary?.replace(Regex("\\s+"), " ")?.trim() ?: "nothing playable yet"
+            save(app, list(app).filter { it.id != id } + Entry(id, type, name, year, 0, true, now?.second ?: 0.0, have, ""))
+            askToNotify(app)
+            done(have)
+        }
+    }
 
     private fun save(c: Context, list: List<Entry>) = History.putRemote(c, record(History.rawRemote(c, ID), list))
 
@@ -103,9 +133,15 @@ object Waiting {
         if (pending.isEmpty()) return emptyList()
         val addons = runCatching { Stremio.parseAddons(Account.addonCache(c).readText()) }.getOrNull() ?: return emptyList()
         val now = System.currentTimeMillis()
-        val found = pending.filter { runCatching { StreamParse.availableNow(addons, it.type, it.id) }.getOrDefault(false) }.map { it.id }.toSet()
+        // Plain entries: any stream that plays. "Better version" entries: one clearly better than before.
+        val got = HashMap<String, String>()
+        pending.forEach { e ->
+            if (e.better) runCatching { StreamParse.betterThan(addons, e.type, e.id, e.bar) }.getOrNull()?.let { got[e.id] = it.first.summary.replace(Regex("\\s+"), " ").trim() }
+            else if (runCatching { StreamParse.availableNow(addons, e.type, e.id) }.getOrDefault(false)) got[e.id] = ""
+        }
+        val found = got.keys
         if (found.isEmpty()) return emptyList()
-        val updated = all.map { if (it.id in found) Entry(it.id, it.type, it.name, it.year, now) else it }
+        val updated = all.map { if (it.id in found) it.readyWith(now, got.getValue(it.id)) else it }
         Sync.push(key, listOf(record(raw, updated)))
         return updated.filter { it.id in found }
     }
@@ -152,8 +188,12 @@ object Waiting {
             c, 0, Intent(c, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             if (Build.VERSION.SDK_INT >= 23) PendingIntent.FLAG_IMMUTABLE else 0,
         )
-        val title = if (ready.size == 1) "Now available: ${ready[0].name}" else "${ready.size} films now available"
-        val text = ready.joinToString(", ") { it.name }
+        val title = when {
+            ready.size == 1 && ready[0].better -> "Better version: ${ready[0].name}"
+            ready.size == 1 -> "Now available: ${ready[0].name}"
+            else -> "${ready.size} films ready to watch"
+        }
+        val text = ready.joinToString(", ") { if (it.better) "${it.name} (${it.found})" else it.name }
         @Suppress("DEPRECATION")
         val b = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(c, CHANNEL) else Notification.Builder(c)
         val n = b.setSmallIcon(R.mipmap.ic_launcher).setContentTitle(title).setContentText(text)
@@ -189,9 +229,12 @@ object Waiting {
         val shows = followed.count { it.first !in finishedIds }
         if (l.isEmpty() && shows == 0) return "empty"
         val ready = l.count { it.ready > 0 }
+        val waiting = l.count { it.ready == 0L && !it.better }
+        val upgrades = l.count { it.ready == 0L && it.better }
         return listOfNotNull(
             if (ready > 0) "$ready ready" else null,
-            if (l.size - ready > 0) "${l.size - ready} waiting" else null,
+            if (waiting > 0) "$waiting waiting" else null,
+            if (upgrades > 0) "$upgrades for better" else null,
             if (shows > 0) "$shows following" else null,
         ).joinToString(" · ") + "  ►"
     }
@@ -203,7 +246,7 @@ object Waiting {
             val marks = History.marks(app)
             val all = list(app)
             // Films you've finished or started (they're in Continue watching) leave the list.
-            val keep = all.filter { marks[it.id] == null }
+            val keep = all.filter { it.better || marks[it.id] == null }
             if (keep.size != all.size) save(app, keep)
             val last = lastCheck(app)
             val rows = mutableListOf(
@@ -224,19 +267,27 @@ object Waiting {
             )
             rows += Row("──── Films ────")
             if (keep.isEmpty()) rows += Row("None. On a film, choose 'Tell me when a stream is available'.")
-            keep.sortedWith(compareByDescending<Entry> { it.ready }.thenBy { it.name }).forEach { e ->
+            keep.filter { !it.better }.sortedWith(compareByDescending<Entry> { it.ready }.thenBy { it.name }).forEach { e ->
                 val label = (if (e.ready > 0) "● " else "") + e.name + if (e.year.isNotEmpty()) " (${e.year})" else ""
                 rows += Row(label, if (e.ready > 0) "ready  ►" else "waiting  ►", opens = { entry(app, e) })
+            }
+            val upgrades = keep.filter { it.better }
+            if (upgrades.isNotEmpty()) {
+                rows += Row("──── Better versions ────")
+                upgrades.sortedWith(compareByDescending<Entry> { it.ready }.thenBy { it.name }).forEach { e ->
+                    val label = (if (e.ready > 0) "● " else "") + e.name + if (e.year.isNotEmpty()) " (${e.year})" else ""
+                    rows += Row(label, (if (e.ready > 0) "found: ${e.found}" else "have: ${e.have}") + "  ►", opens = { entry(app, e) })
+                }
             }
             // Shows you follow, by where you're up to (details from the shared hourly check).
             rows += showSections(app) { if (app.isTop(screen)) { screen.rows = build(); app.refresh(screen) } }
             rows += Row("Episodes out in the last week", "►", opens = { NewEpisodes.screen(app) })
-            val films = list(app)
+            val films = list(app).filter { !it.better }
             val shows = following(app)
             if (films.isNotEmpty() || shows.isNotEmpty()) rows += Row("────────────────────")
             if (films.isNotEmpty()) rows += Row("Clear the films", "►", opens = {
                 confirmScreen(app, "Clear the films?", "Stops waiting for all ${films.size} films, on every device.", "Yes, clear all ${films.size} films") {
-                    save(app, emptyList()); app.toast("Films cleared"); app.back()
+                    save(app, list(app).filter { it.better }); app.toast("Films cleared"); app.back()
                 }
             })
             if (shows.isNotEmpty()) rows += Row("Stop following all shows", "►", opens = {
@@ -303,7 +354,14 @@ object Waiting {
     private fun entry(app: MainActivity, e: Entry): Screen = Screen(
         e.name,
         listOfNotNull(
-            Row(if (e.ready > 0) "A stream is available now." else "No good stream yet. Still waiting."),
+            Row(
+                when {
+                    e.better && e.ready > 0 -> "Better version found: ${e.found}"
+                    e.better -> "Watching for something better than: ${e.have}"
+                    e.ready > 0 -> "A stream is available now."
+                    else -> "No good stream yet. Still waiting."
+                },
+            ),
             Row("────────────────────"),
             Details.screenFor(app, e.id, e.type, e.name, e.year)?.let { d -> Row("Open", "►", opens = { d }) },
             Row("Remove from the list", action = { remove(app, e.id); app.toast("Removed"); app.back() }),

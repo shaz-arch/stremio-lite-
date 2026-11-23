@@ -54,6 +54,8 @@ object Details {
         var full: Full? = null
 
         quick.onShow = {
+            // Picks up where you got to on another device (resume point, watched marks).
+            History.pullFresh(app) { full?.let { f -> if (app.isTop(quick)) { quick.rows = rows(app, f); app.refresh(quick) } } }
             val f = full
             if (f != null) {
                 // Back from the player or an episode: redraw so resume points and marks are current.
@@ -208,6 +210,22 @@ object Details {
                 app.refreshTop()
             })
             rows += wait
+            // Played it but the picture wasn't great? Keep an eye out for a better release.
+            lateinit var better: Row
+            fun betterLabel() = if (Waiting.watchingForBetter(app, f.id)) "Watching for a better version ✓ (stop)" else "Tell me when a better version appears"
+            better = Row(betterLabel(), action = {
+                if (Waiting.watchingForBetter(app, f.id)) {
+                    Waiting.remove(app, f.id); app.toast("Stopped watching for a better version")
+                    better.label = betterLabel(); app.refreshTop()
+                } else {
+                    app.toast("Checking what's there now…")
+                    Waiting.addBetter(app, f.id, f.type, f.name, f.year) { have ->
+                        app.toast("I'll tell you when something better than $have appears")
+                        better.label = betterLabel(); wait.label = waitLabel(); app.refreshTop()
+                    }
+                }
+            })
+            rows += better
         }
         if (History.item(app, f.id) != null) {
             lateinit var cw: Row

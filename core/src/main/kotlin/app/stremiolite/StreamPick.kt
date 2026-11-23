@@ -100,7 +100,10 @@ object StreamParse {
      * Asks the stream add-ons directly (blocking, for background checks) whether a stream that
      * Play best would choose exists right now.
      */
-    fun availableNow(addons: List<Addon>, type: String, id: String): Boolean {
+    fun availableNow(addons: List<Addon>, type: String, id: String): Boolean = bestPlayable(addons, type, id) != null
+
+    /** Every direct stream the add-ons offer for a title right now (blocking). */
+    fun fetchAll(addons: List<Addon>, type: String, id: String): List<Stream> {
         val found = mutableListOf<Stream>()
         for (a in addons.filter { it.supports("stream", type, id) }) {
             val url = a.base + "/stream/" + enc(type) + "/" + enc(id) + ".json"
@@ -113,16 +116,33 @@ object StreamParse {
                 }
             }
         }
-        // "Available" means it really plays: check what the best few links serve (broken releases
-        // give a tiny error clip), up to 3 of them.
-        val minutes = if (type == "movie") 110.0 else 45.0
-        val tried = mutableSetOf<Stream>()
-        repeat(3) {
-            val best = Best.pick(found.filter { it !in tried }, minutes) ?: return false
-            if (!StreamCheck.broken(best.url)) return true
-            tried += best
-        }
-        return false
+        return found
+    }
+
+    private fun minutesFor(type: String) = if (type == "movie") 110.0 else 45.0
+
+    /**
+     * The stream Play best would choose now, with its score, if it really plays: the best few links
+     * are checked (broken releases give a tiny error clip), up to 3 of them.
+     */
+    fun bestPlayable(addons: List<Addon>, type: String, id: String): Pair<Stream, Double>? =
+        playableAbove(fetchAll(addons, type, id), minutesFor(type), Double.NEGATIVE_INFINITY)
+
+    /**
+     * A stream clearly better than [bar] (a score from [bestPlayable]) that really plays, or null.
+     * "Clearly" means a step up Play best would notice, e.g. a better source, audio or size, not a tie.
+     */
+    fun betterThan(addons: List<Addon>, type: String, id: String, bar: Double): Pair<Stream, Double>? =
+        playableAbove(fetchAll(addons, type, id), minutesFor(type), bar + BETTER_BY)
+
+    const val BETTER_BY = 15.0
+
+    private fun playableAbove(found: List<Stream>, minutes: Double, above: Double): Pair<Stream, Double>? {
+        val ranked = found.mapNotNull { s -> Best.score(s, minutes)?.let { s to it } }
+            .filter { it.second > above }
+            .sortedWith(compareBy<Pair<Stream, Double>>({ -it.second }, { it.first.order }))
+        for (c in ranked.take(3)) if (!StreamCheck.broken(c.first.url)) return c
+        return null
     }
 
 }
