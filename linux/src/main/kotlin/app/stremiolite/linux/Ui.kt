@@ -22,7 +22,7 @@ class Row(
 )
 
 /** One text screen: a title and a list of rows. */
-class Screen(val title: String, var rows: List<Row>, val tag: String = "") {
+class Screen(val title: String, var rows: List<Row>, var tag: String = "") {
     var pos = 0
     var top = 0
     /** Set to move the cursor on the next redraw. */

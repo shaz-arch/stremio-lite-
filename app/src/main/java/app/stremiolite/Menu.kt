@@ -23,7 +23,7 @@ class Row(
 class Screen(
     val title: String,
     var rows: List<Row>,
-    val tag: String = "",
+    var tag: String = "",
 ) {
     /** Where the cursor was, so Back returns to the same line. */
     var position: Int = 0

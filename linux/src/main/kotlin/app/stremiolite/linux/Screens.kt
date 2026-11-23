@@ -175,6 +175,7 @@ object Home {
                 else -> ""
             }
             if (status.label.isNotEmpty()) rows += status
+            s.tag = Profiles.current()?.name ?: "Linux"
             val cw = Lib.continueWatching()
             val lib = Lib.library()
             val waiting = Waiting.list()
@@ -208,14 +209,14 @@ object Home {
             rows += Row("Import a setup from another account", "►", opens = { Share.importScreen() })
             rows += Row("Device check", opens = { DeviceCheck.screen() })
             rows += Row("About", opens = { about() })
-            rows += Row(info("Profile", listOfNotNull(Profiles.current()?.name, Account.email.ifEmpty { null }).joinToString("  ·  ")))
+            rows += Row(info("Profile", Profiles.current()?.name ?: "…"))
             rows += Row("Switch profile", "►", opens = { Profiles.chooser() })
             rows += Row("Sign out of this profile", opens = { signOut() })
             s.rows = rows
             App.refresh()
         }
         rebuild = { build() }
-        s = Screen("Stremonino", listOf(Row("Loading…")), tag = "Linux")
+        s = Screen("Stremonino", listOf(Row("Loading…")), tag = Profiles.current()?.name ?: "Linux")
         s.onShow = {
             if (addons == null) {
                 runCatching { Stremio.parseAddons(Store.file("addons.json").readText()) }.onSuccess { addons = it }
