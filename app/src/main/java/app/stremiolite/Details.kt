@@ -306,6 +306,10 @@ object Details {
         if (f.genres.isNotEmpty()) rows += Row(info("Genres", f.genres.joinToString(", ")))
         if (f.director.isNotEmpty()) rows += Row(info("Director", f.director.take(3).joinToString(", ")))
         if (f.cast.isNotEmpty()) rows += Row(info("Cast", f.cast.take(4).joinToString(", ")))
+        DetailExtras.facts(f, DetailExtras.today()).forEach { (k, v) -> rows += Row(info(k, v)) }
+        DetailExtras.history(History.infos(app).firstOrNull { it.id == f.id }).forEach { (k, v) -> rows += Row(info(k, v)) }
+        if (f.imdbUrl.isNotBlank()) rows += LinkOut.row(app, "IMDb page", "IMDb: ${f.name}", f.imdbUrl)
+        if (f.trailerUrl.isNotBlank()) rows += LinkOut.row(app, "Trailer", "Trailer: ${f.name}", f.trailerUrl)
         if (f.description.isNotBlank()) {
             rows += Row("────────────────────")
             Catalogs.wrap(f.description, app.columns()).forEach { rows += Row(it) }

@@ -202,7 +202,7 @@ object Streams {
                 }
             }
             sorted.forEach { s ->
-                val detail = (if (s in broken) "✗ no video · " else "") + (if (s.cached == false) "not cached · " else "") + s.addon
+                val detail = (if (s in broken) "✗ no video · " else "") + (if (s.cached == false) "not cached · " else "") + (if (s.langs.isNotEmpty()) s.langs + " · " else "") + s.addon
                 rows += Row(s.summary, detail, action = {
                     app.toast("Checking the stream…")
                     Net.async({ StreamCheck.broken(s.url) }) { r ->

@@ -16,9 +16,16 @@ class Stream(
     val order: Int,
     /** Everything the add-on said about it, upper-cased, for scoring. */
     val text: String,
+    /** e.g. "Atmos 5.1", "2.0" (blank if the add-on doesn't say). */
+    val audio: String = "",
+    /** e.g. "English, Hindi" or "Multi" (blank if not said). */
+    val langs: String = "",
+    /** Seeders for a not-yet-cached torrent (0 if not said). */
+    val seeders: Int = 0,
 ) {
     val summary: String
-        get() = listOf(quality.padEnd(5), tags, size, provider).filter { it.isNotBlank() }.joinToString("  ")
+        get() = listOf(quality.padEnd(5), tags, audio, size, provider, if (seeders > 0 && cached != true) "👤$seeders" else "")
+            .filter { it.isNotBlank() }.joinToString("  ")
 
     /** The release group (e.g. "NTB" in "Show.S01E02.1080p.WEB-DL-NTB.mkv"), if one can be seen. */
     val group: String by lazy {
@@ -60,7 +67,11 @@ object StreamParse {
         val tags = buildList {
             if (Regex("""\bDV\b|DOLBY ?VISION|\bDOVI\b""").containsMatchIn(up)) add("DV")
             if ("HDR" in up) add("HDR")
-            if ("HEVC" in up || "X265" in up || "H265" in up || "H.265" in up) add("HEVC")
+            when {
+                "HEVC" in up || "X265" in up || "H265" in up || "H.265" in up -> add("HEVC")
+                Regex("""\bAV1\b""").containsMatchIn(up) -> add("AV1")
+                "X264" in up || "H264" in up || "H.264" in up || Regex("""\bAVC\b""").containsMatchIn(up) -> add("H.264")
+            }
             when {
                 "REMUX" in up -> add("REMUX")
                 "BLURAY" in up || "BLU-RAY" in up || "BDRIP" in up || "BRRIP" in up -> add("BluRay")
@@ -94,8 +105,46 @@ object StreamParse {
             bracket?.groupValues?.get(2) == " download" || "⏳" in name || "uncached" in lowerName -> false
             else -> null
         }
-        return Stream(url, addon, quality, tags, size, sizeMb, provider, cached, rank, order, up)
+        return Stream(url, addon, quality, tags, size, sizeMb, provider, cached, rank, order, up, audio(up), langs(text, up), seeders(text))
     }
+    private fun audio(up: String): String {
+        val kind = when {
+            "ATMOS" in up -> "Atmos"
+            "TRUEHD" in up -> "TrueHD"
+            Regex("""DTS-?HD|DTS-?X""").containsMatchIn(up) -> "DTS-HD"
+            Regex("""\bDTS\b""").containsMatchIn(up) -> "DTS"
+            Regex("""DD\+|DDP|E-?AC-?3""").containsMatchIn(up) -> "DD+"
+            Regex("""\bAAC\b""").containsMatchIn(up) -> "AAC"
+            else -> ""
+        }
+        val ch = Regex("""(?<![\d.])([2578])[ .]([01])(?![\d])""").find(up)?.let { "${it.groupValues[1]}.${it.groupValues[2]}" } ?: ""
+        return listOf(kind, ch).filter { it.isNotEmpty() }.joinToString(" ")
+    }
+
+    private val flagLangs = mapOf(
+        "🇬🇧" to "English", "🇺🇸" to "English", "🇮🇳" to "Hindi", "🇪🇸" to "Spanish", "🇲🇽" to "Spanish", "🇫🇷" to "French",
+        "🇩🇪" to "German", "🇮🇹" to "Italian", "🇵🇹" to "Portuguese", "🇧🇷" to "Portuguese", "🇷🇺" to "Russian", "🇯🇵" to "Japanese",
+        "🇰🇷" to "Korean", "🇨🇳" to "Chinese", "🇵🇰" to "Urdu", "🇸🇦" to "Arabic", "🇹🇷" to "Turkish", "🇳🇱" to "Dutch", "🇵🇱" to "Polish",
+    )
+    private val wordLangs = listOf("ENGLISH", "HINDI", "URDU", "SPANISH", "FRENCH", "GERMAN", "ITALIAN", "PORTUGUESE", "RUSSIAN",
+        "JAPANESE", "KOREAN", "CHINESE", "ARABIC", "TURKISH", "TAMIL", "TELUGU", "DUTCH", "POLISH")
+
+    private fun langs(text: String, up: String): String {
+        val found = LinkedHashSet<String>()
+        flagLangs.forEach { (flag, name) -> if (flag in text) found += name }
+        wordLangs.forEach { w -> if (Regex("""\b$w\b""").containsMatchIn(up)) found += w.lowercase().replaceFirstChar { it.uppercase() } }
+        return when {
+            found.size > 3 -> "Multi (${found.size})"
+            found.isNotEmpty() -> found.joinToString(", ")
+            Regex("""\bMULTI\b|DUAL[ .-]?AUDIO""").containsMatchIn(up) -> "Multi"
+            else -> ""
+        }
+    }
+
+    private fun seeders(text: String): Int =
+        (Regex("""👤\s*(\d+)""").find(text) ?: Regex("""(?i)seed(?:er)?s?\W{0,3}(\d+)""").find(text))
+            ?.groupValues?.get(1)?.toIntOrNull() ?: 0
+
     /**
      * Asks the stream add-ons directly (blocking, for background checks) whether a stream that
      * Play best would choose exists right now.

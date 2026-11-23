@@ -434,18 +434,12 @@ object Home {
     )
 
     private fun openInBrowser(app: MainActivity, url: String) {
-        runCatching { app.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
-            .onSuccess { app.toast("For AIOMetadata: Load Configuration, your password, change things, Save. Then Reload here.") }
-            .onFailure { copy(app, url, "Settings page link") }
+        LinkOut.open(app, url)
+        app.toast("For AIOMetadata: Load Configuration, your password, change things, Save. Then Reload here.")
     }
 
-    /** Copies to the clipboard (paste it into a browser or a note). The install link is private: it works on its own. */
-    private fun copy(app: MainActivity, text: String, what: String) {
-        val cm = app.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
-        if (cm == null) { app.toast("Couldn't reach the clipboard"); return }
-        cm.setPrimaryClip(android.content.ClipData.newPlainText(what, text))
-        app.toast("$what copied. Keep it private: it works on its own.")
-    }
+    private fun copy(app: MainActivity, text: String, what: String) =
+        LinkOut.copy(app, text, what, " Keep it private: it works on its own.")
 
     /** The add-on's install link as a QR code: photograph it, or scan it to reinstall elsewhere. */
     private fun linkQr(a: Addon): Screen {

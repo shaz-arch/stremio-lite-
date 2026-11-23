@@ -32,7 +32,23 @@ class Full(
     val source: String,
     /** e.g. "Continuing", "Ended" (when the add-on says). */
     val status: String = "",
-)
+    /** Extras shown on the details page when the add-on sends them (all may be blank). */
+    val released: String = "",
+    val country: String = "",
+    val language: String = "",
+    val writers: List<String> = emptyList(),
+    val awards: String = "",
+    val certification: String = "",
+    val imdbUrl: String = "",
+    val trailerUrl: String = "",
+) {
+    /** The next episode still to air, if the add-on lists one (dates are yyyy-mm-dd). */
+    fun nextToAir(today: String): Video? =
+        videos.filter { it.season > 0 && it.released.length == 10 && it.released > today }.minByOrNull { it.released }
+
+    /** "Returning", "Ended" or "Cancelled" in plain words, or blank. */
+    val statusText: String get() = MetaParse.statusText(status)
+}
 
 
 /** Reading catalogue rows and title details, plus small text helpers both apps share. */
@@ -79,6 +95,75 @@ object MetaParse {
         return lines
     }
 
+    fun statusText(status: String): String {
+        val s = status.trim().lowercase()
+        return when {
+            s.isEmpty() || s == "null" -> ""
+            "cancel" in s -> "Cancelled"
+            "end" in s -> "Ended"
+            "return" in s || "continu" in s || "production" in s || "airing" in s -> "Returning"
+            else -> status.trim().replaceFirstChar { it.uppercase() }
+        }
+    }
+
+    /** "2025-02-14T00:00:00.000Z" → "14 Feb 2025". */
+    fun niceDate(iso: String): String {
+        val d = iso.take(10)
+        if (!Regex("""\d{4}-\d{2}-\d{2}""").matches(d)) return iso.trim()
+        val months = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+        val m = d.substring(5, 7).toInt()
+        if (m !in 1..12) return d
+        return "${d.substring(8, 10).toInt()} ${months[m - 1]} ${d.substring(0, 4)}"
+    }
+
+    /** Names from Stremio's "links" list for one category (e.g. "Writers"), a fallback some add-ons use. */
+    private fun linkNames(o: JSONObject, vararg categories: String): List<String> {
+        val arr = o.optJSONArray("links") ?: return emptyList()
+        return (0 until arr.length()).mapNotNull { i ->
+            val l = arr.optJSONObject(i) ?: return@mapNotNull null
+            l.optString("name").takeIf { n -> n.isNotBlank() && categories.any { it.equals(l.optString("category"), true) } }
+        }.distinct()
+    }
+
+    private fun text(o: JSONObject?, vararg keys: String): String {
+        if (o == null) return ""
+        for (k in keys) {
+            val v = o.opt(k) ?: continue
+            val t = when (v) {
+                is JSONArray -> (0 until v.length()).mapNotNull { v.optString(it).takeIf { s -> s.isNotBlank() && s != "null" } }.joinToString(", ")
+                is JSONObject -> ""
+                else -> v.toString()
+            }.trim()
+            if (t.isNotEmpty() && t != "null" && !t.equals("N/A", true)) return t
+        }
+        return ""
+    }
+
+    private fun imdbUrl(m: JSONObject): String {
+        val links = m.optJSONArray("links")
+        if (links != null) for (i in 0 until links.length()) {
+            val l = links.optJSONObject(i) ?: continue
+            val u = l.optString("url")
+            if (l.optString("category").equals("imdb", true) && u.startsWith("http")) return u
+        }
+        val id = listOf(m.optString("imdb_id"), m.optString("imdbId"), m.optString("id")).firstOrNull { it.matches(Regex("tt\\d+")) }
+        return id?.let { "https://www.imdb.com/title/$it/" } ?: ""
+    }
+
+    private fun trailerUrl(m: JSONObject): String {
+        m.optJSONArray("trailerStreams")?.let { a ->
+            for (i in 0 until a.length()) a.optJSONObject(i)?.optString("ytId")?.takeIf { it.isNotBlank() }?.let { return "https://www.youtube.com/watch?v=$it" }
+        }
+        m.optJSONArray("trailers")?.let { a ->
+            for (i in 0 until a.length()) {
+                val t = a.optJSONObject(i) ?: continue
+                val src = t.optString("source")
+                if (src.isNotBlank() && !t.optString("type").equals("clip", true)) return if (src.startsWith("http")) src else "https://www.youtube.com/watch?v=$src"
+            }
+        }
+        return ""
+    }
+
     private fun strings(o: JSONObject, vararg keys: String): List<String> {
         for (k in keys) {
             val arr = o.optJSONArray(k) ?: continue
@@ -122,14 +207,26 @@ object MetaParse {
             rating = cleanRating(m.optString("imdbRating")),
             runtime = m.optString("runtime"),
             genres = strings(m, "genres", "genre"),
-            director = strings(m, "director", "directors"),
-            cast = strings(m, "cast"),
+            director = strings(m, "director", "directors").ifEmpty { linkNames(m, "Directors") },
+            cast = strings(m, "cast").ifEmpty { linkNames(m, "Cast") },
             description = m.optString("description"),
             videos = videos,
             source = source,
             status = m.optString("status"),
+            released = m.optString("released").takeUnless { it == "null" }?.let { if (it.length >= 10) niceDate(it) else "" } ?: "",
+            country = text(m, "country", "countries"),
+            language = text(m, "language", "original_language", "languages").let { if (it.length == 2) langName(it) else it },
+            writers = strings(m, "writer", "writers").ifEmpty { linkNames(m, "Writers") },
+            awards = text(m, "awards"),
+            certification = text(m, "certification", "mpaa", "contentRating", "rated", "ageRating")
+                .ifEmpty { text(m.optJSONObject("app_extras"), "certification") },
+            imdbUrl = imdbUrl(m),
+            trailerUrl = trailerUrl(m),
         )
     }
+
+    /** "ko" → "Korean" for the common two-letter codes. */
+    fun langName(code: String): String = java.util.Locale(code).getDisplayLanguage(java.util.Locale.ENGLISH).ifBlank { code }
 
 
     /** Title details from the first add-on that can describe it (blocking). */

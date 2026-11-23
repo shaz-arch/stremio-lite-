@@ -440,14 +440,16 @@ object Catalogs {
         lateinit var s: Screen
         lateinit var loadMore: () -> Unit
         val placeKey = "cat:${a.transportUrl}|${c.type}|${c.id}"
-        var pending: Int? = App.place(placeKey)?.takeIf { it in 1..400 }
+        var pending: Int? = App.place(placeKey)?.takeIf { it in 2..400 }
+        // Row 0 is "About this row"; titles start at row 1.
+        val about = Row("About this row", "►", opens = { aboutRow(a, c) })
 
         // "Watched films in lists: Hide them" leaves out films marked watched.
         fun visible(): List<Meta> = if (Prefs.hideWatched) items.filter { !(it.type == "movie" && Lib.filmWatched(it.id)) } else items
 
         fun rebuild() {
             val shown = visible()
-            val rows = shown.mapTo(ArrayList(shown.size + 2)) { row(a, it) }
+            val rows = shown.mapTo(ArrayList<Row>(shown.size + 3).apply { add(about) }) { row(a, it) }
             when {
                 error != null -> { rows += Row("Couldn't load: $error"); rows += Row("Try again", action = { error = null; loadMore() }) }
                 loading -> rows += Row(if (items.isEmpty()) "Loading…" else "Loading more…")
@@ -458,8 +460,8 @@ object Catalogs {
             if (shown.size < LOAD_AHEAD && !loading && !ended && error == null && items.isNotEmpty()) App.later(0) { loadMore() }
             pending?.let { want ->
                 when {
-                    want < shown.size -> { s.moveTo = want; pending = null }
-                    ended || error != null -> { s.moveTo = (shown.size - 1).coerceAtLeast(0); pending = null }
+                    want <= shown.size -> { s.moveTo = want; pending = null }
+                    ended || error != null -> { s.moveTo = shown.size.coerceAtLeast(1); pending = null }
                     !loading -> App.later(0) { loadMore() }
                 }
             }
@@ -484,11 +486,27 @@ object Catalogs {
             }
         }
 
-        s = Screen(title, listOf(Row("Loading…")), tag = MetaParse.typeLabel(c.type))
+        s = Screen(title, listOf(about, Row("Loading…")), tag = MetaParse.typeLabel(c.type))
         s.key = placeKey
+        s.pos = 1
         s.onShow = { if (items.isEmpty() && !loading && error == null && !ended) loadMore() else if (items.isNotEmpty()) rebuild() }
-        s.onSelect = { pos -> if (pos >= visible().size - LOAD_AHEAD && error == null) loadMore() }
+        s.onSelect = { pos -> if (pos >= visible().size + 1 - LOAD_AHEAD && error == null) loadMore() }
         return s
+    }
+
+    /** Which add-on a row comes from and a guess at the list behind it. */
+    private fun aboutRow(a: Addon, c: Addon.Catalog): Screen {
+        val r = RowSource.about(a.name, c)
+        return Screen("About: ${c.name}", listOf(
+            Row(info("From", r.addon)),
+            Row(info("Row ID", r.id)),
+            Row(info("Source", r.source)),
+            Row(info("Type", r.type)),
+            Row(""),
+            Row("The source is a guess from the row's ID."),
+            Row("To change what's in it, edit the row in"),
+            Row("${r.addon}'s settings (Settings › Your add-ons)."),
+        ))
     }
 }
 
@@ -653,6 +671,10 @@ object Details {
         if (f.genres.isNotEmpty()) rows += Row(info("Genres", f.genres.joinToString(", ")))
         if (f.director.isNotEmpty()) rows += Row(info("Director", f.director.joinToString(", ")))
         if (f.cast.isNotEmpty()) rows += Row(info("Cast", f.cast.take(5).joinToString(", ")))
+        DetailExtras.facts(f, DetailExtras.today()).forEach { (k, v) -> rows += Row(info(k, v)) }
+        DetailExtras.history(Lib.info(f.id)).forEach { (k, v) -> rows += Row(info(k, v)) }
+        if (f.imdbUrl.isNotBlank()) rows += Row("IMDb page", "opens browser  ►", action = { WebLink.open(f.imdbUrl) })
+        if (f.trailerUrl.isNotBlank()) rows += Row("Trailer", "opens browser  ►", action = { WebLink.open(f.trailerUrl) })
         if (f.description.isNotBlank()) {
             rows += Row("────────────────────")
             MetaParse.wrap(f.description, App.columns()).forEach { rows += Row(it) }

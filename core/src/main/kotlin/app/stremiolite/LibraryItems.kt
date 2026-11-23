@@ -21,6 +21,9 @@ object LibraryItems {
         val timesWatched: Int,
         val flaggedWatched: Int,
         val watchedField: String,
+        /** When it was last played and first added (ms; 0 if unknown). */
+        val lastWatched: Long = 0,
+        val added: Long = 0,
     ) {
         val inLibrary get() = !removed && !temp && type != "other"
         val continuing get() = (!removed || temp) && offset > 0 && type != "other"
@@ -44,6 +47,8 @@ object LibraryItems {
             timesWatched = st.optInt("timesWatched"),
             flaggedWatched = st.optInt("flaggedWatched"),
             watchedField = st.optString("watched"),
+            lastWatched = Sync.parseTime(st.optString("lastWatched")),
+            added = Sync.parseTime(o.optString("_ctime")),
         )
     }
 

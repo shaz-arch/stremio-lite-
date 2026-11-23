@@ -54,7 +54,9 @@ object Catalogs {
 
         val placeKey = "cat:${a.transportUrl}|${c.type}|${c.id}"
         // Return to the same line as last time (loading further pages if needed, up to a limit).
-        var pending: Int? = app.savedPlace(placeKey)?.takeIf { it in 1..400 }
+        var pending: Int? = app.savedPlace(placeKey)?.takeIf { it in 2..400 }
+        // Row 0 is "About this row"; titles start at row 1.
+        val about = Row("About this row", "►", opens = { aboutRow(app, a, c) })
         var shown = 0
 
         fun rebuild() {
@@ -62,7 +64,7 @@ object Catalogs {
             val hide = Settings.hideWatched(app)
             val visible = if (hide) items.filter { marks[it.id] != "✓" } else items
             shown = visible.size
-            val rows = visible.mapTo(ArrayList<Row>(visible.size + 2)) { m ->
+            val rows = visible.mapTo(ArrayList<Row>(visible.size + 3).apply { add(about) }) { m ->
                 val mark = marks[m.id]
                 Row(if (mark != null) "$mark ${m.name}" else m.name, detail(m), opens = { Details.screen(app, a, m) }, play = {
                     // A film's stream request needs nothing from its details: start it right away.
@@ -81,8 +83,8 @@ object Catalogs {
             screen.rows = rows
             pending?.let { want ->
                 when {
-                    want < shown -> { screen.moveTo = want; pending = null }
-                    ended || error != null -> { screen.moveTo = (shown - 1).coerceAtLeast(0); pending = null }
+                    want <= shown -> { screen.moveTo = want; pending = null }
+                    ended || error != null -> { screen.moveTo = shown.coerceAtLeast(1); pending = null }
                 }
             }
             app.refresh(screen)
@@ -111,14 +113,33 @@ object Catalogs {
             }
         }
 
-        screen = Screen(title, listOf(Row("Loading…")), tag = typeLabel(c.type))
+        screen = Screen(title, listOf(about, Row("Loading…")), tag = typeLabel(c.type))
         screen.key = placeKey
+        screen.position = 1
         screen.onShow = {
             if (items.isEmpty() && !loading && error == null && !ended) loadMore()
             else if (items.isNotEmpty()) rebuild() // refresh ✓ marks after watching something
         }
-        screen.onSelect = { pos -> if (pos >= shown - LOAD_AHEAD && error == null) loadMore() }
+        screen.onSelect = { pos -> if (pos >= shown + 1 - LOAD_AHEAD && error == null) loadMore() }
         return screen
+    }
+
+    /** Which add-on a row comes from and a guess at the list behind it. */
+    private fun aboutRow(app: MainActivity, a: Addon, c: Addon.Catalog): Screen {
+        val r = RowSource.about(a.name, c)
+        return Screen(
+            "About: ${c.name}",
+            listOf(
+                Row(info("From", r.addon)),
+                Row(info("Row ID", r.id)),
+                Row(info("Source", r.source)),
+                Row(info("Type", r.type)),
+                Row(""),
+                Row("The source is a guess from the row's ID."),
+                Row("To change what's in it, edit the row in"),
+                Row("${r.addon}'s settings (Settings › Your add-ons)."),
+            ),
+        )
     }
 
     /** What the catalogue already tells us about a title. Step 4 adds full details and episodes. */

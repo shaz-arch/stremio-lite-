@@ -17,6 +17,14 @@ import java.util.zip.Inflater
 // Clipboard (kitty and most desktops: wl-copy on Wayland, xclip or xsel on X11)
 // ============================================================================================
 
+/** Opens a web page in the desktop's browser, or copies the link if none opens. */
+object WebLink {
+    fun open(url: String) {
+        val ok = runCatching { ProcessBuilder("xdg-open", url).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start(); true }.getOrDefault(false)
+        if (ok) App.toast("Opening in your browser…") else Clipboard.copyOrShow(url, "Link")
+    }
+}
+
 object Clipboard {
     fun copy(text: String): Boolean {
         val tools = listOf(listOf("wl-copy"), listOf("xclip", "-selection", "clipboard"), listOf("xsel", "--clipboard", "--input"))
