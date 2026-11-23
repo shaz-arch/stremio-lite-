@@ -70,11 +70,20 @@ object Following {
         val out = show.videos.filter { it.season > 0 && it.released.length == 10 && it.released <= Releases.day() }
         val inProgress = info != null && info.offset > 0
         val seen = out.count { it.id in watched }
+        // An ended show with nothing more coming has nothing to wait for (it stays in Continue watching).
+        if (show.status.equals("Ended", true) && Releases.upcoming(show, 3650).isEmpty()) return Section.FINISHED
         return when {
             seen == 0 && !inProgress -> Section.NOT_STARTED
-            out.isNotEmpty() && out.all { it.id in watched } ->
-                if (show.status.equals("Ended", true) && Releases.upcoming(show, 3650).isEmpty()) Section.FINISHED else Section.CAUGHT_UP
+            out.isNotEmpty() && out.all { it.id in watched } -> Section.CAUGHT_UP
             else -> Section.WATCHING
         }
+    }
+
+    /** "next S01E02 · 99 more" for a show you're part-way through. */
+    fun progressText(show: Full, watched: Set<String>): String {
+        val left = show.videos.filter { it.season > 0 && it.released.length == 10 && it.released <= Releases.day() && it.id !in watched }
+            .sortedWith(compareBy({ it.season }, { it.episode }))
+        val next = left.firstOrNull() ?: return "up to date"
+        return "next ${MetaParse.epLabel(next)}" + if (left.size > 1) " · ${left.size - 1} more" else ""
     }
 }

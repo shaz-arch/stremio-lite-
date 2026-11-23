@@ -457,6 +457,10 @@ class MainActivity : Activity() {
                 holder.label.layoutParams = LinearLayout.LayoutParams(
                     if (stacked) ViewGroup.LayoutParams.MATCH_PARENT else 0, ViewGroup.LayoutParams.WRAP_CONTENT, if (stacked) 0f else 1f,
                 )
+                // Portrait: long lines wrap onto a second line instead of being cut short.
+                holder.label.setSingleLine(!stacked)
+                holder.label.maxLines = if (stacked) 2 else 1
+                holder.label.ellipsize = android.text.TextUtils.TruncateAt.END
                 holder.detail.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                     marginStart = if (stacked) 0 else (16 * context.resources.displayMetrics.density).toInt()
                 }
@@ -479,7 +483,7 @@ class MainActivity : Activity() {
             }
             if (stacked) {
                 // A lone arrow needs no line of its own on a touch screen.
-                val d = detail.removeSuffix("►").trim()
+                val d = detail.removeSuffix("►").trim().takeIf { t -> t.any { it.isLetterOrDigit() } } ?: ""
                 holder.detail.text = d
                 holder.detail.visibility = if (d.isEmpty()) View.GONE else View.VISIBLE
             } else {

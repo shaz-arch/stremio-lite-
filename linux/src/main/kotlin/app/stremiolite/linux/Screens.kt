@@ -769,7 +769,9 @@ object Waiting {
 
     fun screen(): Screen {
         val rows = mutableListOf(Row("──── Films ────"))
-        val films = list().sortedWith(compareByDescending<Entry> { it.ready }.thenBy { it.name })
+        // Films you've started (or finished) leave the list.
+        val films = list().filter { Lib.info(it.id)?.let { i -> i.continuing || i.filmWatched } != true }
+            .sortedWith(compareByDescending<Entry> { it.ready }.thenBy { it.name })
         if (films.isEmpty()) rows += Row("None. On a film, choose 'Tell me when a stream is available'.")
         films.forEach { e ->
             rows += Row((if (e.ready > 0) "● " else "") + e.name + if (e.year.isNotEmpty()) " (${e.year})" else "",
@@ -798,7 +800,7 @@ object Waiting {
             }
             section("Caught up: waiting for more", by[app.stremiolite.Following.Section.CAUGHT_UP]) { next(it) }
             section("Watching", by[app.stremiolite.Following.Section.WATCHING]) { sh ->
-                "${R.recent(sh, "0000-00-00").count { it.id !in (watchedOf[sh.id] ?: emptySet()) }} to watch"
+                app.stremiolite.Following.progressText(sh, watchedOf[sh.id] ?: emptySet())
             }
             section("Not started", by[app.stremiolite.Following.Section.NOT_STARTED]) { next(it) }
         }
@@ -860,7 +862,8 @@ object NewEpisodes {
     fun weekCount(): Int? = if (fullsAt == 0L) null else fulls.sumOf { app.stremiolite.Releases.upcoming(it, 7).size }
 
     private fun epRow(f: Found, detail: String) = Row(
-        "${f.show.name}  ${MetaParse.epLabel(f.ep)}  ${f.ep.title}".trim(), detail,
+        f.show.name,
+        listOf("${MetaParse.epLabel(f.ep)}  ${f.ep.title}".trim(), detail).filter { it.isNotBlank() }.joinToString(" · "),
         opens = { Details.screenFor(f.show.id, "series", f.show.name) },
         play = {
             val w = Details.watchFor(f.show, f.ep)

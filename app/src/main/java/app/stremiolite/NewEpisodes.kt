@@ -89,7 +89,8 @@ object NewEpisodes {
     private val iso = SimpleDateFormat("yyyy-MM-dd", Locale.UK)
 
     private fun epRow(app: MainActivity, f: Found, detail: String) = Row(
-        "${f.show.name}  ${Details.epLabel(f.ep)}  ${f.ep.title}".trim(), detail,
+        f.show.name,
+        listOf("${Details.epLabel(f.ep)}  ${f.ep.title}".trim(), detail).filter { it.isNotBlank() }.joinToString(" · "),
         opens = { Details.episodeScreen(app, f.show, f.ep) },
         play = { app.push(Details.playEpisode(app, f.show, f.ep)) },
     )

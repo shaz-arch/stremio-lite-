@@ -175,7 +175,10 @@ object Waiting {
     /** The Home line's right-hand text. */
     fun summary(c: Context): String {
         val l = list(c)
-        val shows = following(c).size
+        val followed = following(c)
+        val ids = followed.map { it.first }.toSet()
+        val finishedIds = NewEpisodes.shows().filter { it.id in ids && Following.section(it, emptySet(), null) == Following.Section.FINISHED }.map { it.id }.toSet()
+        val shows = followed.count { it.first !in finishedIds }
         if (l.isEmpty() && shows == 0) return "empty"
         val ready = l.count { it.ready > 0 }
         return listOfNotNull(
@@ -191,7 +194,8 @@ object Waiting {
             // Films you've since watched drop off the list.
             val marks = History.marks(app)
             val all = list(app)
-            val keep = all.filter { marks[it.id] != "✓" }
+            // Films you've finished or started (they're in Continue watching) leave the list.
+            val keep = all.filter { marks[it.id] == null }
             if (keep.size != all.size) save(app, keep)
             val last = lastCheck(app)
             val rows = mutableListOf(
@@ -262,8 +266,7 @@ object Waiting {
         fun next(sh: Full) = Releases.upcoming(sh, 3650).firstOrNull()?.let { "${Details.epLabel(it)} ${Releases.dayName(it.released)}" } ?: "no date yet"
         section("Caught up: waiting for more", bySection[Following.Section.CAUGHT_UP]) { next(it) }
         section("Watching", bySection[Following.Section.WATCHING]) { sh ->
-            val left = Releases.recent(sh, "0000-00-00").count { it.id !in (watchedOf[sh.id] ?: emptySet()) }
-            "$left to watch"
+            Following.progressText(sh, watchedOf[sh.id] ?: emptySet())
         }
         section("Not started", bySection[Following.Section.NOT_STARTED]) { next(it) }
         return rows
