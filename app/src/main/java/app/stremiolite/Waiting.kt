@@ -282,7 +282,7 @@ object Waiting {
             // Shows you follow, by where you're up to (details from the shared hourly check).
             rows += showSections(app) { if (app.isTop(screen)) { screen.rows = build(); app.refresh(screen) } }
             rows += Row("Episodes out in the last week", "►", opens = { NewEpisodes.screen(app) })
-            val films = list(app).filter { !it.better }
+            val films = keep.filter { !it.better }
             val shows = following(app)
             if (films.isNotEmpty() || shows.isNotEmpty()) rows += Row("────────────────────")
             if (films.isNotEmpty()) rows += Row("Clear the films", "►", opens = {

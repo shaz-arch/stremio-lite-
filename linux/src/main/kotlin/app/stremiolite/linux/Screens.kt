@@ -996,7 +996,7 @@ object Waiting {
             }
         }
         rows += Row("Episodes out in the last week", "►", opens = { NewEpisodes.screen() })
-        val filmList = list().filter { !it.better }
+        val filmList = films
         if (filmList.isNotEmpty() || followed.isNotEmpty()) rows += Row("────────────────────")
         if (filmList.isNotEmpty()) rows += Row("Clear the films", "►", opens = {
             confirmScreen("Clear the films?", "Stops waiting for all ${filmList.size} films, on every device.", "Yes, clear all ${filmList.size} films") {
