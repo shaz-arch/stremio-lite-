@@ -139,6 +139,7 @@ object SignIn {
     }
 
     private fun signedIn(key: String, email: String) {
+        Profiles.beforeSave(email)
         Account.save(key, email)
         Lib.reset()
         Home.forget()
@@ -199,11 +200,17 @@ object Home {
                 }
                 rows += Row("────────────────────")
             }
+            // Same order and wording as the phone and stick.
             rows += Row("Settings", opens = { Settings.screen() })
+            rows += Row("Your add-ons", list?.let { "${it.size}  ►" } ?: "►", opens = { Addons.screen() })
             rows += Row("Reload my rows and add-ons", action = { load(force = true) })
-            rows += Row(info("Signed in as", Account.email.ifEmpty { "?" }))
+            rows += Row("Share my setup with another account", "►", opens = { Share.screen() })
+            rows += Row("Use a setup someone shared", action = { Share.askPaste() })
+            rows += Row("Device check", opens = { DeviceCheck.screen() })
             rows += Row("About", opens = { about() })
-            rows += Row("Sign out", opens = { signOut() })
+            rows += Row(info("Profile", listOfNotNull(Profiles.current()?.name, Account.email.ifEmpty { null }).joinToString("  ·  ")))
+            rows += Row("Switch profile", "►", opens = { Profiles.chooser() })
+            rows += Row("Sign out of this profile", opens = { signOut() })
             s.rows = rows
             App.refresh()
         }
@@ -281,9 +288,16 @@ object Home {
         "Sign out?",
         listOf(
             Row("No, go back", action = { App.back() }),
-            Row("Yes, sign out of this computer", action = {
-                Account.clear(); Lib.reset(); forget()
-                App.resetTo(SignIn.screen())
+            Row("Yes, sign this profile out of this computer", action = {
+                Profiles.current()?.let { Profiles.remove(it.id) } ?: run { Account.clear(); Lib.reset() }
+                forget()
+                App.resetTo(
+                    when {
+                        Profiles.all().size > 1 -> Profiles.chooser()
+                        Account.authKey != null -> screen()
+                        else -> SignIn.screen()
+                    }
+                )
             }),
         ),
     )
@@ -840,6 +854,9 @@ object NewEpisodes {
     private var progress: (() -> Unit)? = null
 
     fun fresh() = System.currentTimeMillis() - fullsAt < 60 * 60_000L
+
+    /** Drops the episode lists (after switching profile). */
+    fun forget() { fulls = emptyList(); fullsAt = 0; followed = 0; checked = 0 }
 
     /** Fetches the followed shows' episode lists (at most once an hour), then runs [done]. */
     fun load(force: Boolean = false, onProgress: (() -> Unit)? = null, done: () -> Unit) {

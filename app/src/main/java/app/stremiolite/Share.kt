@@ -81,10 +81,10 @@ object Share {
         val s = Screen(
             "Share my setup",
             listOf(
-                Row("On their phone: install Stremonino, sign in"),
-                Row("with their own account, then scan this code"),
-                Row("with the camera. It opens the app and asks"),
-                Row("before adding anything to their account."),
+                Row("For someone else's Stremio account: they install"),
+                Row("Stremonino, sign in with their own account, then"),
+                Row("scan this code with their phone's camera. It opens"),
+                Row("the app and asks before adding anything."),
                 Row("────────────────────"),
                 Row(info("Add-ons shared", "${p.optJSONArray("a")!!.length() + p.optJSONArray("r")!!.length()}")),
                 Row(info("Settings", "theme, clock, subtitles, hidden rows")),
@@ -93,7 +93,7 @@ object Share {
                 Row("────────────────────"),
                 Row("Send it as a message instead", "►", action = {
                     val text = "My Stremonino setup. Copy this whole line, then in Stremonino choose " +
-                        "'Add a setup someone shared' and paste it:\n$link"
+                        "'Use a setup someone shared' and paste it:\n$link"
                     runCatching {
                         app.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text), "Share setup"))
                     }.onFailure { app.toast("No app to share with on this device") }

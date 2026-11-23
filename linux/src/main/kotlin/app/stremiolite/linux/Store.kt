@@ -10,15 +10,25 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
-/** Files in ~/.config/stremonino (moved from ~/.config/stremio-lean on first run): the sign-in, settings, and caches of the account's data. */
+/**
+ * Files in ~/.config/stremonino (moved from ~/.config/stremio-lean on first run): the sign-in, settings,
+ * and caches of the account's data. The first profile uses the folder itself; others get profiles/<id>/.
+ */
 object Store {
-    val dir: File by lazy {
+    val root: File by lazy {
         val base = System.getenv("XDG_CONFIG_HOME")?.takeIf { it.isNotBlank() } ?: (System.getProperty("user.home") + "/.config")
         val old = File(base, "stremio-lean")
         val now = File(base, "stremonino")
         if (!now.exists() && old.isDirectory) old.renameTo(now)
         now.apply { mkdirs() }
     }
+
+    private var current: File? = null
+
+    /** The current profile's folder. */
+    val dir: File get() = current ?: root
+
+    fun use(d: File) { d.mkdirs(); current = d }
 
     fun file(name: String) = File(dir, name)
 
@@ -46,6 +56,9 @@ object Account {
         cache = o
         Store.writeJson("account.json", o)
     }
+
+    /** Forgets what's in memory (after switching profile). */
+    fun reload() { cache = null }
 
     fun clear() {
         cache = JSONObject()
@@ -90,6 +103,27 @@ object Prefs {
         set(v) { data().put("hiddenRows", JSONArray(v.toList())); save() }
 
     fun language(): Language = Languages.all.getOrElse(subLang) { Languages.all[1] }
+
+    /** Forgets what's in memory (after switching profile). */
+    fun reload() { cache = null }
+
+    /** The shared settings, as "Share my setup" sends them (same shape as the Android app's). */
+    fun exportShared(): JSONObject {
+        val d = data()
+        val o = JSONObject()
+        SHARED.forEach { k -> if (d.has(k)) o.put(k, d.opt(k)) }
+        return o.put("hiddenRows", JSONArray(hiddenRows.toList()))
+    }
+
+    /** Takes someone's shared settings, plus their hidden rows and [alsoHide]. */
+    fun importShared(o: JSONObject, alsoHide: Set<String>) {
+        val d = data()
+        SHARED.forEach { k -> if (o.has(k)) d.put(k, o.opt(k)) }
+        val theirs = o.optJSONArray("hiddenRows")?.let { a -> (0 until a.length()).map { a.optString(it) }.toSet() } ?: emptySet()
+        d.put("hiddenRows", JSONArray((hiddenRows + theirs + alsoHide).toList()))
+        save()
+        syncOut()
+    }
 
     // ---- shared with the other devices (the "stremiolite:settings" record) ------------------
 
@@ -206,6 +240,11 @@ object Lib {
 
     fun reset() {
         records.clear(); unsent.clear(); loaded = true; lastPull = 0
+    }
+
+    /** Forgets what's in memory so the next use reads the (new) profile's file. */
+    fun unload() {
+        records.clear(); unsent.clear(); loaded = false; lastPull = 0
     }
 
     fun raw(id: String): JSONObject? { ensure(); return records[id] }

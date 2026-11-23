@@ -8,5 +8,12 @@ fun main(args: Array<String>) {
         return
     }
     Http.userAgent = "Stremonino/${Updates.current} (Linux)"
-    App.run(if (Account.authKey != null) Home.screen() else SignIn.screen())
+    Profiles.start()
+    App.run(
+        when {
+            Profiles.all().size > 1 -> Profiles.chooser()
+            Account.authKey != null -> Home.screen()
+            else -> SignIn.screen()
+        }
+    )
 }
