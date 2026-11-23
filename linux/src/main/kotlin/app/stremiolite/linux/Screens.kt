@@ -181,6 +181,7 @@ object Home {
             val cw = Lib.continueWatching()
             val lib = Lib.library()
             val waiting = Waiting.list()
+            rows += Row("──── Watching ────")
             rows += Row("Search", "/  ►", opens = null, action = { Search.start() })
             rows += Row("Continue watching", if (cw.isEmpty()) "nothing yet" else "${cw.size}  ►", opens = { continueScreen() })
             rows += Row("Library", if (lib.isEmpty()) "empty" else "${lib.size}  ►", opens = { libraryScreen() })
@@ -188,8 +189,8 @@ object Home {
             rows += Row("Calendar", NewEpisodes.weekCount()?.let { if (it == 0) "nothing this week  ►" else "$it this week  ►" } ?: "", opens = { NewEpisodes.calendar() })
             rows += Row("Watched", Watched.list().size.let { if (it == 0) "" else "$it  ►" }, opens = { watchedScreen() })
             rows += Row("Waiting for streams", Waiting.summary(), opens = { Waiting.screen() })
-            rows += Row("────────────────────")
             if (list != null) {
+                rows += Row("──── Browse ────")
                 val entries = Folders.entries(list, Prefs.hiddenRows)
                 val main = entries.groupingBy { it.addon }.eachCount().maxByOrNull { it.value }?.key
                 entries.filter { it.folder == null }.forEach { e ->
@@ -199,17 +200,17 @@ object Home {
                 }
                 val folders = Index.folderRows(entries)
                 if (folders.isNotEmpty()) {
-                    rows += Row("──── Index ─────────────")
+                    rows += Row("──── Index ────")
                     rows += folders
                 }
-                rows += Row("────────────────────")
             }
+            rows += Row("──── App ────")
             // Same order and wording as the phone and stick.
             // Setup items (add-ons, export/import, device check, about) live inside Settings.
             rows += Row("Settings", "►", opens = { Settings.screen() })
             rows += Row("Reload my rows and add-ons", action = { load(force = true) })
-            rows += Row("────────────────────")
-            rows += Row("Profile", Profiles.current()?.name ?: "…")
+            rows += Row("──── Profile ────")
+            rows += Row(Profiles.current()?.name ?: "…", "current")
             rows += Row("Switch profile", "►", opens = { Profiles.chooser() })
             rows += Row("Sign out of this profile", opens = { signOut() })
             s.rows = rows
@@ -803,8 +804,7 @@ object Settings {
         fun build() {
             // Same order as the phone and stick. Text size is the terminal's own (kitty: ctrl+shift+= / -).
             s.rows = listOf(
-                Row("Enter on a line to change it"),
-                Row("────────────────────"),
+                Row("──── Playback ────"),
                 Row("Player", Prefs.player, action = {
                     App.ask("Player command (e.g. mpv)", Prefs.player) { v -> if (!v.isNullOrBlank()) { Prefs.player = v.trim(); build() } }
                 }),
@@ -817,7 +817,7 @@ object Settings {
                 Row("Auto-play next episode", "◄ ${if (Prefs.autoNext) "On" else "Off"} ►", action = {
                     Prefs.autoNext = !Prefs.autoNext; Prefs.syncOut(); build()
                 }),
-                Row("────────────────────"),
+                Row("──── Look ────"),
                 Row("Theme, text size and clock", "◄ ${if (Prefs.lookLocal) "This computer only" else "Same on all devices"} ►", action = {
                     Prefs.lookLocal = !Prefs.lookLocal
                     if (!Prefs.lookLocal) Prefs.syncOut()
@@ -840,16 +840,16 @@ object Settings {
                 Row("Export my setup to another account", "►", opens = { Share.screen() }),
                 Row("Import a setup from another account", "►", opens = { Share.importScreen() }),
                 Row("Device check", "►", opens = { DeviceCheck.screen() }),
-                Row("────────────────────"),
+                Row("──── About ────"),
                 Row(info("App version", "build ${Updates.current}")),
                 Row("Check for updates", action = { Updates.checkNow() }),
-                Row("About", "►", opens = { Home.about() }),
+                Row("About Stremonino", "►", opens = { Home.about() }),
             )
             App.refresh()
         }
         s = Screen("Settings", emptyList())
         build()
-        s.pos = 2
+        s.pos = 1
         return s
     }
 

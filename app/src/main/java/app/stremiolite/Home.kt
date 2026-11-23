@@ -33,14 +33,14 @@ object Home {
     fun screen(app: MainActivity): Screen {
         // Just the profile's name (the email stays in Switch profile).
         fun whoText() = Profiles.current(app)?.name ?: "…"
-        val who = Row("Profile", whoText())
+        val who = Row(whoText(), "current")
         val addonsRow = Row("Your add-ons", "", opens = { addonList(app) })
         val status = Row("")
         lateinit var screen: Screen
 
         val search = Row("Search", "☰  ►", opens = { Search.menu(app) })
         val tools = listOf(
-            Row("────────────────────"),
+            Row("──── App ────"),
             // Setup items (add-ons, export/import, device check, about) live inside Settings.
             Row("Settings", "►", opens = { Settings.screen(app) }),
             Row("Reload my rows and add-ons", action = {
@@ -48,7 +48,7 @@ object Home {
                 History.pull(app, full = true) { rebuildHome?.invoke() }
                 if (!loading) load(app, screen)
             }),
-            Row("────────────────────"),
+            Row("──── Profile ────"),
             who,
             Row("Switch profile", "►", opens = { Profiles.chooser(app) }),
             Row("Sign out of this profile", opens = { signOut(app) }),
@@ -57,7 +57,7 @@ object Home {
         fun rebuild() {
             val list = addons
             addonsRow.detail = if (list != null) "${list.size}  ►" else ""
-            who.detail = whoText()
+            who.label = whoText()
             screen.tag = Profiles.current(app)?.name ?: ""
             val rows = mutableListOf<Row>()
             if (list != null) rows += homeRows(app, list)
@@ -79,6 +79,7 @@ object Home {
                 rows.add(0, Row("Update available: build $n. Press OK to install", "►", action = { Updates.install(app) }))
             }
             rows.addAll(if (Updates.available != null) 1 else 0, listOf(
+                Row("──── Watching ────"),
                 search,
                 Row("Continue watching", if (cw.isEmpty()) "nothing yet" else "${cw.size}  ►", opens = { continueScreen(app) }),
                 Row("Library", if (lib.isEmpty()) "empty" else "${lib.size}  ►", opens = { libraryScreen(app) }),
@@ -86,7 +87,7 @@ object Home {
                 Row("Calendar", NewEpisodes.weekCount()?.let { if (it == 0) "nothing this week  ►" else "$it this week  ►" } ?: "", opens = { NewEpisodes.calendar(app) }),
                 Row("Watched", History.watched(app).size.let { if (it == 0) "" else "$it  ►" }, opens = { watchedScreen(app) }),
                 Row("Waiting for streams", Waiting.summary(app), opens = { Waiting.screen(app) }),
-                Row("────────────────────"),
+                Row("──── Browse ────"),
             ))
             screen.rows = rows + tools
             app.refresh(screen)
@@ -97,7 +98,7 @@ object Home {
         screen.onShow = {
             // A renamed profile shows its new name in the title straight away.
             screen.tag = Profiles.current(app)?.name ?: ""
-            who.detail = whoText()
+            who.label = whoText()
             History.pull(app) { rebuild() }
             Updates.check { rebuild() }
             Waiting.checkSoon(app) { rebuild() }
@@ -174,7 +175,7 @@ object Home {
         }
         val folders = Index.folderRows(app, entries)
         if (folders.isNotEmpty()) {
-            rows += Row("──── Index ─────────────")
+            rows += Row("──── Index ────")
             rows += folders
         }
         return rows

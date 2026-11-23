@@ -214,8 +214,8 @@ object Settings {
         screen = Screen(
             "Settings",
             listOf(
-                Row("Press OK on a line to change it"), Row("────────────────────"), playerRow, langRow, nextRow,
-                Row("────────────────────"),
+                Row("──── Playback ────"), playerRow, langRow, nextRow,
+                Row("──── Look ────"),
                 lookRow, themeRow, sizeRow, clockRow, watchedRow,
                 Row("Hide rows", "►", opens = { rowsScreen(app) }),
                 Row("──── Setup ────"),
@@ -223,13 +223,13 @@ object Settings {
                 Row("Export my setup to another account", "►", opens = { Share.screen(app) }),
                 Row("Import a setup from another account", "►", opens = { Share.importScreen(app) }),
                 Row("Device check", "►", opens = { DemoMenus.deviceCheck(app) }),
-                Row("────────────────────"),
+                Row("──── About ────"),
                 Row(info("App version", BuildConfig.VERSION_NAME)),
                 updateRow,
-                Row("About", "►", opens = { DemoMenus.about() }),
+                Row("About Stremonino", "►", opens = { DemoMenus.about() }),
             ),
         )
-        screen.position = 2
+        screen.position = 1
         screen.onShow = { show() }
         return screen
     }
