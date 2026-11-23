@@ -250,8 +250,11 @@ object Waiting {
             if (keep.size != all.size) save(app, keep)
             val last = lastCheck(app)
             val rows = mutableListOf(
-                Row(if (last == 0L) "Not checked yet" else "Checked ${java.text.SimpleDateFormat("dd/MM HH:mm", java.util.Locale.UK).format(java.util.Date(last))}" +
-                    if (isPhone(app)) " · every 6 h, with alerts" else " · when the app opens"),
+                // When on the left, how often on the right (on a phone in portrait, the line below).
+                Row(
+                    if (last == 0L) "Not checked yet" else "Checked ${java.text.SimpleDateFormat("dd/MM HH:mm", java.util.Locale.UK).format(java.util.Date(last))}",
+                    if (isPhone(app)) "every 6h, with alerts" else "when the app opens",
+                ),
                 Row("Check now", action = {
                     app.toast("Checking…")
                     Net.async({ checkNow(app) }) { r ->
