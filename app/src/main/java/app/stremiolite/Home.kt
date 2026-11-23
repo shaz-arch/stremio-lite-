@@ -405,7 +405,13 @@ object Home {
                 a.catalogs.map { c ->
                     Row(c.name, Catalogs.typeLabel(c.type) + if (c.required.isNotEmpty()) " · not on home" else "")
                 }
-        val edit = if (a.isLocal) emptyList() else listOf(
+        // On a phone there's nothing to scan: open the page here, or copy the links.
+        val edit = if (a.isLocal) emptyList() else if (app.isPhone) listOf(
+            Row("Edit this add-on's settings", "opens browser  ►", action = { openInBrowser(app, a.base + "/configure") }),
+            Row("Copy its settings page link", action = { copy(app, a.base + "/configure", "Settings page link") }),
+            Row("Copy its install link (to keep a copy)", action = { copy(app, a.transportUrl, "Install link") }),
+            Row("Remove from this account", "►", opens = { removeScreen(app, a) }),
+        ) else listOf(
             Row("Edit this add-on's settings on your phone", "QR  ►", opens = { editQr(a) }),
             Row("Show its install link (to keep a copy)", "QR  ►", opens = { linkQr(a) }),
             Row("Remove from this account", "►", opens = { removeScreen(app, a) }),
@@ -426,6 +432,20 @@ object Home {
             }),
         ),
     )
+
+    private fun openInBrowser(app: MainActivity, url: String) {
+        runCatching { app.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
+            .onSuccess { app.toast("For AIOMetadata: Load Configuration, your password, change things, Save. Then Reload here.") }
+            .onFailure { copy(app, url, "Settings page link") }
+    }
+
+    /** Copies to the clipboard (paste it into a browser or a note). The install link is private: it works on its own. */
+    private fun copy(app: MainActivity, text: String, what: String) {
+        val cm = app.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+        if (cm == null) { app.toast("Couldn't reach the clipboard"); return }
+        cm.setPrimaryClip(android.content.ClipData.newPlainText(what, text))
+        app.toast("$what copied. Keep it private: it works on its own.")
+    }
 
     /** The add-on's install link as a QR code: photograph it, or scan it to reinstall elsewhere. */
     private fun linkQr(a: Addon): Screen {
