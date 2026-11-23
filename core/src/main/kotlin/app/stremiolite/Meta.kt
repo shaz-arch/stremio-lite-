@@ -1,5 +1,6 @@
 package app.stremiolite
 
+import org.json.JSONArray
 import org.json.JSONObject
 
 /** One title as a catalogue row lists it. */
@@ -87,6 +88,17 @@ object MetaParse {
             }
         }
         return emptyList()
+    }
+
+    /**
+     * A compact copy of a show for saving on the device: only what episode lists, counts and the
+     * calendar need (no cast, descriptions or episode summaries). Read back with [full].
+     */
+    fun compact(f: Full): JSONObject {
+        val vids = JSONArray()
+        f.videos.forEach { v -> vids.put(JSONObject().put("id", v.id).put("title", v.title).put("season", v.season).put("episode", v.episode).put("released", v.released)) }
+        return JSONObject().put("id", f.id).put("type", f.type).put("name", f.name).put("releaseInfo", f.year)
+            .put("imdbRating", f.rating).put("runtime", f.runtime).put("status", f.status).put("source", f.source).put("videos", vids)
     }
 
     fun full(m: JSONObject, source: String): Full {

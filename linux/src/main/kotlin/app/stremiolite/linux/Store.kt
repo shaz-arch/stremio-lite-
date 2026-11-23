@@ -244,12 +244,12 @@ object Lib {
     }
 
     fun reset() {
-        records.clear(); unsent.clear(); loaded = true; lastPull = 0
+        records.clear(); unsent.clear(); loaded = true; lastPull = 0; fullDone = false
     }
 
     /** Forgets what's in memory so the next use reads the (new) profile's file. */
     fun unload() {
-        records.clear(); unsent.clear(); loaded = false; lastPull = 0
+        records.clear(); unsent.clear(); loaded = false; lastPull = 0; fullDone = false
     }
 
     fun raw(id: String): JSONObject? { ensure(); return records[id] }
@@ -355,27 +355,68 @@ object Lib {
     }
 
     /** Fetches the account's library; [done] runs on the main loop afterwards. */
-    fun pull(force: Boolean = false, done: (() -> Unit)? = null) {
+    /** False until a full pull has happened since the app started (or the profile changed). */
+    private var fullDone = false
+
+    /**
+     * Brings in changes from the account. Normally only records that changed are fetched (the
+     * account lists ids and change times first); the first pull, and [full] ones (Reload), fetch everything.
+     */
+    fun pull(force: Boolean = false, full: Boolean = false, done: (() -> Unit)? = null) {
         ensure()
         val key = Account.authKey ?: return
-        if (pulling || (!force && System.currentTimeMillis() - lastPull < 60_000)) return
+        if (pulling || (!force && !full && System.currentTimeMillis() - lastPull < 60_000)) return
         pulling = true
         send()
-        App.async({ Sync.pull(key) }) { r ->
-            pulling = false
-            r.onSuccess { arr ->
-                lastPull = System.currentTimeMillis()
-                val keep = unsent.toSet()
-                val fresh = LinkedHashMap<String, JSONObject>()
-                for (i in 0 until arr.length()) {
-                    val o = arr.optJSONObject(i) ?: continue
-                    val id = o.optString("_id")
-                    if (id.isEmpty()) continue
-                    fresh[id] = if (id in keep) records[id] ?: o else o
+        val whole = full || !fullDone
+        val keep = unsent.toSet()
+        val known = if (whole) emptyMap() else records.mapValues { Sync.parseTime(it.value.optString("_mtime")) }
+        App.async({
+            if (whole) Sync.pull(key) to true
+            else {
+                val meta = Sync.meta(key)
+                if (meta == null) Sync.pull(key) to true
+                else {
+                    val want = Sync.changed(meta, known, keep)
+                    val gone = known.keys.filter { it !in meta && it !in keep }
+                    when {
+                        want.isEmpty() && gone.isEmpty() -> null
+                        want.size > 150 -> Sync.pull(key) to true
+                        else -> {
+                            // Changed records, plus empty stand-ins for removed ones (marked by "_gone").
+                            val arr = if (want.isEmpty()) JSONArray() else Sync.pullIds(key, want)
+                            gone.forEach { arr.put(JSONObject().put("_id", it).put("_gone", true)) }
+                            arr to false
+                        }
+                    }
                 }
-                keep.forEach { id -> records[id]?.let { fresh.putIfAbsent(id, it) } }
-                records.clear()
-                records.putAll(fresh)
+            }
+        }) { r ->
+            pulling = false
+            r.onSuccess { got ->
+                lastPull = System.currentTimeMillis()
+                if (whole) fullDone = true
+                if (got == null) { done?.invoke(); return@onSuccess }
+                val (arr, everything) = got
+                if (everything) {
+                    val fresh = LinkedHashMap<String, JSONObject>()
+                    for (i in 0 until arr.length()) {
+                        val o = arr.optJSONObject(i) ?: continue
+                        val id = o.optString("_id")
+                        if (id.isEmpty()) continue
+                        fresh[id] = if (id in keep) records[id] ?: o else o
+                    }
+                    keep.forEach { id -> records[id]?.let { fresh.putIfAbsent(id, it) } }
+                    records.clear()
+                    records.putAll(fresh)
+                } else {
+                    for (i in 0 until arr.length()) {
+                        val o = arr.optJSONObject(i) ?: continue
+                        val id = o.optString("_id")
+                        if (id.isEmpty() || id in unsent) continue
+                        if (o.optBoolean("_gone")) records.remove(id) else records[id] = o
+                    }
+                }
                 save()
                 if (Prefs.syncIn()) App.refresh()
                 done?.invoke()

@@ -45,7 +45,7 @@ object Home {
             addonsRow,
             Row("Reload my rows and add-ons", action = {
                 // Also fetches your history, follows and waiting list from the account straight away.
-                History.pull(app, force = true) { rebuildHome?.invoke() }
+                History.pull(app, full = true) { rebuildHome?.invoke() }
                 if (!loading) load(app, screen)
             }),
             Row("Export my setup to another account", "►", opens = { Share.screen(app) }),
@@ -105,7 +105,11 @@ object Home {
             Updates.check { rebuild() }
             Waiting.checkSoon(app) { rebuild() }
             // Counts for New episodes and the Calendar: checked quietly once an hour.
-            if (!NewEpisodes.fresh()) Net.later(4_000) { if (addons != null) NewEpisodes.load(app) { rebuild() } }
+            // Saved counts straight away; a fresh check (if the saved one is over an hour old) a little later.
+            NewEpisodes.warm(app) {
+                rebuild()
+                if (!NewEpisodes.fresh()) Net.later(4_000) { if (addons != null) NewEpisodes.load(app) { rebuild() } }
+            }
             // A shared setup opened before signing in: offer it now.
             Share.takePending()?.let { p -> Net.later(300) { app.push(Share.receive(app, p)) } }
             if (addons == null) {

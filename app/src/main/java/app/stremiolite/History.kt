@@ -197,6 +197,7 @@ object History {
         loaded = false
         videos.clear(); items.clear(); library.clear(); log.clear(); remote.clear(); unsent.clear()
         lastPull = 0
+        fullDone = false
         pulling = false
     }
 
@@ -205,6 +206,7 @@ object History {
         ensure(c)
         videos.clear(); items.clear(); library.clear(); log.clear(); remote.clear(); unsent.clear()
         lastPull = 0
+        fullDone = false
         save()
     }
 
@@ -438,20 +440,54 @@ object History {
     /** For screens showing resume points: fetches from the account unless that happened in the last 15 seconds. */
     fun pullFresh(c: Context, changed: () -> Unit) = pull(c, force = System.currentTimeMillis() - lastPull > 15_000, changed = changed)
 
-    fun pull(c: Context, force: Boolean = false, changed: (() -> Unit)? = null) {
+    /** False until a full pull has happened since the app started (the first one is always full). */
+    private var fullDone = false
+
+    /**
+     * Brings in changes from the account. Normally only the records that changed are fetched (the
+     * account lists ids and change times first); the first pull after the app starts, and [full]
+     * ones (Reload), fetch everything as a safety net.
+     */
+    fun pull(c: Context, force: Boolean = false, full: Boolean = false, changed: (() -> Unit)? = null) {
         ensure(c)
         val key = Account.authKey(c) ?: return
-        if (pulling || (!force && System.currentTimeMillis() - lastPull < PULL_EVERY_MS)) return
+        if (pulling || (!force && !full && System.currentTimeMillis() - lastPull < PULL_EVERY_MS)) return
         pulling = true
         send(c)
         val skip = unsent.toSet()
         val doneIds = videos.filterValues { it.done }.keys.toHashSet()
         val logIds = log.map { it.id }.toHashSet()
-        Net.async({ compute(Sync.pull(key), skip, doneIds, logIds) }) { r ->
+        val whole = full || !fullDone
+        val copy = if (whole) emptyMap() else LinkedHashMap(remote)
+        Net.async({
+            if (whole) compute(Sync.pull(key), skip, doneIds, logIds)
+            else {
+                val meta = Sync.meta(key)
+                if (meta == null) compute(Sync.pull(key), skip, doneIds, logIds)
+                else {
+                    val want = Sync.changed(meta, copy.mapValues { Sync.mtimeOf(it.value) }, skip)
+                    val gone = copy.keys.any { it !in meta && it !in skip }
+                    when {
+                        want.isEmpty() && !gone -> null                       // nothing changed: no work at all
+                        want.size > 150 -> compute(Sync.pull(key), skip, doneIds, logIds)
+                        else -> {
+                            val fresh = if (want.isEmpty()) JSONArray() else Sync.pullIds(key, want)
+                            val byId = HashMap<String, JSONObject>()
+                            for (i in 0 until fresh.length()) fresh.optJSONObject(i)?.let { byId[it.optString("_id")] = it }
+                            val merged = JSONArray()
+                            copy.forEach { (id, raw) -> if (id in meta && id !in byId) runCatching { merged.put(JSONObject(raw)) } }
+                            byId.values.forEach { merged.put(it) }
+                            compute(merged, skip, doneIds, logIds)
+                        }
+                    }
+                }
+            }
+        }) { r ->
             pulling = false
             r.onSuccess { m ->
                 lastPull = System.currentTimeMillis()
-                if (apply(m)) {
+                if (whole) fullDone = true
+                if (m != null && apply(m)) {
                     save()
                     changed?.invoke()
                 }

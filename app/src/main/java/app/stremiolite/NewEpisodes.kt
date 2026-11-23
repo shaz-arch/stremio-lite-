@@ -42,8 +42,59 @@ object NewEpisodes {
     /** True once the shows have been checked in the last hour. */
     fun fresh() = System.currentTimeMillis() - fullsAt < KEEP_MS
 
+    // ---- kept on the device, so a fresh start doesn't refetch every show -----------------------
+
+    /** Which profile's saved copy is in memory (each profile has its own file). */
+    private var cacheName = ""
+    private var cacheRead = false
+
+    private fun cacheFile(c: Context) = java.io.File(c.applicationContext.filesDir, Profiles.fileName(c, "shows"))
+
+    private fun readCache(c: Context): Triple<List<Full>, Long, List<Pair<String, String>>>? = runCatching {
+        val o = org.json.JSONObject(cacheFile(c).readText())
+        val arr = o.optJSONArray("shows") ?: return null
+        val shows = (0 until arr.length()).mapNotNull { i -> arr.optJSONObject(i)?.let { MetaParse.full(it, it.optString("source")) } }
+        val fol = o.optJSONArray("followed")?.let { a -> (0 until a.length()).mapNotNull { i -> a.optJSONArray(i)?.let { it.optString(0) to it.optString(1) } } } ?: emptyList()
+        Triple(shows, o.optLong("at"), fol)
+    }.getOrNull()
+
+    private fun writeCache(c: Context) {
+        val shows = fulls; val at = fullsAt; val fol = lastFollowed; val f = cacheFile(c)
+        Net.async({
+            val arr = org.json.JSONArray(); shows.forEach { arr.put(MetaParse.compact(it)) }
+            val fa = org.json.JSONArray(); fol.forEach { fa.put(org.json.JSONArray().put(it.first).put(it.second)) }
+            f.writeText(org.json.JSONObject().put("at", at).put("shows", arr).put("followed", fa).toString())
+        }) { }
+    }
+
+    /** Reads the saved copy if it hasn't been yet (no network), then runs [done]: counts on Home at once. */
+    fun warm(app: MainActivity, done: () -> Unit) {
+        val name = Profiles.fileName(app, "shows")
+        if (cacheRead && name == cacheName) { done(); return }
+        if (name != cacheName) { cacheName = name; fulls = emptyList(); fullsAt = 0; lastFollowed = emptyList() }
+        cacheRead = true
+        Net.async({ readCache(app) }) { r ->
+            r.getOrNull()?.let { (shows, at, fol) -> if (fulls.isEmpty()) { fulls = shows; fullsAt = at; lastFollowed = fol; followedCount = fol.size } }
+            done()
+        }
+    }
+
     /** Fetches the followed shows (if not fresh), then runs [done]. [progress] runs as each show arrives. */
     fun load(app: MainActivity, force: Boolean = false, progress: (() -> Unit)? = null, done: () -> Unit) {
+        val name = Profiles.fileName(app, "shows")
+        if (name != cacheName) {
+            cacheName = name; cacheRead = false
+            fulls = emptyList(); fullsAt = 0; lastFollowed = emptyList()
+        }
+        // First time: read the saved copy (in the background), then carry on as if it had just been fetched.
+        if (!cacheRead) {
+            cacheRead = true
+            Net.async({ readCache(app) }) { r ->
+                r.getOrNull()?.let { (shows, at, fol) -> if (fulls.isEmpty()) { fulls = shows; fullsAt = at; lastFollowed = fol; followedCount = fol.size } }
+                load(app, force, progress, done)
+            }
+            return
+        }
         if (!force && fresh()) { done(); return }
         waiting += done
         progressHook = progress ?: progressHook
@@ -57,6 +108,7 @@ object NewEpisodes {
             val got = mutableListOf<Full>()
             fun finish() {
                 fulls = got.toList(); fullsAt = System.currentTimeMillis(); loading = false; failed.clear()
+                writeCache(app)
                 val list = waiting.toList(); waiting.clear(); list.forEach { it() }
             }
             if (shows.isEmpty()) { finish(); return@async }
@@ -99,7 +151,7 @@ object NewEpisodes {
             Net.async({ Details.loadFull("series", id) }) { r ->
                 fetching -= id
                 val f = r.getOrNull()
-                if (f == null) failed += id else if (fulls.none { it.id == f.id }) fulls = fulls + f
+                if (f == null) failed += id else if (fulls.none { it.id == f.id }) { fulls = fulls + f; writeCache(app) }
                 done()
             }
         }

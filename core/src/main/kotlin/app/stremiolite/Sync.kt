@@ -29,6 +29,41 @@ object Sync {
         return json.optJSONArray("result") ?: JSONArray()
     }
 
+    /**
+     * Each record's id and when it last changed (ms), without the records themselves: a few KB
+     * however big the history is. Null if the reply isn't the expected shape (then do a full pull).
+     */
+    fun meta(authKey: String): Map<String, Long>? {
+        val body = JSONObject().put("authKey", authKey).put("collection", "libraryItem")
+        val json = JSONObject(Http.postJson(API + "datastoreMeta", body.toString(), timeoutMs = 20_000))
+        json.optJSONObject("error")?.let { throw Stremio.ApiError(it.optString("message", "library sync failed")) }
+        val arr = json.optJSONArray("result") ?: return null
+        val out = HashMap<String, Long>(arr.length() * 2)
+        for (i in 0 until arr.length()) {
+            val pair = arr.optJSONArray(i) ?: return null
+            val id = pair.optString(0).ifEmpty { return null }
+            val t = pair.opt(1)
+            out[id] = when (t) {
+                is Number -> t.toLong()
+                is String -> t.toLongOrNull() ?: parseTime(t)
+                else -> return null
+            }
+        }
+        return out
+    }
+
+    /**
+     * Which records to fetch: those the account has that we don't, or whose change time differs
+     * (to the second) from our copy. [skip]: ones changed here and not yet sent.
+     */
+    fun changed(meta: Map<String, Long>, known: Map<String, Long>, skip: Set<String>): List<String> =
+        meta.filter { (id, t) -> id !in skip && known[id]?.let { it / 1000 != t / 1000 } ?: true }.keys.toList()
+
+    /** A record's change time from its JSON text, without parsing the whole record. */
+    fun mtimeOf(raw: String): Long = mtimeRx.find(raw)?.groupValues?.get(1)?.let { parseTime(it) } ?: 0L
+
+    private val mtimeRx = Regex("\"_mtime\"\\s*:\\s*\"([^\"]+)\"")
+
     /** Just the listed records (for the background check, which needs only the waiting list). */
     fun pullIds(authKey: String, ids: List<String>): JSONArray {
         val body = JSONObject().put("authKey", authKey).put("collection", "libraryItem")

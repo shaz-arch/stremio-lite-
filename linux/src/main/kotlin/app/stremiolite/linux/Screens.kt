@@ -247,7 +247,7 @@ object Home {
                 addons = list
                 error = null
                 runCatching { Store.file("addons.json").writeText(json) }
-                if (force) Lib.pull(force = true) { rebuild?.invoke() }
+                if (force) Lib.pull(full = true) { rebuild?.invoke() }
             }.onFailure { e ->
                 error = if (e is Stremio.ApiError) e.message else Net.describe(e)
                 if (e is Stremio.ApiError && e.message?.contains("session", true) == true) {
@@ -1034,13 +1034,37 @@ object NewEpisodes {
     private val waiting = mutableListOf<() -> Unit>()
     private var progress: (() -> Unit)? = null
 
-    fun fresh() = System.currentTimeMillis() - fullsAt < 60 * 60_000L
+    fun fresh(): Boolean { if (!cacheRead) readCache(); return System.currentTimeMillis() - fullsAt < 60 * 60_000L }
 
     /** Drops the episode lists (after switching profile). */
-    fun forget() { fulls = emptyList(); fullsAt = 0; followed = 0; checked = 0 }
+    fun forget() { fulls = emptyList(); fullsAt = 0; followed = 0; checked = 0; lastFollowed = emptyList(); cacheRead = false }
+
+    // ---- kept in the profile's folder (shows.json), so a fresh start doesn't refetch every show ----
+    private var cacheRead = false
+
+    private fun readCache() {
+        cacheRead = true
+        val o = Store.readJson("shows.json")
+        val arr = o.optJSONArray("shows") ?: return
+        if (fulls.isNotEmpty()) return
+        fulls = (0 until arr.length()).mapNotNull { i -> arr.optJSONObject(i)?.let { MetaParse.full(it, it.optString("source")) } }
+        fullsAt = o.optLong("at")
+        lastFollowed = o.optJSONArray("followed")?.let { a -> (0 until a.length()).mapNotNull { i -> a.optJSONArray(i)?.let { it.optString(0) to it.optString(1) } } } ?: emptyList()
+        followed = lastFollowed.size
+    }
+
+    private fun writeCache() {
+        val shows = fulls; val at = fullsAt; val fol = lastFollowed
+        App.async({
+            val arr = JSONArray(); shows.forEach { arr.put(MetaParse.compact(it)) }
+            val fa = JSONArray(); fol.forEach { fa.put(JSONArray().put(it.first).put(it.second)) }
+            Store.writeJson("shows.json", JSONObject().put("at", at).put("shows", arr).put("followed", fa))
+        }) { }
+    }
 
     /** Fetches the followed shows' episode lists (at most once an hour), then runs [done]. */
     fun load(force: Boolean = false, onProgress: (() -> Unit)? = null, done: () -> Unit) {
+        if (!cacheRead) readCache()
         if (!force && fresh()) { done(); return }
         waiting += done
         if (onProgress != null) progress = onProgress
@@ -1055,6 +1079,7 @@ object NewEpisodes {
             val got = mutableListOf<Full>()
             fun finish() {
                 fulls = got.toList(); fullsAt = System.currentTimeMillis(); loading = false; failed.clear()
+                writeCache()
                 val l = waiting.toList(); waiting.clear(); l.forEach { it() }
             }
             if (shows.isEmpty()) { finish(); return@async }
@@ -1092,7 +1117,7 @@ object NewEpisodes {
             App.async({ MetaParse.fetch(Home.all(), "series", id) }) { r ->
                 fetching -= id
                 val f = r.getOrNull()
-                if (f == null) failed += id else if (fulls.none { it.id == f.id }) fulls = fulls + f
+                if (f == null) failed += id else if (fulls.none { it.id == f.id }) { fulls = fulls + f; writeCache() }
                 done()
             }
         }
