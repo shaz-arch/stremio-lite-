@@ -41,17 +41,14 @@ object Home {
         val search = Row("Search", "☰  ►", opens = { Search.menu(app) })
         val tools = listOf(
             Row("────────────────────"),
-            Row("Settings", opens = { Settings.screen(app) }),
-            addonsRow,
+            // Setup items (add-ons, export/import, device check, about) live inside Settings.
+            Row("Settings", "►", opens = { Settings.screen(app) }),
             Row("Reload my rows and add-ons", action = {
                 // Also fetches your history, follows and waiting list from the account straight away.
                 History.pull(app, full = true) { rebuildHome?.invoke() }
                 if (!loading) load(app, screen)
             }),
-            Row("Export my setup to another account", "►", opens = { Share.screen(app) }),
-            Row("Import a setup from another account", "►", opens = { Share.importScreen(app) }),
-            Row("Device check", opens = { DemoMenus.deviceCheck(app) }),
-            Row("About", opens = { DemoMenus.about() }),
+            Row("────────────────────"),
             who,
             Row("Switch profile", "►", opens = { Profiles.chooser(app) }),
             Row("Sign out of this profile", opens = { signOut(app) }),
@@ -291,6 +288,12 @@ object Home {
     }
 
     private fun shortName(name: String) = name.substringBefore('|').trim().take(18)
+
+    /** Settings' "Your add-ons" line opens this. */
+    fun addonsScreen(app: MainActivity) = addonList(app)
+
+    /** How many add-ons the account has (for Settings), or null while loading. */
+    fun addonCount(): Int? = addons?.size
 
     private fun addonList(app: MainActivity): Screen {
         val list = addons

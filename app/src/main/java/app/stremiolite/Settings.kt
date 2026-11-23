@@ -218,9 +218,15 @@ object Settings {
                 Row("────────────────────"),
                 lookRow, themeRow, sizeRow, clockRow, watchedRow,
                 Row("Hide rows", "►", opens = { rowsScreen(app) }),
+                Row("──── Setup ────"),
+                Row("Your add-ons", (Home.addonCount()?.let { "$it  " } ?: "") + "►", opens = { Home.addonsScreen(app) }),
+                Row("Export my setup to another account", "►", opens = { Share.screen(app) }),
+                Row("Import a setup from another account", "►", opens = { Share.importScreen(app) }),
+                Row("Device check", "►", opens = { DemoMenus.deviceCheck(app) }),
                 Row("────────────────────"),
                 Row(info("App version", BuildConfig.VERSION_NAME)),
                 updateRow,
+                Row("About", "►", opens = { DemoMenus.about() }),
             ),
         )
         screen.position = 2

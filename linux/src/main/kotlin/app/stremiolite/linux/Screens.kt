@@ -205,13 +205,10 @@ object Home {
                 rows += Row("────────────────────")
             }
             // Same order and wording as the phone and stick.
-            rows += Row("Settings", opens = { Settings.screen() })
-            rows += Row("Your add-ons", list?.let { "${it.size}  ►" } ?: "►", opens = { Addons.screen() })
+            // Setup items (add-ons, export/import, device check, about) live inside Settings.
+            rows += Row("Settings", "►", opens = { Settings.screen() })
             rows += Row("Reload my rows and add-ons", action = { load(force = true) })
-            rows += Row("Export my setup to another account", "►", opens = { Share.screen() })
-            rows += Row("Import a setup from another account", "►", opens = { Share.importScreen() })
-            rows += Row("Device check", opens = { DeviceCheck.screen() })
-            rows += Row("About", opens = { about() })
+            rows += Row("────────────────────")
             rows += Row("Profile", Profiles.current()?.name ?: "…")
             rows += Row("Switch profile", "►", opens = { Profiles.chooser() })
             rows += Row("Sign out of this profile", opens = { signOut() })
@@ -344,7 +341,7 @@ object Home {
         ),
     )
 
-    private fun about() = Screen(
+    fun about() = Screen(
         "About",
         listOf(
             Row(info("Stremonino", "Linux, build ${Updates.current}")),
@@ -838,9 +835,15 @@ object Settings {
                     Prefs.hideWatched = !Prefs.hideWatched; Prefs.syncOut(); build()
                 }),
                 Row("Hide rows", "►", opens = { rowsScreen() }),
+                Row("──── Setup ────"),
+                Row("Your add-ons", (Home.all().size.takeIf { it > 0 }?.let { "$it  " } ?: "") + "►", opens = { Addons.screen() }),
+                Row("Export my setup to another account", "►", opens = { Share.screen() }),
+                Row("Import a setup from another account", "►", opens = { Share.importScreen() }),
+                Row("Device check", "►", opens = { DeviceCheck.screen() }),
                 Row("────────────────────"),
                 Row(info("App version", "build ${Updates.current}")),
                 Row("Check for updates", action = { Updates.checkNow() }),
+                Row("About", "►", opens = { Home.about() }),
             )
             App.refresh()
         }
