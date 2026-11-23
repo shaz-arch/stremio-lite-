@@ -28,7 +28,7 @@ object Net {
 
     fun init(context: Context) {
         HttpsURLConnection.setDefaultSSLSocketFactory(Trust.socketFactory(context.applicationContext))
-        Http.userAgent = "StremioLean/${BuildConfigLite.VERSION} (Android TV)"
+        Http.userAgent = "Stremonino/${BuildConfigLite.VERSION} (Android TV)"
     }
 
     /** Run [work] in the background, then [done] on the main thread. */

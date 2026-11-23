@@ -1,4 +1,4 @@
-// Stremio Lean for Linux: a terminal app (same DOS look) that plays through mpv.
+// Stremonino for Linux: a terminal app (same DOS look) that plays through mpv.
 plugins {
     id("org.jetbrains.kotlin.jvm")
 }
@@ -27,16 +27,16 @@ val versionFile = tasks.register("versionFile") {
     outputs.dir(out)
     inputs.property("build", build)
     doLast {
-        val f = out.get().file("stremio-lean-version.txt").asFile
+        val f = out.get().file("stremonino-version.txt").asFile
         f.parentFile.mkdirs()
         f.writeText(build.toString())
     }
 }
 sourceSets["main"].resources.srcDir(versionFile)
 
-// One runnable file: java -jar stremio-lean-linux.jar
+// One runnable file: java -jar stremonino-linux.jar
 tasks.register<Jar>("fatJar") {
-    archiveFileName.set("stremio-lean-linux.jar")
+    archiveFileName.set("stremonino-linux.jar")
     destinationDirectory.set(layout.buildDirectory.dir("dist"))
     manifest { attributes("Main-Class" to "app.stremiolite.linux.MainKt") }
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE

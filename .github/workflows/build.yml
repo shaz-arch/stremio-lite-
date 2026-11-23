@@ -29,12 +29,16 @@ jobs:
       - name: Publish download link
         run: |
           cp app/build/outputs/apk/release/app-release.apk stremio-lite.apk
-          cp linux/build/dist/stremio-lean-linux.jar stremio-lean-linux.jar
+          cp app/build/outputs/apk/release/app-release.apk stremonino.apk
+          cp linux/build/dist/stremonino-linux.jar stremonino-linux.jar
+          cp linux/build/dist/stremonino-linux.jar stremio-lean-linux.jar
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
-          name: Stremio Lite build ${{ github.run_number }}
+          name: Stremonino build ${{ github.run_number }}
           make_latest: true
           files: |
+            stremonino.apk
             stremio-lite.apk
+            stremonino-linux.jar
             stremio-lean-linux.jar

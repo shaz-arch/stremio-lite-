@@ -286,7 +286,7 @@ object Player {
     fun play(url: String, title: String, sub: Sub?, startAt: Long, done: (Result) -> Unit) {
         val cmd = Prefs.player
         val isMpv = File(cmd).name.startsWith("mpv")
-        val sock = File(System.getProperty("java.io.tmpdir"), "stremio-lean-mpv-${ProcessHandle.current().pid()}.sock")
+        val sock = File(System.getProperty("java.io.tmpdir"), "stremonino-mpv-${ProcessHandle.current().pid()}.sock")
         sock.delete()
         val args = mutableListOf(cmd)
         if (isMpv) {
@@ -356,13 +356,13 @@ object Player {
     }
 }
 
-/** Updates from the same GitHub releases as the Android app (the Linux file is stremio-lean-linux.jar). */
+/** Updates from the same GitHub releases as the Android app (the Linux file is stremonino-linux.jar). */
 object Updates {
     private const val LATEST = "https://api.github.com/repos/shaz-arch/stremio-lite-/releases/latest"
-    private const val JAR = "https://github.com/shaz-arch/stremio-lite-/releases/latest/download/stremio-lean-linux.jar"
+    private const val JAR = "https://github.com/shaz-arch/stremio-lite-/releases/latest/download/stremonino-linux.jar"
 
     val current: Int by lazy {
-        runCatching { Updates::class.java.getResource("/stremio-lean-version.txt")!!.readText().trim().toInt() }.getOrDefault(0)
+        runCatching { Updates::class.java.getResource("/stremonino-version.txt")!!.readText().trim().toInt() }.getOrDefault(0)
     }
     var available: Int? = null
         private set
@@ -398,7 +398,7 @@ object Updates {
     private fun install(n: Int) {
         val me = runCatching { File(Updates::class.java.protectionDomain.codeSource.location.toURI()) }.getOrNull()
         if (me == null || !me.isFile || !me.name.endsWith(".jar")) {
-            App.toast("Build $n is out: download stremio-lean-linux.jar from the releases page")
+            App.toast("Build $n is out: download stremonino-linux.jar from the releases page")
             return
         }
         App.toast("Downloading build $n…")

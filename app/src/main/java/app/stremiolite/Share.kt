@@ -19,7 +19,9 @@ import java.util.zip.Inflater
  *  - personal list rows (your MDBList/Trakt/Simkl watchlist): hidden on their side.
  */
 object Share {
-    private const val SCHEME = "stremiolean"
+    private const val SCHEME = "stremonino"
+    /** Links made before the rename still open. */
+    private val SCHEMES = listOf(SCHEME, "stremiolean")
     private const val STREAMS_CONFIGURE = "https://aiostreams.elfhosted.com/stremio/configure"
     private const val STREAMS_CONFIG_FILE = "https://raw.githubusercontent.com/shaz-arch/stremio-lite-/main/setup/aiostreams-config.json"
 
@@ -79,7 +81,7 @@ object Share {
         val s = Screen(
             "Share my setup",
             listOf(
-                Row("On their phone: install Stremio Lean, sign in"),
+                Row("On their phone: install Stremonino, sign in"),
                 Row("with their own account, then scan this code"),
                 Row("with the camera. It opens the app and asks"),
                 Row("before adding anything to their account."),
@@ -90,7 +92,7 @@ object Share {
                 Row(info("Stream add-on", if (streams) "not shared (yours uses your TorBox)" else "none")),
                 Row("────────────────────"),
                 Row("Send it as a message instead", "►", action = {
-                    val text = "My Stremio Lean setup. Copy this whole line, then in Stremio Lean choose " +
+                    val text = "My Stremonino setup. Copy this whole line, then in Stremonino choose " +
                         "'Add a setup someone shared' and paste it:\n$link"
                     runCatching {
                         app.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text), "Share setup"))
@@ -106,7 +108,7 @@ object Share {
 
     /** Called with the link that opened the app (if any). */
     fun open(app: MainActivity, uri: Uri?) {
-        if (uri == null || uri.scheme != SCHEME) return
+        if (uri == null || uri.scheme !in SCHEMES) return
         val p = decode(uri.toString()) ?: run { app.toast("That setup link looks incomplete"); return }
         if (Account.authKey(app) == null) {
             pending = p
@@ -123,7 +125,7 @@ object Share {
             .setView(input)
             .setPositiveButton("Next") { _, _ ->
                 val text = input.text.toString()
-                val start = text.indexOf("$SCHEME://")
+                val start = SCHEMES.map { text.indexOf("$it://") }.filter { it >= 0 }.minOrNull() ?: -1
                 val p = if (start >= 0) decode(text.substring(start).split(Regex("\\s"))[0]) else null
                 if (p == null) app.toast("That doesn't look like a setup link") else app.push(receive(app, p))
             }

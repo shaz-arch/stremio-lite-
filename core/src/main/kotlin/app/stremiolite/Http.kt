@@ -11,9 +11,9 @@ import java.net.URL
 object Http {
     class HttpError(val code: Int) : IOException("HTTP $code")
 
-    /** Set by each app, e.g. "StremioLean/1.14 (Android TV)". */
+    /** Set by each app, e.g. "Stremonino/1.14 (Android TV)". */
     @Volatile
-    var userAgent = "StremioLean"
+    var userAgent = "Stremonino"
 
     fun get(url: String, timeoutMs: Int = 15_000, allowErrors: Boolean = false): String =
         request(url, null, timeoutMs, allowErrors)

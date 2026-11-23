@@ -32,11 +32,12 @@
             android:exported="true"
             android:launchMode="singleTask"
             android:screenOrientation="fullUser">
-            <!-- "Share my setup" links: stremiolean://share?d=… -->
+            <!-- "Share my setup" links: stremonino://share?d=… (older stremiolean:// links still work) -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="stremonino" android:host="share" />
                 <data android:scheme="stremiolean" android:host="share" />
             </intent-filter>
             <intent-filter>

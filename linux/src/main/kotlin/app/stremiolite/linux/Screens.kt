@@ -208,7 +208,7 @@ object Home {
             App.refresh()
         }
         rebuild = { build() }
-        s = Screen("Stremio Lean", listOf(Row("Loading…")), tag = "Linux")
+        s = Screen("Stremonino", listOf(Row("Loading…")), tag = "Linux")
         s.onShow = {
             if (addons == null) {
                 runCatching { Stremio.parseAddons(Store.file("addons.json").readText()) }.onSuccess { addons = it }
@@ -267,7 +267,7 @@ object Home {
     private fun about() = Screen(
         "About",
         listOf(
-            Row(info("Stremio Lean", "Linux, build ${Updates.current}")),
+            Row(info("Stremonino", "Linux, build ${Updates.current}")),
             Row(info("Player", Prefs.player)),
             Row(info("Settings folder", Store.dir.path)),
             Row(""),

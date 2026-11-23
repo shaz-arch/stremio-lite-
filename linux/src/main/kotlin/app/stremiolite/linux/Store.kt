@@ -10,11 +10,14 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
-/** Files in ~/.config/stremio-lean: the sign-in, settings, and caches of the account's data. */
+/** Files in ~/.config/stremonino (moved from ~/.config/stremio-lean on first run): the sign-in, settings, and caches of the account's data. */
 object Store {
     val dir: File by lazy {
         val base = System.getenv("XDG_CONFIG_HOME")?.takeIf { it.isNotBlank() } ?: (System.getProperty("user.home") + "/.config")
-        File(base, "stremio-lean").apply { mkdirs() }
+        val old = File(base, "stremio-lean")
+        val now = File(base, "stremonino")
+        if (!now.exists() && old.isDirectory) old.renameTo(now)
+        now.apply { mkdirs() }
     }
 
     fun file(name: String) = File(dir, name)
