@@ -74,17 +74,19 @@ object Share {
     }.getOrNull()
 
     fun screen(app: MainActivity): Screen {
-        if (Home.allAddons().isEmpty()) return Screen("Share my setup", listOf(Row("Your add-ons are still loading. Go back and try again in a moment.")))
+        if (Home.allAddons().isEmpty()) return Screen("Export my setup", listOf(Row("Your add-ons are still loading. Go back and try again in a moment.")))
         val p = payload(app)
         val link = encode(p)
         val streams = p.optBoolean("st")
         val s = Screen(
-            "Share my setup",
+            "Export my setup",
             listOf(
-                Row("For someone else's Stremio account: they install"),
-                Row("Stremonino, sign in with their own account, then"),
-                Row("scan this code with their phone's camera. It opens"),
-                Row("the app and asks before adding anything."),
+                Row("For someone else's Stremio account. On their phone:"),
+                Row("install Stremonino, sign in with their account, then"),
+                Row("point the phone's camera at this code. It opens"),
+                Row("Stremonino and asks before adding anything."),
+                Row("Their stick and other devices on that account get it"),
+                Row("too: it goes onto the account, not just the phone."),
                 Row("────────────────────"),
                 Row(info("Add-ons shared", "${p.optJSONArray("a")!!.length() + p.optJSONArray("r")!!.length()}")),
                 Row(info("Settings", "theme, clock, subtitles, hidden rows")),
@@ -92,8 +94,8 @@ object Share {
                 Row(info("Stream add-on", if (streams) "not shared (yours uses your TorBox)" else "none")),
                 Row("────────────────────"),
                 Row("Send it as a message instead", "►", action = {
-                    val text = "My Stremonino setup. Copy this whole line, then in Stremonino choose " +
-                        "'Use a setup someone shared' and paste it:\n$link"
+                    val text = "My Stremonino setup. On your phone, tap this link to open it in Stremonino, or copy it and choose " +
+                        "'Import a setup from another account' → 'Paste a link':\n$link"
                     runCatching {
                         app.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text), "Share setup"))
                     }.onFailure { app.toast("No app to share with on this device") }
@@ -116,6 +118,27 @@ object Share {
             return
         }
         app.push(receive(app, p))
+    }
+
+    /** Where to start an import: the camera on a phone, or a pasted link. */
+    fun importScreen(app: MainActivity): Screen {
+        val rows = mutableListOf(
+            Row("The setup goes onto the Stremio account you're signed"),
+            Row("in with (${Account.email(app).ifEmpty { "this profile" }}), so every device on that"),
+            Row("account gets it. Do it once, on any one of them."),
+            Row("────────────────────"),
+        )
+        if (app.isPhone) {
+            rows += Row("Easiest: point this phone's camera at their code")
+            rows += Row("(Export my setup on their device). It opens here.")
+        } else {
+            rows += Row("Easiest: on your phone, sign in to Stremonino with")
+            rows += Row("this same account and point the camera at their code.")
+            rows += Row("Then choose Reload my rows and add-ons here.")
+        }
+        rows += Row("────────────────────")
+        rows += Row("Paste a link they sent you", "►", action = { askPaste(app) })
+        return Screen("Import a setup", rows).also { it.position = rows.size - 1 }
     }
 
     fun askPaste(app: MainActivity) {

@@ -27,8 +27,8 @@ The app tells you when a new build is out, and updates itself from Settings.
 - **Following:** shows you start are followed automatically. **New episodes** and a **Calendar** list what's out and coming.
   The **Waiting list** tracks films and seasons that have no stream yet, with phone notifications when they're playable.
 - **MDBList / personal lists** from your add-ons show up as rows and count as followed.
-- **Share my setup:** a QR code or link that copies your rows and settings to another device or another person's account
-  (your own lists, sign-in and debrid-backed stream add-ons are not shared).
+- **Export / import a setup:** a QR code or link that copies your rows and settings onto another person's Stremio account
+  (scan it with their phone's camera; your own lists, sign-in and debrid-backed stream add-ons are not shared).
 - **Player:** VLC or Just Player on Android, mpv on Linux.
 - **Looks:** colour themes, clock, portrait layout on phones.
 

@@ -393,17 +393,18 @@ object Share {
     }.getOrNull()
 
     fun screen(): Screen {
-        if (Home.all().isEmpty()) return Screen("Share my setup", listOf(Row("Your add-ons are still loading. Go back and try again in a moment.")))
+        if (Home.all().isEmpty()) return Screen("Export my setup", listOf(Row("Your add-ons are still loading. Go back and try again in a moment.")))
         val p = payload()
         val link = encode(p)
         val streams = p.optBoolean("st")
         val s = Screen(
-            "Share my setup",
+            "Export my setup",
             listOf(
-                Row("For someone else's Stremio account: they install Stremonino,"),
-                Row("sign in with their own account, then scan the code with their"),
-                Row("phone, or paste the link in 'Use a setup someone shared'."),
-                Row("It asks before adding anything to their account."),
+                Row("For someone else's Stremio account. On their phone: install"),
+                Row("Stremonino, sign in with their account, then point the camera"),
+                Row("at this code. It opens Stremonino and asks before adding anything."),
+                Row("Or copy the link and send it: they paste it in"),
+                Row("'Import a setup from another account'."),
                 Row("────────────────────"),
                 Row(info("Add-ons shared", "${p.optJSONArray("a")!!.length() + p.optJSONArray("r")!!.length()}")),
                 Row(info("Settings", "theme, clock, subtitles, hidden rows")),
@@ -417,6 +418,22 @@ object Share {
         val code = qrLines(link)
         if (code.size <= 60) s.qr = code
         return s
+    }
+
+    /** Where to start an import: a phone's camera, or a pasted link. */
+    fun importScreen(): Screen {
+        val rows = listOf(
+            Row("The setup goes onto the Stremio account you're signed in with"),
+            Row("(${Account.email.ifEmpty { "this profile" }}), so every device on that account gets it."),
+            Row("Do it once, on any one of them."),
+            Row("────────────────────"),
+            Row("Easiest: on your phone, sign in to Stremonino with this same"),
+            Row("account and point the camera at their code. Then choose"),
+            Row("Reload my rows and add-ons here."),
+            Row("────────────────────"),
+            Row("Paste a link they sent you", "►", action = { askPaste() }),
+        )
+        return Screen("Import a setup", rows).also { it.pos = rows.size - 1 }
     }
 
     fun askPaste() {
