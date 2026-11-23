@@ -270,6 +270,7 @@ object Home {
             Row(info("Stremonino", "Linux, build ${Updates.current}")),
             Row(info("Player", Prefs.player)),
             Row(info("Settings folder", Store.dir.path)),
+            Row(info("Fire Stick install", "Downloader code 4200313")),
             Row(""),
             Row("A text-menu way to browse your Stremio add-ons and play"),
             Row("through mpv. Not made by or connected with Stremio."),

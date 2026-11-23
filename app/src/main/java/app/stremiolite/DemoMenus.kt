@@ -130,7 +130,7 @@ object DemoMenus {
 
     fun about() = Screen("About", listOf(
         Row(info("Stremonino", BuildConfig.VERSION_NAME)),
-        Row("Version 1 complete: all six steps built."),
+        Row(info("Install on a Fire Stick", "Downloader code 4200313")),
         Row("Source: github.com/shaz-arch/stremio-lite-"),
     ))
 

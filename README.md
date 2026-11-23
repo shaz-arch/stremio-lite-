@@ -7,8 +7,8 @@ It's a client for **your own Stremio account and add-ons**. It doesn't come with
 
 ## Install
 
-- **Fire Stick / Android TV:** in the Downloader app, enter
-  `github.com/shaz-arch/stremio-lite-/releases/latest/download/stremonino.apk`
+- **Fire Stick / Android TV:** in the Downloader app, enter the code **4200313**
+  (or the full link `github.com/shaz-arch/stremio-lite-/releases/latest/download/stremonino.apk`)
 - **Android phone:** open the same link in the browser and allow the install.
 - **Linux:** see [below](#linux-terminal-app).
 
