@@ -38,7 +38,18 @@ class MainActivity : Activity() {
         // The wide borders keep text inside a TV's overscan; a phone has no overscan, so use its full width.
         if (isPhone) {
             val d = resources.displayMetrics.density
-            findViewById<android.view.View>(R.id.root).setPaddingRelative((6 * d).toInt(), (10 * d).toInt(), (6 * d).toInt(), (8 * d).toInt())
+            val root = findViewById<android.view.View>(R.id.root)
+            // Add the phone's own bars (status bar, gesture bar, camera cut-out) to a small margin,
+            // so nothing sits underneath them in portrait or landscape.
+            fun pad(l: Int, t: Int, r: Int, b: Int) =
+                root.setPadding(l + (14 * d).toInt(), t + (10 * d).toInt(), r + (14 * d).toInt(), b + (12 * d).toInt())
+            pad(0, 0, 0, 0)
+            root.setOnApplyWindowInsetsListener { v, ins ->
+                @Suppress("DEPRECATION")
+                pad(ins.systemWindowInsetLeft, ins.systemWindowInsetTop, ins.systemWindowInsetRight, ins.systemWindowInsetBottom)
+                ins
+            }
+            root.requestApplyInsets()
         }
 
         titleView = findViewById(R.id.title)
