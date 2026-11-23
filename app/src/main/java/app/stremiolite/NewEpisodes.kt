@@ -55,7 +55,7 @@ object NewEpisodes {
             followedCount = shows.size
             val got = mutableListOf<Full>()
             fun finish() {
-                fulls = got.toList(); fullsAt = System.currentTimeMillis(); loading = false
+                fulls = got.toList(); fullsAt = System.currentTimeMillis(); loading = false; failed.clear()
                 val list = waiting.toList(); waiting.clear(); list.forEach { it() }
             }
             if (shows.isEmpty()) { finish(); return@async }
@@ -71,6 +71,27 @@ object NewEpisodes {
     }
 
     private var progressHook: (() -> Unit)? = null
+
+    private val fetching = HashSet<String>()
+    private val failed = HashSet<String>()
+
+    /**
+     * Adds shows followed since the last check (e.g. one you've just followed) without waiting
+     * for the hourly refresh. [done] runs as each arrives. Returns the ids still on their way.
+     */
+    fun ensure(app: MainActivity, shows: List<Pair<String, String>>, done: () -> Unit): Set<String> {
+        val have = fulls.map { it.id }.toSet()
+        shows.filter { it.first !in have && it.first !in fetching && it.first !in failed }.forEach { (id, _) ->
+            fetching += id
+            Net.async({ Details.loadFull("series", id) }) { r ->
+                fetching -= id
+                val f = r.getOrNull()
+                if (f == null) failed += id else if (fulls.none { it.id == f.id }) fulls = fulls + f
+                done()
+            }
+        }
+        return fetching.toSet()
+    }
 
     /** The followed shows' details from the last check. */
     fun shows(): List<Full> = fulls

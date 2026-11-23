@@ -244,6 +244,8 @@ object Waiting {
             NewEpisodes.load(app) { ready() }
             return rows
         }
+        // A show followed since the last check is fetched now, not at the next hourly refresh.
+        val coming = if (NewEpisodes.isLoading()) emptySet() else NewEpisodes.ensure(app, followed) { ready() }
         val infos = History.infos(app).associateBy { it.id }
         val ids = followed.map { it.first }.toSet()
         val watchedOf = NewEpisodes.shows().filter { it.id in ids }.associate { show ->
@@ -269,6 +271,11 @@ object Waiting {
             Following.progressText(sh, watchedOf[sh.id] ?: emptySet(), infos[sh.id])
         }
         section("Not started", bySection[Following.Section.NOT_STARTED]) { next(it) }
+        val pending = followed.filter { it.first in coming }
+        if (pending.isNotEmpty()) {
+            rows += Row("──── Checking ────")
+            pending.forEach { (_, name) -> rows += Row(name, "checking…") }
+        }
         return rows
     }
 

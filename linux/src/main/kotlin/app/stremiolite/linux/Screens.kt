@@ -869,7 +869,11 @@ object Waiting {
     fun summary(): String {
         val l = list()
         val ready = l.count { it.ready > 0 }
-        val shows = following().size
+        // Ended shows with nothing more coming aren't counted (same as the phone and stick).
+        val followed = following()
+        val ids = followed.map { it.first }.toSet()
+        val finished = NewEpisodes.shows().filter { it.id in ids && app.stremiolite.Following.section(it, emptySet(), null) == app.stremiolite.Following.Section.FINISHED }.map { it.id }.toSet()
+        val shows = followed.count { it.first !in finished }
         if (l.isEmpty() && shows == 0) return "empty"
         return listOfNotNull(
             if (ready > 0) "$ready ready" else null,
@@ -898,6 +902,7 @@ object Waiting {
             NewEpisodes.load { if (App.top()?.title == "Waiting for streams") App.replaceTop(screen()) }
         } else {
             val R = app.stremiolite.Releases
+            val coming = NewEpisodes.ensure(followed) { if (App.top()?.title == "Waiting for streams") App.replaceTop(screen()) }
             val infos = Lib.infos().associateBy { it.id }
             val ids = followed.map { it.first }.toSet()
             val shows = NewEpisodes.shows().filter { it.id in ids }
@@ -914,6 +919,11 @@ object Waiting {
                 app.stremiolite.Following.progressText(sh, watchedOf[sh.id] ?: emptySet(), infos[sh.id])
             }
             section("Not started", by[app.stremiolite.Following.Section.NOT_STARTED]) { next(it) }
+            val pending = followed.filter { it.first in coming }
+            if (pending.isNotEmpty()) {
+                rows += Row("──── Checking ────")
+                pending.forEach { (_, name) -> rows += Row(name, "checking…") }
+            }
         }
         rows += Row("Episodes out in the last week", "►", opens = { NewEpisodes.screen() })
         return Screen("Waiting for streams", rows)
@@ -954,7 +964,7 @@ object NewEpisodes {
             followed = shows.size
             val got = mutableListOf<Full>()
             fun finish() {
-                fulls = got.toList(); fullsAt = System.currentTimeMillis(); loading = false
+                fulls = got.toList(); fullsAt = System.currentTimeMillis(); loading = false; failed.clear()
                 val l = waiting.toList(); waiting.clear(); l.forEach { it() }
             }
             if (shows.isEmpty()) { finish(); return@async }
@@ -971,6 +981,25 @@ object NewEpisodes {
 
     fun shows(): List<Full> = fulls
     fun isLoading() = loading
+
+    private val fetching = HashSet<String>()
+    private val failed = HashSet<String>()
+
+    /** Adds shows followed since the last check without waiting for the hourly refresh; returns those still coming. */
+    fun ensure(shows: List<Pair<String, String>>, done: () -> Unit): Set<String> {
+        if (loading) return emptySet()
+        val have = fulls.map { it.id }.toSet()
+        shows.filter { it.first !in have && it.first !in fetching && it.first !in failed }.forEach { (id, _) ->
+            fetching += id
+            App.async({ MetaParse.fetch(Home.all(), "series", id) }) { r ->
+                fetching -= id
+                val f = r.getOrNull()
+                if (f == null) failed += id else if (fulls.none { it.id == f.id }) fulls = fulls + f
+                done()
+            }
+        }
+        return fetching.toSet()
+    }
 
     fun recentCount(): Int? = if (fullsAt == 0L) null else fulls.sumOf { app.stremiolite.Releases.recent(it).size }
     fun weekCount(): Int? = if (fullsAt == 0L) null else fulls.sumOf { app.stremiolite.Releases.upcoming(it, 7).size }
