@@ -178,6 +178,11 @@ object Look {
         Clock("Time only, 24 h", "HH:mm"),
         Clock("Day/month, 12 h", "dd/MM h:mm a"),
         Clock("Off", ""),
+        // With seconds (added after "Off" so existing choices keep their place in the shared settings).
+        Clock("Day/month, 24 h, seconds", "dd/MM HH:mm:ss"),
+        Clock("Weekday, day/month, 24 h, seconds", "EEE dd/MM HH:mm:ss"),
+        Clock("Time only, 24 h, seconds", "HH:mm:ss"),
+        Clock("Day/month, 12 h, seconds", "dd/MM h:mm:ss a"),
     )
 
     fun clock(): Clock = clocks.getOrElse(Prefs.clock) { clocks[0] }

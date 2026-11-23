@@ -146,7 +146,7 @@ class MainActivity : Activity() {
     private val clockHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var clockTick: Runnable? = null
 
-    /** Shows the time, then wakes again just after the next minute starts. Costs one redraw a minute. */
+    /** Shows the time, then wakes again just after the next minute (or second, when showing seconds) starts. */
     fun updateClock() {
         clockTick?.let { clockHandler.removeCallbacks(it) }
         val view = findViewById<TextView>(R.id.clock)
@@ -156,7 +156,9 @@ class MainActivity : Activity() {
         view.text = java.text.SimpleDateFormat(pattern, java.util.Locale.UK).format(java.util.Date())
         val tick = Runnable { updateClock() }
         clockTick = tick
-        clockHandler.postDelayed(tick, 60_000L - System.currentTimeMillis() % 60_000L + 200L)
+        // Only the clock's own few characters are redrawn, so even once a second costs next to nothing.
+        val step = if (pattern.contains("ss")) 1_000L else 60_000L
+        clockHandler.postDelayed(tick, step - System.currentTimeMillis() % step + 20L)
     }
 
     override fun onDestroy() {

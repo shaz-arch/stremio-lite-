@@ -174,7 +174,9 @@ object App {
                 val key = term.pollInput()
                 if (key != null) { handle(key); dirty = true }
                 toast?.let { if (it.second < now) { toast = null; dirty = true } }
-                if (now / 60_000 != lastMinute) { lastMinute = now / 60_000; dirty = true }
+                // Redraw when the clock changes: each minute, or each second when it shows seconds.
+                val step = if (Look.clock().pattern.contains("ss")) 1_000L else 60_000L
+                if (now / step != lastMinute) { lastMinute = now / step; dirty = true }
                 if (dirty) { dirty = false; draw() }
                 if (key == null) Thread.sleep(15)
             }
