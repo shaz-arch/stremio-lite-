@@ -217,7 +217,7 @@ object Waiting {
                 rows += Row(label, if (e.ready > 0) "ready  ►" else "waiting  ►", opens = { entry(app, e) })
             }
             // Shows you follow, by where you're up to (details from the shared hourly check).
-            rows += showSections(app)
+            rows += showSections(app) { if (app.isTop(screen)) { screen.rows = build(); app.refresh(screen) } }
             rows += Row("Episodes out in the last week", "►", opens = { NewEpisodes.screen(app) })
             return rows
         }
@@ -226,7 +226,7 @@ object Waiting {
         return screen
     }
 
-    private fun showSections(app: MainActivity): List<Row> {
+    private fun showSections(app: MainActivity, ready: () -> Unit): List<Row> {
         val rows = mutableListOf<Row>()
         val followed = following(app)
         if (followed.isEmpty()) {
@@ -237,7 +237,7 @@ object Waiting {
         if (!NewEpisodes.fresh() && NewEpisodes.shows().isEmpty()) {
             rows += Row("──── Shows: ${followed.size} followed ────")
             rows += Row(if (NewEpisodes.isLoading()) "Checking where you're up to…" else "Checking where you're up to… (back and in again to refresh)")
-            NewEpisodes.load(app) { app.refreshTop() }
+            NewEpisodes.load(app) { ready() }
             return rows
         }
         val infos = History.infos(app).associateBy { it.id }

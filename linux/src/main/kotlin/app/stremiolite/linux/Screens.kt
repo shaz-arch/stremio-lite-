@@ -781,8 +781,8 @@ object Waiting {
             rows += Row("None yet. Shows you start watching are followed automatically.")
         } else if (NewEpisodes.shows().isEmpty()) {
             rows += Row("──── Shows: ${followed.size} followed ────")
-            rows += Row("Checking where you're up to… (open this again in a moment)")
-            NewEpisodes.load { App.refresh() }
+            rows += Row("Checking where you're up to…")
+            NewEpisodes.load { if (App.top()?.title == "Waiting for streams") App.replaceTop(screen()) }
         } else {
             val R = app.stremiolite.Releases
             val infos = Lib.infos().associateBy { it.id }
