@@ -220,6 +220,7 @@ object Settings {
                 Row("Hide rows", "►", opens = { rowsScreen(app) }),
                 Row("──── Setup ────"),
                 Row("Your add-ons", (Home.addonCount()?.let { "$it  " } ?: "") + "►", opens = { Home.addonsScreen(app) }),
+                Row("Choose your rows (AIOMetadata)", "►", opens = { RowPicker.entry(app) }),
                 Row("Export my setup to another account", "►", opens = { Share.screen(app) }),
                 Row("Import a setup from another account", "►", opens = { Share.importScreen(app) }),
                 Row("Device check", "►", opens = { DemoMenus.deviceCheck(app) }),

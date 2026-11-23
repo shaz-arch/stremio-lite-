@@ -91,6 +91,7 @@ object App {
 
     fun top(): Screen? = stack.lastOrNull()
     fun isTop(s: Screen) = stack.lastOrNull() === s
+    fun inStack(s: Screen) = stack.any { it === s }
 
     private fun remember(s: Screen) { s.key?.let { places[it] = s.pos } }
 

@@ -288,6 +288,7 @@ class MainActivity : Activity() {
     }
 
     fun isTop(screen: Screen) = stack.lastOrNull() === screen
+    fun inStack(screen: Screen) = stack.any { it === screen }
 
     /** Applies the chosen theme and text size to the whole screen. */
     fun applyLook() {

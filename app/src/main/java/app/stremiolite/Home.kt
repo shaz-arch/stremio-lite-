@@ -6,6 +6,9 @@ package app.stremiolite
  */
 object Home {
     private var addons: List<Addon>? = null
+
+    /** The add-ons as last loaded (empty until Home has loaded them). */
+    fun loadedAddons(): List<Addon> = addons ?: emptyList()
     private var loading = false
     private var loadError: String? = null
 

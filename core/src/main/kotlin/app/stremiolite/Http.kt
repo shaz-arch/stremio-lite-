@@ -22,6 +22,22 @@ object Http {
     fun postJson(url: String, body: String, timeoutMs: Int = 15_000): String =
         request(url, body, timeoutMs, allowErrors = true)
 
+    /** Sends JSON with [method] (POST, PUT…) and returns the status code with the reply text. */
+    fun sendJson(url: String, method: String, body: String, timeoutMs: Int = 30_000): Pair<Int, String> {
+        val c = open(url, timeoutMs)
+        try {
+            c.requestMethod = method
+            c.doOutput = true
+            c.setRequestProperty("Content-Type", "application/json")
+            c.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+            val code = c.responseCode
+            val stream = if (code >= 400) c.errorStream else c.inputStream
+            return code to (stream?.use { it.readBytes().toString(Charsets.UTF_8) } ?: "")
+        } finally {
+            c.disconnect()
+        }
+    }
+
     fun getBytes(url: String, timeoutMs: Int = 15_000): ByteArray {
         val c = open(url, timeoutMs)
         try {
