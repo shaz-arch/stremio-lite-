@@ -184,6 +184,7 @@ object Home {
             rows += Row("Library", if (lib.isEmpty()) "empty" else "${lib.size}  ►", opens = { libraryScreen() })
             rows += Row("New episodes", NewEpisodes.recentCount()?.let { if (it == 0) "none  ►" else "$it  ►" } ?: "", opens = { NewEpisodes.screen() })
             rows += Row("Calendar", NewEpisodes.weekCount()?.let { if (it == 0) "nothing this week  ►" else "$it this week  ►" } ?: "", opens = { NewEpisodes.calendar() })
+            rows += Row("Watched", Watched.list().size.let { if (it == 0) "" else "$it  ►" }, opens = { watchedScreen() })
             rows += Row("Waiting for streams", Waiting.summary(), opens = { Waiting.screen() })
             rows += Row("────────────────────")
             if (list != null) {
@@ -271,6 +272,47 @@ object Home {
         }
         return Screen("Library", rows.ifEmpty { listOf(Row("Your library is empty.")) })
     }
+
+    private fun watchedScreen(): Screen {
+        lateinit var s: Screen
+        val day = java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.UK)
+        fun build() {
+            val list = Watched.list()
+            s.rows = if (list.isEmpty()) listOf(Row("Nothing finished yet. Films and episodes you watch to the end appear here."))
+            else list.map { e ->
+                val detail = listOf(e.label, if (e.time > 0) day.format(java.util.Date(e.time)) else "").filter { it.isNotBlank() }.joinToString("   ")
+                Row(e.name, "$detail  ►", opens = { watchedEntry(e) })
+            }
+            App.refresh()
+        }
+        s = Screen("Watched", emptyList())
+        build()
+        s.onShow = { build(); Lib.pull { build() } }
+        return s
+    }
+
+    /** One finished film or episode: open it, or take it off the watched list (here and on the account). */
+    private fun watchedEntry(e: Watched.Entry): Screen = Screen(
+        e.name + if (e.label.isNotEmpty()) " ${e.label}" else "",
+        listOf(
+            Row("Open", "►", opens = { Details.screenFor(e.id, e.type, e.name) }),
+            Row("Remove from watched", action = {
+                if (e.type == "movie") {
+                    Lib.unwatch(e.id, e.type, e.id, emptyList()); Watched.remove(e.id, "")
+                    App.toast("Removed from watched"); App.back()
+                } else {
+                    // Episodes: the show's episode order is needed to update the account's marks.
+                    App.toast("Removing…")
+                    App.async({ Details.load(e.type, e.id) }) { r ->
+                        r.onSuccess { show ->
+                            Lib.unwatch(e.id, e.type, e.videoId, MetaParse.stremioOrder(show)); Watched.remove(e.id, e.videoId)
+                            App.toast("Removed from watched"); App.back()
+                        }.onFailure { App.toast("Couldn't remove: ${Net.describe(it)}") }
+                    }
+                }
+            }),
+        ),
+    )
 
     private fun about() = Screen(
         "About",
@@ -462,6 +504,9 @@ object Search {
 
 object Details {
     private val cache = HashMap<String, Full>()
+
+    /** A title's full details (cached), for screens outside Details. */
+    fun load(type: String, id: String): Full = fetch(null, type, id)
 
     private fun fetch(from: Addon?, type: String, id: String): Full {
         cache["$type/$id"]?.let { return it }

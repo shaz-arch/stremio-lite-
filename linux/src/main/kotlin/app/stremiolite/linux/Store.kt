@@ -283,6 +283,7 @@ object Lib {
 
     fun record(w: Watch, pos: Long, dur: Long, positionKnown: Boolean, done: Boolean) {
         ensure()
+        if (done) Watched.add(w)
         val item = LibraryItems.update(
             existing = records[w.id], id = w.id, type = w.type, name = w.name, videoId = w.videoId,
             pos = pos, dur = dur, done = done, positionKnown = positionKnown,
@@ -355,5 +356,41 @@ object Lib {
                 done?.invoke()
             }.onFailure { e -> App.toast("Couldn't sync your history: ${Net.describe(e)}") }
         }
+    }
+}
+
+
+/**
+ * Films and episodes finished on this computer (newest first), like the phone's Watched list,
+ * plus films the account marks as watched from other devices.
+ */
+object Watched {
+    class Entry(val id: String, val type: String, val name: String, val videoId: String, val label: String, val time: Long)
+
+    private fun read(): List<Entry> {
+        val a = Store.readJson("watched.json").optJSONArray("list") ?: return emptyList()
+        return (0 until a.length()).mapNotNull { i ->
+            a.optJSONObject(i)?.let { Entry(it.optString("id"), it.optString("type"), it.optString("name"), it.optString("videoId"), it.optString("label"), it.optLong("time")) }
+        }
+    }
+
+    private fun write(list: List<Entry>) {
+        val a = JSONArray()
+        list.take(300).forEach { a.put(JSONObject().put("id", it.id).put("type", it.type).put("name", it.name).put("videoId", it.videoId).put("label", it.label).put("time", it.time)) }
+        Store.writeJson("watched.json", JSONObject().put("list", a))
+    }
+
+    fun add(w: Watch) {
+        val e = Entry(w.id, w.type, w.name, w.videoId, w.label, System.currentTimeMillis())
+        write(listOf(e) + read().filter { !(it.id == e.id && it.videoId == e.videoId) })
+    }
+
+    fun remove(id: String, videoId: String) = write(read().filter { !(it.id == id && (it.videoId == videoId || videoId.isEmpty())) })
+
+    fun list(): List<Entry> {
+        val mine = read()
+        val films = Lib.watchedFilms().filter { f -> mine.none { it.id == f.id } }
+            .map { Entry(it.id, it.type, it.name, it.id, "", it.updated) }
+        return (mine.filter { it.type != "movie" || Lib.filmWatched(it.id) } + films).sortedByDescending { it.time }
     }
 }
