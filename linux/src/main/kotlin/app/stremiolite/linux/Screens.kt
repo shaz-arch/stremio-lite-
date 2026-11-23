@@ -800,7 +800,7 @@ object Waiting {
             }
             section("Caught up: waiting for more", by[app.stremiolite.Following.Section.CAUGHT_UP]) { next(it) }
             section("Watching", by[app.stremiolite.Following.Section.WATCHING]) { sh ->
-                app.stremiolite.Following.progressText(sh, watchedOf[sh.id] ?: emptySet())
+                app.stremiolite.Following.progressText(sh, watchedOf[sh.id] ?: emptySet(), infos[sh.id])
             }
             section("Not started", by[app.stremiolite.Following.Section.NOT_STARTED]) { next(it) }
         }
@@ -863,7 +863,7 @@ object NewEpisodes {
 
     private fun epRow(f: Found, detail: String) = Row(
         f.show.name,
-        listOf("${MetaParse.epLabel(f.ep)}  ${f.ep.title}".trim(), detail).filter { it.isNotBlank() }.joinToString(" · "),
+        listOf(MetaParse.epLabel(f.ep), detail, f.ep.title).filter { it.isNotBlank() }.joinToString(" · "),
         opens = { Details.screenFor(f.show.id, "series", f.show.name) },
         play = {
             val w = Details.watchFor(f.show, f.ep)
@@ -887,7 +887,7 @@ object NewEpisodes {
             val rows = mutableListOf(status)
             list.forEach { f ->
                 val watched = if (f.ep.id in Lib.watchedEpisodes(f.show.id, MetaParse.stremioOrder(f.show))) "✓ " else ""
-                rows += epRow(f, watched + (if (R.opensSeason(f.ep)) "new season · " else "") + f.ep.released)
+                rows += epRow(f, watched + (if (R.opensSeason(f.ep)) "new season · " else "") + R.dayName(f.ep.released))
             }
             rows += Row("────────────────────")
             rows += Row("Calendar: coming up", "►", opens = { calendar() })

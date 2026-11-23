@@ -90,7 +90,7 @@ object NewEpisodes {
 
     private fun epRow(app: MainActivity, f: Found, detail: String) = Row(
         f.show.name,
-        listOf("${Details.epLabel(f.ep)}  ${f.ep.title}".trim(), detail).filter { it.isNotBlank() }.joinToString(" · "),
+        listOf(Details.epLabel(f.ep), detail, f.ep.title).filter { it.isNotBlank() }.joinToString(" · "),
         opens = { Details.episodeScreen(app, f.show, f.ep) },
         play = { app.push(Details.playEpisode(app, f.show, f.ep)) },
     )

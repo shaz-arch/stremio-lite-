@@ -199,8 +199,8 @@ object Waiting {
             if (keep.size != all.size) save(app, keep)
             val last = lastCheck(app)
             val rows = mutableListOf(
-                Row(if (last == 0L) "Not checked yet" else "Last checked ${java.text.SimpleDateFormat("dd/MM HH:mm", java.util.Locale.UK).format(java.util.Date(last))}" +
-                    if (isPhone(app)) " · checks every 6 hours, with a notification" else " · checks when the app opens"),
+                Row(if (last == 0L) "Not checked yet" else "Checked ${java.text.SimpleDateFormat("dd/MM HH:mm", java.util.Locale.UK).format(java.util.Date(last))}" +
+                    if (isPhone(app)) " · every 6 h, with alerts" else " · when the app opens"),
                 Row("Check now", action = {
                     app.toast("Checking…")
                     Net.async({ checkNow(app) }) { r ->
@@ -266,7 +266,7 @@ object Waiting {
         fun next(sh: Full) = Releases.upcoming(sh, 3650).firstOrNull()?.let { "${Details.epLabel(it)} ${Releases.dayName(it.released)}" } ?: "no date yet"
         section("Caught up: waiting for more", bySection[Following.Section.CAUGHT_UP]) { next(it) }
         section("Watching", bySection[Following.Section.WATCHING]) { sh ->
-            Following.progressText(sh, watchedOf[sh.id] ?: emptySet())
+            Following.progressText(sh, watchedOf[sh.id] ?: emptySet(), infos[sh.id])
         }
         section("Not started", bySection[Following.Section.NOT_STARTED]) { next(it) }
         return rows

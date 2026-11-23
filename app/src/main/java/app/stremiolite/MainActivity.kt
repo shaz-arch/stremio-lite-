@@ -461,6 +461,9 @@ class MainActivity : Activity() {
                 holder.label.setSingleLine(!stacked)
                 holder.label.maxLines = if (stacked) 2 else 1
                 holder.label.ellipsize = android.text.TextUtils.TruncateAt.END
+                holder.detail.setSingleLine(!stacked)
+                holder.detail.maxLines = if (stacked) 2 else 1
+                holder.detail.ellipsize = android.text.TextUtils.TruncateAt.END
                 holder.detail.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                     marginStart = if (stacked) 0 else (16 * context.resources.displayMetrics.density).toInt()
                 }

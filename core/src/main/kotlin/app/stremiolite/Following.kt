@@ -79,10 +79,20 @@ object Following {
         }
     }
 
-    /** "next S01E02 · 99 more" for a show you're part-way through. */
-    fun progressText(show: Full, watched: Set<String>): String {
-        val left = show.videos.filter { it.season > 0 && it.released.length == 10 && it.released <= Releases.day() && it.id !in watched }
+    /**
+     * Where you're up to in a show: "on S01E02 · 33 more" while an episode is in progress
+     * (from Continue watching), otherwise "next S01E03 · 32 more".
+     */
+    fun progressText(show: Full, watched: Set<String>, info: LibraryItems.Info? = null): String {
+        val out = show.videos.filter { it.season > 0 && it.released.length == 10 && it.released <= Releases.day() }
             .sortedWith(compareBy({ it.season }, { it.episode }))
+        val current = info?.takeIf { it.continuing }?.let { i -> out.indexOfFirst { it.id == i.videoId } }?.takeIf { it >= 0 }
+        if (current != null) {
+            val after = out.size - current - 1
+            val verb = if (info.upNext) "next" else "on"
+            return "$verb ${MetaParse.epLabel(out[current])}" + if (after > 0) " · $after more" else ""
+        }
+        val left = out.filter { it.id !in watched }
         val next = left.firstOrNull() ?: return "up to date"
         return "next ${MetaParse.epLabel(next)}" + if (left.size > 1) " · ${left.size - 1} more" else ""
     }
