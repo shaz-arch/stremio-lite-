@@ -226,11 +226,17 @@ class MainActivity : Activity() {
         updateCounter(screen.position)
     }
 
+    /** A touch device that isn't a TV (phones and tablets). */
+    val isPhone: Boolean by lazy {
+        packageManager.hasSystemFeature("android.hardware.touchscreen") && !packageManager.hasSystemFeature("android.software.leanback")
+    }
+
     /** Where the cursor is on the current screen. */
     fun cursor(): Int = list.selectedItemPosition
 
     private fun showImage(screen: Screen) {
-        val image = screen.image
+        // The side picture (the sign-in QR code) is for scanning a TV with a phone; on a phone it only takes up room.
+        val image = screen.image?.takeIf { !isPhone && !narrow }
         if (image != null) {
             if (sideImage.visibility != View.VISIBLE || sideImage.tag !== image) {
                 sideImage.setImageBitmap(image)
@@ -284,7 +290,7 @@ class MainActivity : Activity() {
         updateClock()
         // Touch screens have no cursor to show; the bar would stay where a finger last pressed.
         list.selector = android.graphics.drawable.ColorDrawable(
-            if (packageManager.hasSystemFeature("android.hardware.touchscreen") && !packageManager.hasSystemFeature("android.software.leanback")) android.graphics.Color.TRANSPARENT else t.bar,
+            if (isPhone) android.graphics.Color.TRANSPARENT else t.bar,
         )
         adapter.notifyDataSetChanged()
     }

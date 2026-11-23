@@ -14,7 +14,14 @@ object SignIn {
 
     /** [addingProfile]: signing in an extra account as a new profile (reached from "Add a profile"). */
     fun screen(app: MainActivity, addingProfile: Boolean = false): Screen {
-        val linkRow = Row("   getting a code…")
+        val phone = app.isPhone
+        var fullLink = ""
+        fun openLink() {
+            if (fullLink.isEmpty()) return
+            runCatching { app.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(fullLink))) }
+                .onFailure { app.toast("No browser to open $fullLink") }
+        }
+        val linkRow = Row("   getting a code…", action = { openLink() })
         val codeRow = Row("   ")
         val status = Row("")
         lateinit var screen: Screen
@@ -61,11 +68,12 @@ object SignIn {
             Net.async({ Stremio.linkCreate() }) { r ->
                 r.onSuccess { lc ->
                     code = lc.code
+                    fullLink = lc.link.ifEmpty { "https://www.stremio.com" }.let { if (it.startsWith("http")) it else "https://$it" }
                     startedAt = System.currentTimeMillis()
                     linkRow.label = "   " + lc.link.ifEmpty { "www.stremio.com" }
                         .removePrefix("https://").removePrefix("http://")
                     codeRow.label = "   " + lc.code
-                    show("Waiting for you to approve it on your phone…")
+                    show(if (phone) "Waiting for approval. Come back here after approving." else "Waiting for you to approve it on your phone…")
                     loadQr(lc.qrcode) { bmp ->
                         if (code == lc.code) {
                             screen.image = bmp
@@ -81,7 +89,17 @@ object SignIn {
 
         screen = Screen(
             title = if (addingProfile) "Add a profile: sign in" else "Sign in to Stremio",
-            rows = listOf(
+            rows = if (phone) listOf(
+                Row("1. Tap to open the approval page:", action = { openLink() }),
+                linkRow,
+                Row("2. Sign in there and approve code:"),
+                codeRow,
+                Row("────────────────────"),
+                status,
+                Row("────────────────────"),
+                Row("Get a new code", action = { newCode() }),
+                Row("Sign in with email and password instead", action = { app.askEmailAndPassword() }),
+            ) else listOf(
                 Row("1. On your phone, scan the code or open:"),
                 linkRow,
                 Row("2. Sign in to Stremio and approve this code:"),
