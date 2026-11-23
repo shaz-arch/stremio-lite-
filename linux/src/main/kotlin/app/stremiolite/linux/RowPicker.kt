@@ -63,6 +63,13 @@ object RowPicker {
         }
     }
 
+    /** "Genres > Movies: Horror" shows as "Movies: Horror" under its Genres heading. */
+    private fun short(item: AioRows.Item): String {
+        val n = item.name
+        val i = n.indexOf(" > ")
+        return if (i in 1..24) n.substring(i + 3) else app.stremiolite.Folders.split(n).let { (p, r) -> if (p != null) r else n }
+    }
+
     private fun mark(s: AioRows.State) = when (s) { AioRows.State.OFF -> "   "; AioRows.State.ON -> "✓  "; AioRows.State.HOME -> "✓⌂ " }
     private fun onOrder(l: AioRows.Loaded) = AioRows.items(l).filter { it.state != AioRows.State.OFF }.joinToString(",") { it.id }
 
@@ -95,9 +102,9 @@ object RowPicker {
             rows += Row("──── $folder ────")
             items.forEach { item ->
                 lateinit var row: Row
-                row = Row(mark(item.state) + item.name, item.typeLabel + " · " + item.state.label, action = {
+                row = Row(mark(item.state) + short(item), item.typeLabel + " · " + item.state.label, action = {
                     item.state = item.next()
-                    row.label = mark(item.state) + item.name
+                    row.label = mark(item.state) + short(item)
                     row.detail = item.typeLabel + " · " + item.state.label
                     saveRow.detail = if (changed()) "unsaved" else ""
                     screen.tag = counts()
@@ -106,7 +113,7 @@ object RowPicker {
                 rows += row
             }
         }
-        screen = Screen(if (a.stickRows) "Stremonino's rows" else "Stremio's rows", rows, tag = counts())
+        screen = Screen(if (a.stickRows) "Stremonino's rows" else "Your rows", rows, tag = counts())
         screen.onShow = { screen.tag = counts(); saveRow.detail = if (changed()) "unsaved" else ""; App.refresh() }
         screen.onHide = { if (changed() && !saved && !App.inStack(screen)) App.toast("Your row changes weren't saved") }
         return screen

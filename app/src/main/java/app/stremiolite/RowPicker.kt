@@ -85,6 +85,13 @@ object RowPicker {
         }
     }
 
+    /** "Genres > Movies: Horror" shows as "Movies: Horror" under its Genres heading. */
+    private fun short(item: AioRows.Item): String {
+        val n = item.name
+        val i = n.indexOf(" > ")
+        return if (i in 1..24) n.substring(i + 3) else app.stremiolite.Folders.split(n).let { (p, r) -> if (p != null) r else n }
+    }
+
     private fun mark(s: AioRows.State) = when (s) { AioRows.State.OFF -> "   "; AioRows.State.ON -> "✓  "; AioRows.State.HOME -> "✓⌂ " }
 
     private fun picker(app: MainActivity, a: Addon, l: AioRows.Loaded, password: String): Screen {
@@ -107,9 +114,9 @@ object RowPicker {
                 rows += Row("──── $folder ────")
                 items.forEach { item ->
                     lateinit var row: Row
-                    row = Row(mark(item.state) + item.name, item.typeLabel + " · " + item.state.label, action = {
+                    row = Row(mark(item.state) + short(item), item.typeLabel + " · " + item.state.label, action = {
                         item.state = item.next()
-                        row.label = mark(item.state) + item.name
+                        row.label = mark(item.state) + short(item)
                         row.detail = item.typeLabel + " · " + item.state.label
                         saveRow.detail = if (changed()) "unsaved  ►" else ""
                         app.refresh(screen)
@@ -120,7 +127,7 @@ object RowPicker {
             saveRow.detail = if (changed()) "unsaved  ►" else ""
             return rows
         }
-        screen = Screen(if (a.stickRows) "Stremonino's rows" else "Stremio's rows", build(), tag = counts())
+        screen = Screen(if (a.stickRows) "Stremonino's rows" else "Your rows", build(), tag = counts())
         screen.onShow = { screen.tag = counts(); saveRow.detail = if (changed()) "unsaved  ►" else ""; app.refresh(screen) }
         // Leaving with changes not saved: say so, since nothing reaches AIOMetadata until Save.
         screen.onHide = { if (changed() && !saved && !app.inStack(screen)) app.toast("Your row changes weren't saved") }
