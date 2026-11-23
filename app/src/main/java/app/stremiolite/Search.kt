@@ -6,7 +6,7 @@ import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import java.net.URLEncoder
 
-/** Search every add-on catalogue that supports it, all at once, results grouped by catalogue. */
+/** Search every add-on catalogue that supports it, all at once: best matches, then collections, films and shows. */
 object Search {
     private var lastQuery = ""
 
@@ -81,6 +81,15 @@ object Search {
         input.requestFocus()
     }
 
+    private fun row(app: MainActivity, p: Pair<Addon, Meta>): Row {
+        val (a, m) = p
+        val detail = if (SearchRank.isCollection(m.type)) listOf(m.year, "Collection").filter { it.isNotBlank() }.joinToString("  ") else Catalogs.detail(m)
+        return Row(m.name, detail, opens = { Details.screen(app, a, m) }, play = {
+            if (m.type == "movie") Streams.prefetch(app, m.type, m.id)
+            app.push(Details.screen(app, a, m, autoPlay = true))
+        })
+    }
+
     private fun results(app: MainActivity, query: String): Screen {
         val sources = Home.rowAddons().filter { !it.isLocal }.flatMap { a ->
             a.catalogs.filter { it.searchable }.map { c -> a to c }
@@ -102,18 +111,22 @@ object Search {
             val rows = mutableListOf(summary, Row("New search", action = { start(app) }))
             errors.forEach { rows += Row(it) }
             val seen = HashSet<String>()
-            sources.forEachIndexed { i, (a, c) ->
-                val metas = results[i]?.filter { seen.add(it.type + ":" + it.id) } ?: return@forEachIndexed
-                if (metas.isEmpty()) return@forEachIndexed
-                rows += Row("──── ${c.name} · ${Catalogs.typeLabel(c.type)} ────")
-                metas.take(25).forEach { m ->
-                    rows += Row(m.name, Catalogs.detail(m), opens = { Details.screen(app, a, m) }, play = {
-                        if (m.type == "movie") Streams.prefetch(app, m.type, m.id)
-                        app.push(Details.screen(app, a, m, autoPlay = true))
-                    })
-                }
+            val all = mutableListOf<Pair<Addon, Meta>>()
+            sources.forEachIndexed { i, (a, _) -> results[i]?.forEach { m -> if (seen.add(m.type + ":" + m.id)) all += a to m } }
+            val g = SearchRank.group(all, query) { it.second }
+            if (g.best.isNotEmpty()) {
+                rows += Row("──── Best matches ────")
+                g.best.forEach { rows += row(app, it) }
             }
-            if (answered >= sources.size && rows.size == 2 + errors.size && sources.isNotEmpty()) {
+            if (all.isNotEmpty()) rows += Row("────────────────────")
+            fun group(name: String, list: List<Pair<Addon, Meta>>) {
+                if (list.isNotEmpty()) rows += Row(name, "${list.size}  ►", opens = { Screen("$name: $query", list.map { row(app, it) }) })
+            }
+            group("Collections", g.collections)
+            group("Films", g.films)
+            group("Shows", g.shows)
+            group("Other", g.other)
+            if (answered >= sources.size && all.isEmpty() && sources.isNotEmpty()) {
                 rows += Row("Nothing found.")
             }
             screen.rows = rows

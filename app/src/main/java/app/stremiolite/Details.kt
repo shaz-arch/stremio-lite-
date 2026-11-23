@@ -257,19 +257,31 @@ object Details {
                 rows += Row(name, "$count  ►", opens = { episodes(app, f, name, eps) })
             }
         } else if (f.videos.isNotEmpty()) {
-            // e.g. a film collection: each part is its own title
-            rows += Row("Parts in this collection: ${f.videos.size}")
-            f.videos.forEach { v ->
-                rows += Row(v.title.ifEmpty { v.id }, v.released.take(4), opens = { Streams.screen(app, "movie", v.id, v.title.ifEmpty { f.name }) })
+            // A film collection: each part is a film of its own, in release order, with ✓ on the ones watched.
+            val marks = History.marks(app)
+            rows += Row("Films in this collection: ${f.videos.size}")
+            SearchRank.parts(f.videos).forEach { v ->
+                val name = v.title.ifEmpty { v.id }
+                val own = v.id.startsWith("tt") || v.id.startsWith("tmdb:")
+                rows += Row((if (marks[v.id] == "✓") "✓ " else "") + name, v.released.take(4), opens = {
+                    if (own) screenFor(app, v.id, "movie", name, v.released.take(4)) ?: Streams.screen(app, "movie", v.id, name)
+                    else Streams.screen(app, "movie", v.id, name)
+                }, play = {
+                    if (own) screenFor(app, v.id, "movie", name, v.released.take(4), autoPlay = true)?.let { app.push(it) }
+                    else app.push(Streams.screen(app, "movie", v.id, name))
+                })
             }
         } else {
             rows += playRows(app, f, null, f.name)
         }
+        val collection = !isShow && f.videos.isNotEmpty()
         rows += Row("────────────────────")
-        rows += libraryRows(app, f)
-        rows += Row("────────────────────")
+        if (!collection) {
+            rows += libraryRows(app, f)
+            rows += Row("────────────────────")
+        }
 
-        rows += Row(info("Type", if (isShow) "Series" else Catalogs.typeLabel(f.type).removeSuffix("s")))
+        rows += Row(info("Type", if (isShow) "Series" else if (collection) "Collection" else Catalogs.typeLabel(f.type).removeSuffix("s")))
         if (f.year.isNotBlank()) rows += Row(info("Year", f.year))
         if (f.rating.isNotBlank()) rows += Row(info("IMDb rating", "★ ${f.rating}"))
         if (f.runtime.isNotBlank()) rows += Row(info("Runtime", f.runtime))

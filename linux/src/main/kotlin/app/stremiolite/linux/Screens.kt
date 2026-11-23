@@ -6,6 +6,7 @@ import app.stremiolite.Full
 import app.stremiolite.Http
 import app.stremiolite.Meta
 import app.stremiolite.MetaParse
+import app.stremiolite.SearchRank
 import app.stremiolite.Stremio
 import app.stremiolite.Video
 import com.google.zxing.BarcodeFormat
@@ -475,11 +476,28 @@ object Search {
         val sources = Folders.rowAddons(Home.all()).filter { !it.isLocal }.flatMap { a -> a.catalogs.filter { it.searchable }.map { a to it } }
         val found = LinkedHashMap<String, Pair<Addon, Meta>>()
         var answered = 0
+        fun row(p: Pair<Addon, Meta>): Row {
+            val (a, m) = p
+            return if (SearchRank.isCollection(m.type)) Row(m.name, listOf(m.year, "Collection").filter { it.isNotBlank() }.joinToString("  ") + "  ►", opens = { Details.screen(a, m) })
+            else Catalogs.row(a, m)
+        }
         fun build() {
             val rows = mutableListOf<Row>()
             rows += Row(if (answered < sources.size) "Searching… ${answered} of ${sources.size}" else "${found.size} results for \"$q\"")
-            rows += Row("────────────────────")
-            found.values.forEach { (a, m) -> rows += Catalogs.row(a, m) }
+            val g = SearchRank.group(found.values.toList(), q) { it.second }
+            if (g.best.isNotEmpty()) {
+                rows += Row("──── Best matches ────")
+                g.best.forEach { rows += row(it) }
+            }
+            if (found.isNotEmpty()) rows += Row("────────────────────")
+            fun group(name: String, list: List<Pair<Addon, Meta>>) {
+                if (list.isNotEmpty()) rows += Row(name, "${list.size}  ►", opens = { Screen("$name: $q", list.map { row(it) }) })
+            }
+            group("Collections", g.collections)
+            group("Films", g.films)
+            group("Shows", g.shows)
+            group("Other", g.other)
+            if (answered >= sources.size && found.isEmpty() && sources.isNotEmpty()) rows += Row("Nothing found.")
             s.rows = rows
             App.refresh()
         }
@@ -577,10 +595,39 @@ object Details {
                 rows += Row("Season $n", (if (left == 0) "✓ " else "") + "${eps.size} episodes  ►", opens = { episodes(f, n, eps) })
             }
         } else if (f.videos.isNotEmpty()) {
+            // A film collection: each part is a film of its own, in release order, with ✓ on the ones watched.
+            rows += Row("Films in this collection: ${f.videos.size}")
             rows += Row("────────────────────")
-            f.videos.forEach { v -> rows += Row(v.title.ifEmpty { v.id }, "►", opens = { episode(f, v) }) }
+            SearchRank.parts(f.videos).forEach { v ->
+                val name = v.title.ifEmpty { v.id }
+                val own = v.id.startsWith("tt") || v.id.startsWith("tmdb:")
+                rows += Row((if (Lib.filmWatched(v.id)) "✓ " else "") + name, v.released.take(4) + "  ►",
+                    opens = { if (own) screenFor(v.id, "movie", name) else episode(f, v) },
+                    play = { if (own) App.push(screenFor(v.id, "movie", name, autoPlay = true)) else App.push(episode(f, v)) })
+            }
+        }
+        val collection = !isShow(f) && f.videos.isNotEmpty()
+        rows += Row("────────────────────")
+        if (!collection) rows += libraryRows(f)
+        rows += Row("────────────────────")
+        rows += Row(info("Type", if (collection) "Collection" else if (f.type == "movie") "Movie" else if (f.type == "series") "Series" else f.type))
+        if (f.year.isNotBlank()) rows += Row(info("Year", f.year))
+        if (f.rating.isNotBlank()) rows += Row(info("IMDb rating", "★ ${f.rating}"))
+        if (f.runtime.isNotBlank()) rows += Row(info("Runtime", f.runtime))
+        if (f.genres.isNotEmpty()) rows += Row(info("Genres", f.genres.joinToString(", ")))
+        if (f.director.isNotEmpty()) rows += Row(info("Director", f.director.joinToString(", ")))
+        if (f.cast.isNotEmpty()) rows += Row(info("Cast", f.cast.take(5).joinToString(", ")))
+        if (f.description.isNotBlank()) {
+            rows += Row("────────────────────")
+            MetaParse.wrap(f.description, App.columns()).forEach { rows += Row(it) }
         }
         rows += Row("────────────────────")
+        rows += Row(info("Details from", f.source.substringBefore('|').trim()))
+        return rows
+    }
+
+    private fun libraryRows(f: Full): List<Row> {
+        val rows = mutableListOf<Row>()
         lateinit var lib: Row
         lib = Row(if (Lib.inLibrary(f.id)) "Remove from library" else "Add to library", action = {
             val added = Lib.toggleLibrary(f.id, f.type, f.name)
@@ -615,20 +662,6 @@ object Details {
             })
             rows += wait
         }
-        rows += Row("────────────────────")
-        rows += Row(info("Type", if (f.type == "movie") "Movie" else if (f.type == "series") "Series" else f.type))
-        if (f.year.isNotBlank()) rows += Row(info("Year", f.year))
-        if (f.rating.isNotBlank()) rows += Row(info("IMDb rating", "★ ${f.rating}"))
-        if (f.runtime.isNotBlank()) rows += Row(info("Runtime", f.runtime))
-        if (f.genres.isNotEmpty()) rows += Row(info("Genres", f.genres.joinToString(", ")))
-        if (f.director.isNotEmpty()) rows += Row(info("Director", f.director.joinToString(", ")))
-        if (f.cast.isNotEmpty()) rows += Row(info("Cast", f.cast.take(5).joinToString(", ")))
-        if (f.description.isNotBlank()) {
-            rows += Row("────────────────────")
-            MetaParse.wrap(f.description, App.columns()).forEach { rows += Row(it) }
-        }
-        rows += Row("────────────────────")
-        rows += Row(info("Details from", f.source.substringBefore('|').trim()))
         return rows
     }
 
