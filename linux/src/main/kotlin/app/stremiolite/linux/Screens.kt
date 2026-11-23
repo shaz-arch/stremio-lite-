@@ -818,6 +818,12 @@ object Settings {
                     Prefs.autoNext = !Prefs.autoNext; Prefs.syncOut(); build()
                 }),
                 Row("────────────────────"),
+                Row("Theme, text size and clock", "◄ ${if (Prefs.lookLocal) "This computer only" else "Same on all devices"} ►", action = {
+                    Prefs.lookLocal = !Prefs.lookLocal
+                    if (!Prefs.lookLocal) Prefs.syncOut()
+                    App.toast(if (Prefs.lookLocal) "This computer keeps its own look" else "Your look is now shared with your other devices")
+                    build()
+                }),
                 Row("Theme", "◄ ${Look.theme().name} ►", action = {
                     Prefs.theme = (Prefs.theme + 1) % themes.size; Prefs.syncOut(); build()
                 }),

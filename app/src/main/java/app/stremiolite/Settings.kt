@@ -36,14 +36,20 @@ object Settings {
     // stick share them. The player and text size stay per device: a phone and a TV want different ones.
 
     private const val SYNC_ID = "stremiolite:settings"
-    private val INT_KEYS = listOf("subLang", "theme", "clock")
+    private val INT_KEYS = listOf("subLang", "theme", "clock", "textSize")
     private val BOOL_KEYS = listOf("autoNext", "hideWatched")
+    /** The look: shared by default, or kept to this device ("lookLocal", which itself never syncs). */
+    private val LOOK_KEYS = setOf("theme", "clock", "textSize")
+
+    fun lookLocal(c: Context) = prefs(c).getBoolean("lookLocal", false)
+
+    private fun shares(c: Context, k: String) = k !in LOOK_KEYS || !lookLocal(c)
 
     /** The shared settings as JSON (also what "Share my setup" sends). */
     fun exportShared(c: Context): JSONObject {
         val p = prefs(c)
         val o = JSONObject()
-        INT_KEYS.forEach { k -> if (p.contains(k)) o.put(k, p.getInt(k, 0)) }
+        INT_KEYS.forEach { k -> if (p.contains(k) && shares(c, k)) o.put(k, p.getInt(k, 0)) }
         BOOL_KEYS.forEach { k -> if (p.contains(k)) o.put(k, p.getBoolean(k, false)) }
         o.put("hiddenRows", JSONArray(hiddenRows(c).toList()))
         return o
@@ -64,9 +70,14 @@ object Settings {
     fun syncOut(c: Context) {
         val p = prefs(c)
         val now = System.currentTimeMillis()
-        val o = exportShared(c).put("updated", now)
-        p.edit().putLong("syncedAt", now).apply()
         val item = History.rawRemote(c, SYNC_ID)?.let { runCatching { JSONObject(it) }.getOrNull() } ?: Sync.newItem(SYNC_ID, "other", "{}")
+        // Start from what's on the account, so settings this device keeps to itself (or doesn't have)
+        // stay as the other devices left them.
+        val o = runCatching { JSONObject(item.optString("name")) }.getOrNull() ?: JSONObject()
+        val mine = exportShared(c)
+        mine.keys().forEach { k -> o.put(k, mine.get(k)) }
+        o.put("updated", now)
+        p.edit().putLong("syncedAt", now).apply()
         item.put("name", o.toString()).put("removed", true).put("temp", false).put("_mtime", Sync.iso(now))
         History.putRemote(c, item)
     }
@@ -88,7 +99,7 @@ object Settings {
         val remoteHidden = o.optJSONArray("hiddenRows")?.let { a -> (0 until a.length()).map { a.optString(it) }.toSet() } ?: emptySet()
         val hidden = if (first) remoteHidden + hiddenRows(c) else remoteHidden
         val e = p.edit()
-        INT_KEYS.forEach { k -> if (o.has(k)) e.putInt(k, o.optInt(k)) }
+        INT_KEYS.forEach { k -> if (o.has(k) && shares(c, k)) e.putInt(k, o.optInt(k)) }
         BOOL_KEYS.forEach { k -> if (o.has(k)) e.putBoolean(k, o.optBoolean(k)) }
         e.putStringSet("hiddenRows", hidden)
         e.putLong("syncedAt", updated).apply()
@@ -149,8 +160,10 @@ object Settings {
         lateinit var sizeRow: Row
         lateinit var clockRow: Row
         lateinit var watchedRow: Row
+        lateinit var lookRow: Row
 
         fun show() {
+            lookRow.detail = "◄ ${if (lookLocal(app)) "This device only" else "Same on all devices"} ►"
             themeRow.detail = "◄ ${Look.theme(app).name} ►"
             sizeRow.detail = "◄ ${Look.size(app).name} ►"
             clockRow.detail = "◄ ${Look.clock(app).name} ►"
@@ -170,7 +183,15 @@ object Settings {
             }
         })
         themeRow = Row("Theme", action = { Look.nextTheme(app); app.applyLook(); show() })
-        sizeRow = Row("Text size", action = { Look.nextSize(app); app.applyLook(); show() })
+        sizeRow = Row("Text size", action = { Look.nextSize(app); app.applyLook(); syncOut(app); show() })
+        lookRow = Row("Theme, text size and clock", action = {
+            val local = !lookLocal(app)
+            prefs(app).edit().putBoolean("lookLocal", local).apply()
+            // Back to shared: this device's look becomes everyone's.
+            if (!local) syncOut(app)
+            app.toast(if (local) "This device keeps its own look" else "Your look is now shared with your other devices")
+            show()
+        })
         clockRow = Row("Clock", action = { Look.nextClock(app); app.updateClock(); show() })
         watchedRow = Row("Watched films in lists", action = { prefs(app).edit().putBoolean("hideWatched", !hideWatched(app)).apply(); syncOut(app); show() })
         nextRow = Row("Auto-play next episode", action = {
@@ -195,7 +216,7 @@ object Settings {
             listOf(
                 Row("Press OK on a line to change it"), Row("────────────────────"), playerRow, langRow, nextRow,
                 Row("────────────────────"),
-                themeRow, sizeRow, clockRow, watchedRow,
+                lookRow, themeRow, sizeRow, clockRow, watchedRow,
                 Row("Hide rows", "►", opens = { rowsScreen(app) }),
                 Row("────────────────────"),
                 Row(info("App version", BuildConfig.VERSION_NAME)),

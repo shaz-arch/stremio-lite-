@@ -131,6 +131,14 @@ object Prefs {
 
     /** Shared settings this build knows; one this computer has never had is always taken from the account. */
     private val SHARED = listOf("theme", "subLang", "autoNext", "clock", "hideWatched")
+    /** The look: shared by default, or kept to this computer ("lookLocal", which itself never syncs). */
+    private val LOOK = setOf("theme", "clock")
+
+    var lookLocal: Boolean
+        get() = data().optBoolean("lookLocal", false)
+        set(v) { data().put("lookLocal", v); save() }
+
+    private fun shares(k: String) = k !in LOOK || !lookLocal
 
     /** Takes the account's shared settings if they're newer than this computer's. */
     fun syncIn(): Boolean {
@@ -141,7 +149,7 @@ object Prefs {
         val newer = updated > syncedAt
         var changed = false
         for (k in SHARED) {
-            if (!o.has(k) || (!newer && d.has(k))) continue
+            if (!shares(k) || !o.has(k) || (!newer && d.has(k))) continue
             if (d.opt(k) != o.opt(k)) { d.put(k, o.opt(k)); changed = true }
         }
         if (newer) o.optJSONArray("hiddenRows")?.let { d.put("hiddenRows", it); changed = true }
@@ -157,7 +165,7 @@ object Prefs {
         val o = raw?.let { runCatching { JSONObject(it.optString("name")) }.getOrNull() } ?: JSONObject()
         // Only settings chosen on this computer (or already taken from the account): never a default.
         val d = data()
-        SHARED.forEach { k -> if (d.has(k)) o.put(k, d.opt(k)) }
+        SHARED.forEach { k -> if (d.has(k) && shares(k)) o.put(k, d.opt(k)) }
         o.put("hiddenRows", JSONArray(hiddenRows.toList())).put("updated", now)
         syncedAt = now
         val item = raw ?: Sync.newItem(SYNC_ID, "other", "{}")
