@@ -2,6 +2,8 @@ package app.stremiolite.linux
 
 import app.stremiolite.Addon
 import app.stremiolite.Folders
+import app.stremiolite.DetailExtras
+import app.stremiolite.RowSource
 import app.stremiolite.Full
 import app.stremiolite.Http
 import app.stremiolite.Meta
