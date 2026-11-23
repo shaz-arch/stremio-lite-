@@ -25,6 +25,8 @@ object Look {
         Theme("Terminal green", Color.BLACK, Color.rgb(51, 255, 102), Color.rgb(0, 170, 68), Color.rgb(153, 255, 153), Color.rgb(51, 255, 102), Color.BLACK),
         Theme("Amber", Color.rgb(16, 10, 0), Color.rgb(255, 176, 0), Color.rgb(190, 120, 0), Color.rgb(255, 214, 102), Color.rgb(255, 176, 0), Color.BLACK),
         Theme("Black & white", Color.BLACK, Color.WHITE, Color.rgb(190, 190, 190), Color.WHITE, Color.WHITE, Color.BLACK),
+        // Newsprint: dark ink on grey paper, a charcoal bar for the cursor.
+        Theme("Newspaper grey", Color.rgb(214, 212, 206), Color.rgb(26, 26, 26), Color.rgb(96, 96, 92), Color.BLACK, Color.rgb(58, 58, 56), Color.rgb(236, 234, 228)),
     )
 
     class Size(val name: String, val sp: Float)
