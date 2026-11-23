@@ -518,8 +518,8 @@ object DeviceCheck {
         val mb = 1024 * 1024
         val player = firstLine(Prefs.player, "--version")?.take(50) ?: "NOT FOUND (${Prefs.player})"
         val clip = listOf("wl-copy", "xclip", "xsel").firstOrNull { t -> firstLine("which", t)?.startsWith("/") == true } ?: "none (links are shown to copy by hand)"
-        val api = Row(info("Stremio account server", "checking…"))
-        val le = Row(info("Let's Encrypt sites", "checking…"))
+        val api = Row(info("Stremio server", "checking…"))
+        val le = Row(info("Secure sites test", "checking…"))
         fun test(row: Row, label: String, url: String) {
             App.async({ val t0 = System.currentTimeMillis(); Http.get(url, 10_000, allowErrors = true); System.currentTimeMillis() - t0 }) { r ->
                 row.label = info(label, r.fold({ "OK $it ms" }, { "FAILED: ${Net.describe(it)}" })); App.refresh()
@@ -545,8 +545,8 @@ object DeviceCheck {
             }),
         ))
         s.onShow = {
-            test(api, "Stremio account server", "https://api.strem.io/api/")
-            test(le, "Let's Encrypt sites", "https://valid-isrgrootx1.letsencrypt.org/")
+            test(api, "Stremio server", "https://api.strem.io/api/")
+            test(le, "Secure sites test", "https://valid-isrgrootx1.letsencrypt.org/")
         }
         return s
     }
