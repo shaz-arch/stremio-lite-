@@ -484,6 +484,10 @@ class MainActivity : Activity() {
                 holder.sp = sp
                 holder.theme = t
             }
+            // Side by side (TV, landscape): the right-hand text gets at most just over half the width, so a long
+            // episode title is cut short (…) instead of squeezing the name on the left down to a few letters.
+            val half = if (stacked || parent.width <= 0) Int.MAX_VALUE else (parent.width * 0.55f).toInt()
+            if (holder.detail.maxWidth != half) holder.detail.maxWidth = half
             holder.label.text = row.label
             val detail = when {
                 row.detail.isNotEmpty() -> row.detail

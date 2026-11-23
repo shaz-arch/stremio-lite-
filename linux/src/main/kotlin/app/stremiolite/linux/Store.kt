@@ -95,22 +95,25 @@ object Prefs {
 
     private const val SYNC_ID = "stremiolite:settings"
 
+    /** Shared settings this build knows; one this computer has never had is always taken from the account. */
+    private val SHARED = listOf("theme", "subLang", "autoNext", "clock", "hideWatched")
+
     /** Takes the account's shared settings if they're newer than this computer's. */
     fun syncIn(): Boolean {
         val raw = Lib.raw(SYNC_ID) ?: return false
         val o = runCatching { JSONObject(raw.optString("name")) }.getOrNull() ?: return false
         val updated = o.optLong("updated")
-        if (updated <= syncedAt) return false
         val d = data()
-        if (o.has("theme")) d.put("theme", o.optInt("theme"))
-        if (o.has("subLang")) d.put("subLang", o.optInt("subLang"))
-        if (o.has("autoNext")) d.put("autoNext", o.optBoolean("autoNext"))
-        if (o.has("clock")) d.put("clock", o.optInt("clock"))
-        if (o.has("hideWatched")) d.put("hideWatched", o.optBoolean("hideWatched"))
-        o.optJSONArray("hiddenRows")?.let { d.put("hiddenRows", it) }
-        d.put("syncedAt", updated)
+        val newer = updated > syncedAt
+        var changed = false
+        for (k in SHARED) {
+            if (!o.has(k) || (!newer && d.has(k))) continue
+            if (d.opt(k) != o.opt(k)) { d.put(k, o.opt(k)); changed = true }
+        }
+        if (newer) o.optJSONArray("hiddenRows")?.let { d.put("hiddenRows", it); changed = true }
+        if (newer) d.put("syncedAt", updated)
         save()
-        return true
+        return changed
     }
 
     /** Sends theme, clock, subtitle language, auto-next, watched-films choice and hidden rows, keeping anything else the record holds. */
@@ -118,8 +121,10 @@ object Prefs {
         val now = System.currentTimeMillis()
         val raw = Lib.raw(SYNC_ID)
         val o = raw?.let { runCatching { JSONObject(it.optString("name")) }.getOrNull() } ?: JSONObject()
-        o.put("theme", theme).put("subLang", subLang).put("autoNext", autoNext).put("clock", clock).put("hideWatched", hideWatched)
-            .put("hiddenRows", JSONArray(hiddenRows.toList())).put("updated", now)
+        // Only settings chosen on this computer (or already taken from the account): never a default.
+        val d = data()
+        SHARED.forEach { k -> if (d.has(k)) o.put(k, d.opt(k)) }
+        o.put("hiddenRows", JSONArray(hiddenRows.toList())).put("updated", now)
         syncedAt = now
         val item = raw ?: Sync.newItem(SYNC_ID, "other", "{}")
         item.put("name", o.toString()).put("removed", true).put("temp", false).put("_mtime", Sync.iso(now))

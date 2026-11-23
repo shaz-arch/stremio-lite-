@@ -681,6 +681,7 @@ object Settings {
                 Row("Theme", "◄ ${Look.theme().name} ►", action = {
                     Prefs.theme = (Prefs.theme + 1) % themes.size; Prefs.syncOut(); build()
                 }),
+                Row("Text size", "your terminal's (kitty: ctrl+shift+= / −)"),
                 Row("Clock", "◄ ${Look.clock().name} ►", action = {
                     Prefs.clock = (Look.clocks.indexOf(Look.clock()) + 1) % Look.clocks.size; Prefs.syncOut(); build()
                 }),
