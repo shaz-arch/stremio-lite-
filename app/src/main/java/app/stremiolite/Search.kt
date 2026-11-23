@@ -81,9 +81,12 @@ object Search {
         input.requestFocus()
     }
 
+    /** Ids found to be film collections in the current search. */
+    private val collections = HashSet<String>()
+
     private fun row(app: MainActivity, p: Pair<Addon, Meta>): Row {
         val (a, m) = p
-        val detail = if (SearchRank.isCollection(m.type)) listOf(m.year, "Collection").filter { it.isNotBlank() }.joinToString("  ") else Catalogs.detail(m)
+        val detail = if (m.id in collections) listOf(m.year, "Collection").filter { it.isNotBlank() }.joinToString("  ") else Catalogs.detail(m)
         return Row(m.name, detail, opens = { Details.screen(app, a, m) }, play = {
             if (m.type == "movie") Streams.prefetch(app, m.type, m.id)
             app.push(Details.screen(app, a, m, autoPlay = true))
@@ -112,8 +115,15 @@ object Search {
             errors.forEach { rows += Row(it) }
             val seen = HashSet<String>()
             val all = mutableListOf<Pair<Addon, Meta>>()
-            sources.forEachIndexed { i, (a, _) -> results[i]?.forEach { m -> if (seen.add(m.type + ":" + m.id)) all += a to m } }
-            val g = SearchRank.group(all, query) { it.second }
+            sources.forEachIndexed { i, (a, c) ->
+                results[i]?.forEach { m ->
+                    if (seen.add(m.type + ":" + m.id)) {
+                        all += a to m
+                        if (SearchRank.isCollection(m, a.name, c.type)) collections += m.id
+                    }
+                }
+            }
+            val g = SearchRank.group(all, query, { it.second }) { it.second.id in collections }
             if (g.best.isNotEmpty()) {
                 rows += Row("──── Best matches ────")
                 g.best.forEach { rows += row(app, it) }

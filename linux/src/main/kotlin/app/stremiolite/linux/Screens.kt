@@ -504,16 +504,17 @@ object Search {
         lateinit var s: Screen
         val sources = Folders.rowAddons(Home.all()).filter { !it.isLocal }.flatMap { a -> a.catalogs.filter { it.searchable }.map { a to it } }
         val found = LinkedHashMap<String, Pair<Addon, Meta>>()
+        val collections = HashSet<String>()
         var answered = 0
         fun row(p: Pair<Addon, Meta>): Row {
             val (a, m) = p
-            return if (SearchRank.isCollection(m.type)) Row(m.name, listOf(m.year, "Collection").filter { it.isNotBlank() }.joinToString("  ") + "  ►", opens = { Details.screen(a, m) })
+            return if (m.id in collections) Row(m.name, listOf(m.year, "Collection").filter { it.isNotBlank() }.joinToString("  ") + "  ►", opens = { Details.screen(a, m) })
             else Catalogs.row(a, m)
         }
         fun build() {
             val rows = mutableListOf<Row>()
             rows += Row(if (answered < sources.size) "Searching… ${answered} of ${sources.size}" else "${found.size} results for \"$q\"")
-            val g = SearchRank.group(found.values.toList(), q) { it.second }
+            val g = SearchRank.group(found.values.toList(), q, { it.second }) { it.second.id in collections }
             if (g.best.isNotEmpty()) {
                 rows += Row("──── Best matches ────")
                 g.best.forEach { rows += row(it) }
@@ -536,7 +537,9 @@ object Search {
             val url = a.base + "/catalog/" + Net.enc(c.type) + "/" + Net.enc(c.id) + "/search=" + Net.enc(q) + ".json"
             App.async({ MetaParse.parse(Http.get(url)) }) { r ->
                 answered++
-                r.getOrNull()?.forEach { m -> found.putIfAbsent(m.type + ":" + m.id, a to m) }
+                r.getOrNull()?.forEach { m ->
+                    if (found.putIfAbsent(m.type + ":" + m.id, a to m) == null && SearchRank.isCollection(m, a.name, c.type)) collections += m.id
+                }
                 build()
             }
         }

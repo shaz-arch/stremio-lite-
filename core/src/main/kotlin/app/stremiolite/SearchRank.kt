@@ -26,21 +26,34 @@ object SearchRank {
 
     fun isCollection(type: String) = type.startsWith("collection")
 
+    private val yearRange = Regex("""^\d{4}\s*[-–]\s*\d{4}$""")
+
+    /**
+     * A film collection, however the add-on labels it: a "collections" type or catalogue, an add-on
+     * that is all collections (e.g. TMDB Collections), or a "… Collection" spanning several years.
+     */
+    fun isCollection(m: Meta, addonName: String = "", catalogType: String = ""): Boolean =
+        isCollection(m.type) || isCollection(catalogType) || addonName.contains("collection", ignoreCase = true) ||
+            (m.name.endsWith("Collection", ignoreCase = true) && yearRange.matches(m.year.trim()))
+
     class Groups<T>(val best: List<T>, val collections: List<T>, val films: List<T>, val shows: List<T>, val other: List<T>)
 
-    /** [items] in the order the add-ons gave them (their own relevance), each with its [Meta]. */
-    fun <T> group(items: List<T>, query: String, meta: (T) -> Meta): Groups<T> {
+    /**
+     * [items] in the order the add-ons gave them (their own relevance), each with its [Meta];
+     * [collection] says which are film collections (they get their own list, not Films).
+     */
+    fun <T> group(items: List<T>, query: String, meta: (T) -> Meta, collection: (T) -> Boolean = { isCollection(meta(it).type) }): Groups<T> {
         val ranked = items.withIndex()
             .sortedWith(compareBy({ score(meta(it.value).name, query) }, { it.index }))
             .map { it.value }
-        val collections = ranked.filter { isCollection(meta(it).type) }
-        val films = ranked.filter { meta(it).type == "movie" }
-        val shows = ranked.filter { meta(it).type == "series" }
-        val listed = (collections + films + shows).toSet()
-        val other = ranked.filter { it !in listed }
-        val titles = ranked.filter { !isCollection(meta(it).type) }
-        // Close matches; if there are none, the add-ons' own top few.
-        val best = titles.filter { score(meta(it).name, query) <= 1 }.take(6).ifEmpty { titles.take(4) }
+        val collections = ranked.filter { collection(it) }
+        val rest = ranked.filter { !collection(it) }
+        val films = rest.filter { meta(it).type == "movie" }
+        val shows = rest.filter { meta(it).type == "series" }
+        val listed = (films + shows).toSet()
+        val other = rest.filter { it !in listed }
+        // Close matches (collections too, e.g. for "superman collection"); if none, the add-ons' own top few titles.
+        val best = ranked.filter { score(meta(it).name, query) <= 1 }.take(6).ifEmpty { rest.take(4) }
         return Groups(best, collections, films, shows, other)
     }
 
