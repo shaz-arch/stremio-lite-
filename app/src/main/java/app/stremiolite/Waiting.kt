@@ -234,7 +234,11 @@ object Waiting {
             return rows
         }
         screen = Screen("Waiting for streams", build())
-        screen.onShow = { screen.rows = build(); app.refresh(screen) }
+        screen.onShow = {
+            screen.rows = build(); app.refresh(screen)
+            // Changes made on another device (follows, the waiting list) are fetched on the way in.
+            History.pull(app, force = true) { if (app.isTop(screen)) { screen.rows = build(); app.refresh(screen) } }
+        }
         return screen
     }
 

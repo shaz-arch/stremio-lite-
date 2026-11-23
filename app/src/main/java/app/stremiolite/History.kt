@@ -15,7 +15,7 @@ import java.io.File
 object History {
     private const val MAX_VIDEOS = 3000
     private const val MAX_LOG = 300
-    private const val PULL_EVERY_MS = 5 * 60_000L
+    private const val PULL_EVERY_MS = 60_000L
 
     /** What is about to be played, so the result from the player can be filed against it. */
     class Watch(

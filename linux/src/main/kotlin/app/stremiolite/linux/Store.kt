@@ -333,7 +333,7 @@ object Lib {
     fun pull(force: Boolean = false, done: (() -> Unit)? = null) {
         ensure()
         val key = Account.authKey ?: return
-        if (pulling || (!force && System.currentTimeMillis() - lastPull < 3 * 60_000)) return
+        if (pulling || (!force && System.currentTimeMillis() - lastPull < 60_000)) return
         pulling = true
         send()
         App.async({ Sync.pull(key) }) { r ->

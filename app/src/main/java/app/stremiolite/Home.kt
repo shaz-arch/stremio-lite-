@@ -43,7 +43,11 @@ object Home {
             Row("────────────────────"),
             Row("Settings", opens = { Settings.screen(app) }),
             addonsRow,
-            Row("Reload my rows and add-ons", action = { if (!loading) load(app, screen) }),
+            Row("Reload my rows and add-ons", action = {
+                // Also fetches your history, follows and waiting list from the account straight away.
+                History.pull(app, force = true) { rebuildHome?.invoke() }
+                if (!loading) load(app, screen)
+            }),
             Row("Export my setup to another account", "►", opens = { Share.screen(app) }),
             Row("Import a setup from another account", "►", opens = { Share.importScreen(app) }),
             Row("Device check", opens = { DemoMenus.deviceCheck(app) }),

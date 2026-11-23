@@ -930,7 +930,14 @@ object Waiting {
             }
         }
         rows += Row("Episodes out in the last week", "►", opens = { NewEpisodes.screen() })
-        return Screen("Waiting for streams", rows)
+        val s = Screen("Waiting for streams", rows)
+        // Changes made on another device (follows, the waiting list) are fetched on the way in.
+        s.onShow = {
+            if (System.currentTimeMillis() - Lib.lastPull > 15_000) Lib.pull(force = true) {
+                if (App.top()?.title == "Waiting for streams") App.replaceTop(screen())
+            }
+        }
+        return s
     }
 }
 
