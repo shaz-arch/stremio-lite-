@@ -111,12 +111,31 @@ object Layout {
 
     // ---- changes ----
 
-    /** Puts a row in [path] ("" = the front page), at the end of that folder. */
-    fun moveRow(d: Data, key: String, path: String) {
+    /**
+     * Puts a row in [path] ("" = the front page), at the end of that folder. [entries] is the Index
+     * before the move: the folders' current order is kept, so moving a row never reshuffles them.
+     */
+    fun moveRow(d: Data, entries: List<Folders.Entry>, key: String, path: String) {
+        val before = tree(entries, d)
+        fun freeze(n: Node) {
+            if (d.order[n.path] == null) d.order[n.path] = n.folders.map { folderItem(it.name) }.toMutableList()
+            n.folders.forEach { freeze(it) }
+        }
+        freeze(before)
+        val dest = if (path.isEmpty()) FRONT else path
+        if (path.isEmpty() && d.order[FRONT] == null) d.order[FRONT] = front(entries, d).map { rowItem(Folders.rowKey(it.addon, it.catalog)) }.toMutableList()
+        find(before, path)?.takeIf { path.isNotEmpty() }?.let { n -> if (d.order[path].isNullOrEmpty() || d.order[path]!!.none { it.startsWith("r:") }) d.order[path] = n.items.toMutableList() }
         d.folder[key] = path
-        val p = if (path.isEmpty()) FRONT else path
         d.order.values.forEach { it.remove(rowItem(key)) }
-        d.order[p]?.add(rowItem(key))
+        val list = d.order.getOrPut(dest) { mutableListOf() }
+        list.add(rowItem(key))
+        // A brand-new folder goes at the end of its parent.
+        val parts = parts(path)
+        for (i in parts.indices) {
+            val parent = join(parts.take(i))
+            val l = d.order.getOrPut(parent) { mutableListOf() }
+            if (folderItem(parts[i]) !in l) l.add(folderItem(parts[i]))
+        }
     }
 
     fun rename(d: Data, key: String, name: String?) {

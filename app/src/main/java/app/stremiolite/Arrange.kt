@@ -122,7 +122,7 @@ object Arrange {
         val e = entries(app); val d = Settings.layout(app)
         val here = if (from == Layout.FRONT) "" else from
         fun to(path: String, label: String) = Row(label, if (path == here) "here now" else "", action = {
-            val dd = Settings.layout(app); Layout.moveRow(dd, key, path); save(app, dd)
+            val dd = Settings.layout(app); Layout.moveRow(dd, entries(app), key, path); save(app, dd)
             pendingFolder = null
             app.toast("Moved to " + (if (path.isEmpty()) "the front page" else path.replace(" > ", " · ")))
             app.back(); app.back()
