@@ -68,6 +68,8 @@ object Stremio {
             val url = o.optString("transportUrl")
             if (!url.startsWith("http") || "127.0.0.1" in url || "localhost" in url) return@mapNotNull null
             if (o.optJSONObject("manifest")?.optString("id")?.endsWith(STICK_ROWS) == true) o.put("stickRows", true)
+            // A details-only copy stays as stored: its rows are meant to stay out of sight.
+            if (o.optJSONObject("manifest")?.optString("id")?.endsWith(DETAILS_ONLY) == true) return@mapNotNull null
             Thread {
                 runCatching { JSONObject(Http.get(url, timeoutMs = 8_000)) }.getOrNull()
                     ?.takeIf { it.has("id") && it.has("resources") }
@@ -104,11 +106,34 @@ object Stremio {
      */
     /** Marks the stored copy of a "stick rows" add-on (its id gets this ending). */
     const val STICK_ROWS = ".stickrows"
+    const val DETAILS_ONLY = ".detailsonly"
 
     /**
      * A "stick rows" copy for the account: no rows and only the catalog resource, so Stremio's
      * own apps ignore it. Stremio Lite reads the live list and uses its rows instead.
      */
+    /**
+     * A copy used only to open its items (e.g. TMDB Collections' film series): no rows, so it adds
+     * nothing to Stremio's home or Discover, or to Stremonino's Index; AIOMetadata shows its rows instead.
+     */
+    private fun detailsOnlyCopy(manifest: JSONObject): JSONObject {
+        val m = JSONObject()
+        for (k in listOf("version", "description", "logo", "types", "idPrefixes", "behaviorHints")) if (manifest.has(k)) m.put(k, manifest.get(k))
+        m.put("id", manifest.optString("id") + DETAILS_ONLY)
+        m.put("name", manifest.optString("name", "Add-on") + " (details only)")
+        val res = JSONArray()
+        manifest.optJSONArray("resources")?.let { r ->
+            for (i in 0 until r.length()) {
+                val v = r.get(i)
+                val name = if (v is JSONObject) v.optString("name") else v.toString()
+                if (name != "catalog") res.put(v)
+            }
+        }
+        m.put("resources", res)
+        m.put("catalogs", JSONArray())
+        return m
+    }
+
     private fun stickRowsCopy(manifest: JSONObject): JSONObject {
         val m = JSONObject()
         // behaviorHints keeps the ⚙ settings button in Stremio's own apps.
@@ -129,12 +154,12 @@ object Stremio {
         setAddons(authKey, out)
     }
 
-    fun installAddon(authKey: String, link: String, stickRows: Boolean = false): String {
+    fun installAddon(authKey: String, link: String, stickRows: Boolean = false, detailsOnly: Boolean = false): String {
         val url = link.trim().replace(Regex("^stremio://", RegexOption.IGNORE_CASE), "https://")
             .let { if (it.endsWith("/manifest.json")) it else it.trimEnd('/') + "/manifest.json" }
         val manifest = JSONObject(Http.get(url, timeoutMs = 15_000))
         if (!manifest.has("id")) throw ApiError("That link isn't an add-on")
-        val stored = if (stickRows) stickRowsCopy(manifest) else slim(manifest)
+        val stored = if (stickRows) stickRowsCopy(manifest) else if (detailsOnly) detailsOnlyCopy(manifest) else slim(manifest)
         val entry = JSONObject().put("transportUrl", url).put("transportName", "")
             .put("manifest", stored)
             .put("flags", JSONObject().put("official", false).put("protected", false))

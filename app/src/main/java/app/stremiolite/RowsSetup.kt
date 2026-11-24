@@ -18,6 +18,16 @@ object RowsSetup {
             })
             rows += Row("Switch single rows on or off", "►", opens = { RowPicker.entry(app) })
         }
+        if (!RowSetup.hasCollectionsAddon(Home.allAddons())) rows += Row("Add TMDB Collections (opens film series)", "►", action = {
+            val key = Account.authKey(app)
+            if (key != null) {
+                app.toast("Adding TMDB Collections…")
+                Net.async({ Stremio.installAddon(key, RowSetup.collectionsAddon, detailsOnly = true) }) { r ->
+                    r.onSuccess { Home.forget(); app.toast("Added. Collections rows now open their film series."); app.back() }
+                        .onFailure { e -> app.toast("Couldn't add it: " + Net.describe(e)) }
+                }
+            }
+        })
         rows += Row("────────────────────")
         rows += Row(if (aio.isEmpty()) "Create your rows" else "Start again from the full catalogue", "►",
             opens = { checklist(app, RowSetup.defaults(), edit = null, password = null) })
@@ -77,7 +87,7 @@ object RowsSetup {
                 ), { p.tmdbKey }, { p.tmdbKey = it })
             })
             rows += Row("────────────────────")
-            rows += if (edit != null) Row("Save to AIOMetadata", "►", action = { if (fits(app, p)) save(app, edit, password!!, p) })
+            rows += if (edit != null) Row("Save to AIOMetadata", "►", action = { if (fits(app, p, edit)) save(app, edit, password!!, p) })
             else Row("Create my rows", "►", action = { if (fits(app, p)) askNewPassword(app, p) })
             return rows
         }
@@ -142,6 +152,8 @@ object RowsSetup {
         Net.async({
             val made = RowSetup.create(p, password, tmdbKey.ifBlank { p.tmdbKey })
             Stremio.installAddon(key, made.installUrl)
+            if ("Collections" in p.categories && !RowSetup.hasCollectionsAddon(Home.allAddons()))
+                runCatching { Stremio.installAddon(key, RowSetup.collectionsAddon, detailsOnly = true) }
             made
         }) { r ->
             r.onSuccess { made ->
@@ -174,11 +186,11 @@ object RowsSetup {
         }
     }
     /** ElfHosted's free server takes at most 200 rows per install: say what to untick if it's over. */
-    private fun fits(app: MainActivity, p: RowSetup.Picks): Boolean {
-        val n = RowSetup.count(p)
-        if (n <= RowSetup.SERVER_LIMIT - 10) return true
+    private fun fits(app: MainActivity, p: RowSetup.Picks, existing: AioRows.Loaded? = null): Boolean {
+        val n = RowSetup.serverCountFor(p, existing?.catalogs)
+        if (n <= RowSetup.SERVER_LIMIT) return true
         val big = RowSetup.biggest(p).joinToString(", ") { "${it.first} (${it.second})" }
-        android.app.AlertDialog.Builder(app).setTitle("Too many rows: about $n")
+        android.app.AlertDialog.Builder(app).setTitle("Too many rows: $n")
             .setMessage("ElfHosted's free AIOMetadata allows 200 rows per install. Untick some of the biggest: $big.")
             .setPositiveButton("OK", null).show()
         return false

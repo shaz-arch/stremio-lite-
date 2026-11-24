@@ -19,6 +19,26 @@ object RowSetup {
     /** Rows the server counts against its limit (everything not switched off). */
     fun serverCount(catalogs: JSONArray): Int = (0 until catalogs.length()).count { catalogs.optJSONObject(it)?.optBoolean("enabled", true) == true }
 
+    /** Exactly what the server will count for these picks: a new install, or changes to [existing]. */
+    fun serverCountFor(p: Picks, existing: JSONArray? = null): Int {
+        val rows = JSONArray((existing ?: forRegion(p.region)).toString())
+        apply(rows, p)
+        return serverCount(rows)
+    }
+
+    /**
+     * The TMDB Collections add-on: the Collections rows come through AIOMetadata, but opening a
+     * film series needs this add-on on the account. Its settings match the ones the rows use.
+     */
+    val collectionsAddon: String by lazy {
+        val all = catalogue()
+        (0 until all.length()).map { all.getJSONObject(it) }.firstOrNull { it.optString("id").startsWith("custom.org_stremio_tmdbcollections") }
+            ?.optString("sourceUrl")?.substringBefore("/catalog/")?.let { "$it/manifest.json" }
+            ?: "https://61ab9c85a149-tmdb-collections.baby-beamup.club/manifest.json"
+    }
+
+    fun hasCollectionsAddon(list: List<Addon>) = list.any { "tmdb-collections" in it.transportUrl || "tmdbcollections" in it.id.lowercase() }
+
     /** The biggest ticked categories, to suggest unticking when over the limit. */
     fun biggest(p: Picks, n: Int = 4): List<Pair<String, Int>> =
         p.categories.map { it to countIn(p, it) }.sortedByDescending { it.second }.take(n)
