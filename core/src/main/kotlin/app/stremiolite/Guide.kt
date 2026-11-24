@@ -20,7 +20,31 @@ object Guide {
     class Prog(val start: Long, val stop: Long, val title: String, val desc: String)
 
     /** [progs] by the guide's channel id; [names] maps simplified channel names (and ids) to ids. */
-    class Data(val at: Long, val progs: Map<String, List<Prog>>, val names: Map<String, String>)
+    /** [covered]: the channel keys this was read for (see [keys]); null means every channel in the guide. */
+    class Data(val at: Long, val progs: Map<String, List<Prog>>, val names: Map<String, String>, val covered: Set<String>?)
+
+    /**
+     * What identifies [c] in a guide: its tvg-id, and its simplified name (and id) prefixed "n:".
+     * Reading a guide for just these keeps it small: a country's guide covers ~1,000 channels.
+     */
+    fun keys(c: LiveTv.Channel): Set<String> = setOfNotNull(
+        c.tvgId.takeIf { it.isNotEmpty() },
+        c.tvgId.takeIf { it.isNotEmpty() }?.let { "n:" + simple(it) },
+        "n:" + simple(c.name),
+    )
+
+    /** For [channels]: each guide link they use, with the keys to read it for (adding to what's read already). */
+    fun needs(channels: List<LiveTv.Channel>, yours: String): Map<String, Set<String>> {
+        val out = HashMap<String, MutableSet<String>>()
+        for (c in channels) for (u in guidesFor(c, yours)) out.getOrPut(u) { HashSet() } += keys(c)
+        return out.filter { (u, k) -> isDue(u, k) }.mapValues { (u, k) -> k + (cache[u]?.covered ?: emptySet()) }
+    }
+
+    private fun isDue(u: String, k: Set<String>): Boolean {
+        if (u.isBlank() || loading.containsKey(u) || failed.containsKey(u)) return false
+        val d = cache[u] ?: return true
+        return System.currentTimeMillis() - d.at > KEEP_MS || (d.covered != null && !d.covered.containsAll(k))
+    }
 
     private const val AHEAD_MS = 14 * 3600_000L
     private const val KEEP_MS = 3 * 3600_000L
@@ -70,7 +94,7 @@ object Guide {
     }
 
     /** Downloads and reads a guide. Blocking: a big guide takes a while on the stick. */
-    fun load(url: String): Data {
+    fun load(url: String, wanted: Set<String>? = null): Data {
         loading[url] = true
         try {
             val c = URL(url).openConnection() as HttpURLConnection
@@ -80,7 +104,7 @@ object Guide {
                 c.instanceFollowRedirects = true
                 c.setRequestProperty("User-Agent", Http.userAgent)
                 if (c.responseCode >= 400) throw Http.HttpError(c.responseCode)
-                val d = parse(c.inputStream, System.currentTimeMillis())
+                val d = parse(c.inputStream, System.currentTimeMillis(), wanted)
                 if (d.progs.isEmpty()) throw IllegalStateException("No programmes in that guide")
                 cache[url] = d
                 failed.remove(url)
@@ -88,16 +112,20 @@ object Guide {
             } finally {
                 c.disconnect()
             }
-        } catch (e: Exception) {
-            failed[url] = why(e)
-            throw e
+        } catch (e: Throwable) {
+            // Recorded so it isn't tried again and again (each try is a big download).
+            failed[url] = if (e is OutOfMemoryError) "too big for this device's memory" else why(e)
+            throw if (e is Exception) e else RuntimeException(failed[url], e)
         } finally {
             loading.remove(url)
         }
     }
 
     /** Reads XMLTV from [input] (gzipped or not), keeping programmes that end after [now] and start within [AHEAD_MS]. */
-    fun parse(input: InputStream, now: Long): Data {
+    fun parse(input: InputStream, now: Long, wanted: Set<String>? = null): Data {
+        // Guide channel ids to keep (null: all). Channels are listed before programmes in XMLTV.
+        val keep: HashSet<String>? = if (wanted == null) null else HashSet()
+        fun wantedId(id: String) = keep == null || id in keep || id in wanted!! || ("n:" + simple(id)) in wanted
         val buffered = BufferedInputStream(input, 64 * 1024)
         buffered.mark(2)
         val gz = buffered.read() == 0x1f && buffered.read() == 0x8b
@@ -127,8 +155,11 @@ object Guide {
                 else sb.indexOf(endTag, openEnd).let { if (it < 0) -1 else it + endTag.length }
                 if (end < 0) { waiting = start; break }
                 val el = sb.substring(start, end)
-                if (isProg) programme(el, now, until)?.let { (id, prog) -> progs.getOrPut(id) { ArrayList() } += prog }
-                else channel(el, names)
+                if (isProg) {
+                    // Cheap check of the channel before reading the whole programme.
+                    val id = el.substringAfter("channel=\"", "").substringBefore('"')
+                    if (wantedId(id)) programme(el, now, until)?.let { (cid, prog) -> progs.getOrPut(cid) { ArrayList() } += prog }
+                } else channel(el, names, wanted, keep)
                 i = end
             }
             // Keep an unfinished element, or else just a possible tag start ("<progr…") at the very end.
@@ -138,7 +169,7 @@ object Guide {
         }
         progs.values.forEach { it.sortBy { p -> p.start } }
         progs.keys.forEach { id -> names.putIfAbsent(simple(id), id) }
-        return Data(System.currentTimeMillis(), progs, names)
+        return Data(System.currentTimeMillis(), progs, names, wanted)
     }
 
     private val attrRe = Regex("""(\w[\w-]*)="([^"]*)"""")
@@ -155,8 +186,9 @@ object Guide {
         return unescape(el.substring(o + 1, e).trim())
     }
 
-    private fun channel(el: String, names: HashMap<String, String>) {
+    private fun channel(el: String, names: HashMap<String, String>, wanted: Set<String>?, keep: HashSet<String>?) {
         val id = attrs(el.substring(0, el.indexOf('>') + 1))["id"] ?: return
+        val found = ArrayList<String>()
         var at = 0
         while (true) {
             val s = el.indexOf("<display-name", at)
@@ -164,9 +196,15 @@ object Guide {
             val o = el.indexOf('>', s)
             val e = el.indexOf("</display-name>", o)
             if (o < 0 || e < 0) break
-            names.putIfAbsent(simple(unescape(el.substring(o + 1, e))), id)
+            found += simple(unescape(el.substring(o + 1, e)))
             at = e
         }
+        if (wanted != null && keep != null) {
+            val hit = id in wanted || ("n:" + simple(id)) in wanted || found.any { ("n:" + it) in wanted }
+            if (!hit) return
+            keep += id
+        }
+        found.forEach { names.putIfAbsent(it, id) }
     }
 
     private fun programme(el: String, now: Long, until: Long): Pair<String, Prog>? {

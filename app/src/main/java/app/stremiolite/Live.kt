@@ -58,8 +58,7 @@ object Live {
         }
 
         guides = {
-            val urls = listOf(Settings.liveGuide(app)) + Settings.favourites(app).flatMap { Guide.guidesFor(it, "") }
-            loadGuides(app, urls) { if (app.inStack(screen)) build() }
+            loadGuides(app, Settings.favourites(app) + (groups?.flatMap { it.channels } ?: emptyList())) { if (app.inStack(screen)) build() }
         }
 
         screen = Screen("Live TV", listOf(Row("Loading channels…")))
@@ -68,7 +67,7 @@ object Live {
             guides()
             if (groups == null) {
                 Net.async({ LiveTv.load() }) { r ->
-                    r.onSuccess { groups = it; build(); checkAll() }.onFailure { error = Net.describe(it); build() }
+                    r.onSuccess { groups = it; build(); checkAll(); guides() }.onFailure { error = Net.describe(it); build() }
                 }
             } else { build(); checkAll() }
         }
@@ -221,7 +220,7 @@ object Live {
             app.refresh(screen)
         }
 
-        fun soon() { if (!pending) { pending = true; Net.later(800) { build() } } }
+        fun soon() { if (!pending) { pending = true; Net.later(if (app.isPhone) 800L else 1500L) { build() } } }
 
         fun next() {
             if (!app.inStack(screen)) return
@@ -234,7 +233,7 @@ object Live {
         screen = Screen(title, listOf(Row("Loading…")))
         screen.onShow = {
             build()
-            channels()?.let { list -> loadGuides(app, list.flatMap { Guide.pick(it) }.distinct() + Settings.liveGuide(app)) { if (app.inStack(screen)) soon() } }
+            channels()?.let { list -> loadGuides(app, list) { if (app.inStack(screen)) soon() } }
             channels()?.let { list ->
                 queue.clear()
                 queue.addAll(list.filter { LiveTv.known(it) == null && it !in busy })
@@ -257,9 +256,9 @@ object Live {
 
     private fun guidesFor(app: MainActivity, c: LiveTv.Channel) = Guide.guidesFor(c, Settings.liveGuide(app))
 
-    /** Reads any of [urls] that are due, then calls [done] (once per guide read). */
-    private fun loadGuides(app: MainActivity, urls: List<String>, done: () -> Unit) {
-        Guide.due(urls).forEach { u -> Net.async({ Guide.load(u) }) { done() } }
+    /** Reads the guides [channels] need (just for those channels), then calls [done] once per guide read. */
+    private fun loadGuides(app: MainActivity, channels: List<LiveTv.Channel>, done: () -> Unit) {
+        Guide.needs(channels, Settings.liveGuide(app)).forEach { (u, wanted) -> Net.async({ Guide.load(u, wanted) }) { done() } }
     }
 
     private fun guideState(url: String): String = when {
@@ -349,7 +348,7 @@ object Live {
         s = Screen(c.name, emptyList())
         s.rows = rows()
         redraw = { build() }
-        s.onShow = { build(); loadGuides(app, guidesFor(app, c)) { if (app.inStack(s)) build() } }
+        s.onShow = { build(); loadGuides(app, listOf(c)) { if (app.inStack(s)) build() } }
         return s
     }
 

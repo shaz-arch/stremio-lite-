@@ -59,8 +59,7 @@ object Live {
         }
 
         guides = {
-            val urls = listOf(Prefs.liveGuide) + Prefs.favourites.flatMap { Guide.guidesFor(it, "") }
-            loadGuides(urls) { if (App.inStack(screen)) build() }
+            loadGuides(Prefs.favourites + (groups?.flatMap { it.channels } ?: emptyList())) { if (App.inStack(screen)) build() }
         }
 
         screen = Screen("Live TV", listOf(Row("Loading channels…")))
@@ -69,7 +68,7 @@ object Live {
             guides()
             if (groups == null) {
                 App.async({ LiveTv.load() }) { r ->
-                    r.onSuccess { groups = it; build(); checkAll() }.onFailure { error = Net.describe(it); build() }
+                    r.onSuccess { groups = it; build(); checkAll(); guides() }.onFailure { error = Net.describe(it); build() }
                 }
             } else { build(); checkAll() }
         }
@@ -232,7 +231,7 @@ object Live {
         screen = Screen(title, listOf(Row("Loading…")))
         screen.onShow = {
             build()
-            channels()?.let { list -> loadGuides(list.flatMap { Guide.pick(it) }.distinct() + Prefs.liveGuide) { if (App.inStack(screen)) soon() } }
+            channels()?.let { list -> loadGuides(list) { if (App.inStack(screen)) soon() } }
             channels()?.let { list ->
                 queue.clear()
                 queue.addAll(list.filter { LiveTv.known(it) == null && it !in busy })
@@ -255,8 +254,9 @@ object Live {
 
     private fun guidesFor(c: LiveTv.Channel) = Guide.guidesFor(c, Prefs.liveGuide)
 
-    private fun loadGuides(urls: List<String>, done: () -> Unit) {
-        Guide.due(urls).forEach { u -> App.async({ Guide.load(u) }) { done() } }
+    /** Reads the guides [channels] need (just for those channels), then calls [done] once per guide read. */
+    private fun loadGuides(channels: List<LiveTv.Channel>, done: () -> Unit) {
+        Guide.needs(channels, Prefs.liveGuide).forEach { (u, wanted) -> App.async({ Guide.load(u, wanted) }) { done() } }
     }
 
     private fun guideState(url: String): String = when {
@@ -359,7 +359,7 @@ object Live {
         s = Screen(c.name, emptyList())
         s.rows = rows()
         redraw = { build() }
-        s.onShow = { build(); loadGuides(guidesFor(c)) { if (App.inStack(s)) build() } }
+        s.onShow = { build(); loadGuides(listOf(c)) { if (App.inStack(s)) build() } }
         return s
     }
 
