@@ -130,11 +130,12 @@ object RowsSetup {
     /** The TMDB Collections add-on: Collections rows list film series, and this add-on opens them. */
     fun collections(app: MainActivity): Screen {
         lateinit var s: Screen
+        var redraw: () -> Unit = {}
         fun install(link: String) {
             val key = Account.authKey(app) ?: return
             app.toast("Adding TMDB Collections…")
             Net.async({ Stremio.installAddon(key, link, detailsOnly = true) }) { r ->
-                r.onSuccess { addedHere = true; Home.forget(); app.toast("Added. Collections now open their film series."); s.rows = build(); app.refresh(s) }
+                r.onSuccess { addedHere = true; Home.forget(); app.toast("Added. Collections now open their film series."); redraw() }
                     .onFailure { e -> app.toast("Couldn't add it: " + Net.describe(e)) }
             }
         }
@@ -156,13 +157,14 @@ object RowsSetup {
             if (onAccount(app)) Row("Take it off the account", action = {
                 val key = Account.authKey(app)
                 if (key != null) Net.async({ RowSetup.collectionsAddons(Stremio.parseAddons(Stremio.addonsJson(key))).forEach { Stremio.removeAddon(key, it.transportUrl) } }) { r ->
-                    r.onSuccess { addedHere = false; Home.forget(); app.toast("Taken off. Collections rows won't open."); s.rows = build(); app.refresh(s) }
+                    r.onSuccess { addedHere = false; Home.forget(); app.toast("Taken off. Collections rows won't open."); redraw() }
                         .onFailure { e -> app.toast("Couldn't: " + Net.describe(e)) }
                 }
             }) else null,
             Row("Done", action = { app.back() }),
         )
         s = Screen("TMDB Collections", build())
+        redraw = { s.rows = build(); app.refresh(s) }
         return s
     }
 
