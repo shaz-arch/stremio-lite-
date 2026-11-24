@@ -40,7 +40,15 @@ object RowSetup {
     )
     val defaultCategories = setOf("Top 10", "Streaming", "Genres", "Kids & Family", "Charts", "Decades", "Documentaries", "Collections")
 
-    class Picks(var region: Region, val services: MutableSet<String>, val categories: MutableSet<String>)
+    class Picks(var region: Region, val services: MutableSet<String>, val categories: MutableSet<String>) {
+        /** Optional keys: your own TMDB key, and an MDBList key (which switches on the MDBList rows). */
+        var tmdbKey: String = ""
+        var mdblistKey: String = ""
+    }
+
+    /** Where to get each key (shown as a link on phones and Linux, a QR code on the stick). */
+    const val TMDB_KEY_PAGE = "https://www.themoviedb.org/settings/api"
+    const val MDBLIST_KEY_PAGE = "https://mdblist.com/preferences/"
 
     fun defaults(r: Region = Region.UK) = Picks(r, defaultServices(r).toMutableSet(), defaultCategories.toMutableSet())
 
@@ -61,7 +69,7 @@ object RowSetup {
     }
 
     /** Whether a row is on with these picks (rows folded into a merged row keep their own setting). */
-    fun wanted(name: String, p: Picks): Boolean {
+    fun wanted(name: String, p: Picks, ignoreKey: Boolean = false): Boolean {
         val (cat, service) = group(name)
         if (cat.isEmpty()) return true
         if (cat !in p.categories) return false
@@ -69,9 +77,22 @@ object RowSetup {
         return service in p.services && service in services(p.region)
     }
 
-    fun catalogue(): JSONArray {
-        val text = RowSetup::class.java.getResourceAsStream("/stremonino-catalogue.json")!!.use { it.readBytes().toString(Charsets.UTF_8) }
-        return JSONObject(text).getJSONArray("catalogs")
+    private val file: JSONObject by lazy {
+        JSONObject(RowSetup::class.java.getResourceAsStream("/stremonino-catalogue.json")!!.use { it.readBytes().toString(Charsets.UTF_8) })
+    }
+
+    fun catalogue(): JSONArray = JSONArray(file.getJSONArray("catalogs").toString())
+
+    /** Rows that need an MDBList key (lists from MDBList, or merged rows using them). */
+    val needsMdblist: Set<String> by lazy {
+        file.optJSONArray("needsMdblist")?.let { a -> (0 until a.length()).map { a.getString(it) }.toSet() } ?: emptySet()
+    }
+
+    /** How many rows an MDBList key adds for these picks. */
+    fun mdblistCount(p: Picks): Int {
+        val all = forRegion(p.region)
+        return (0 until all.length()).map { all.getJSONObject(it) }
+            .count { it.optString("mergedInto").isBlank() && it.optString("id") in needsMdblist && wanted(it.optString("name"), p, ignoreKey = true) }
     }
 
     /** The catalogue for a region: Top 10 rows use its country, streaming rows its watch region. */
@@ -104,12 +125,25 @@ object RowSetup {
             val name = o.optString("name")
             val (cat, _) = group(name)
             if (cat.isNotEmpty() && cat !in categories) continue
-            o.put("enabled", wanted(name, p))
+            val keyOk = o.optString("id") !in needsMdblist || p.mdblistKey.isNotBlank()
+            o.put("enabled", keyOk && wanted(name, p))
             if (cat.isNotEmpty()) o.put("showInHome", false)
         }
     }
 
-    /** What an existing install has on, as picks (for "Categories"). */
+    /** What an existing install has on, with its keys, as picks (for "Categories"). */
+    fun picksFrom(config: JSONObject): Picks {
+        val p = picksFrom(config.optJSONArray("catalogs") ?: JSONArray())
+        config.optJSONObject("apiKeys")?.let { k -> p.tmdbKey = k.optString("tmdb"); p.mdblistKey = k.optString("mdblist") }
+        return p
+    }
+
+    /** Puts the picks' keys into a configuration (blank keys are left blank). */
+    fun putKeys(config: JSONObject, p: Picks) {
+        val k = config.optJSONObject("apiKeys") ?: JSONObject().also { config.put("apiKeys", it) }
+        k.put("tmdb", p.tmdbKey.trim()); k.put("mdblist", p.mdblistKey.trim())
+    }
+
     fun picksFrom(catalogs: JSONArray): Picks {
         val cats = mutableSetOf<String>()
         val svcs = mutableSetOf<String>()
@@ -126,7 +160,7 @@ object RowSetup {
     }
 
     /** A full AIOMetadata configuration with AIOMetadata's usual defaults and these rows. */
-    fun newConfig(p: Picks, tmdbKey: String = ""): JSONObject {
+    fun newConfig(p: Picks, tmdbKey: String = p.tmdbKey): JSONObject {
         val rows = forRegion(p.region)
         apply(rows, p)
         val engine = JSONObject()
@@ -147,7 +181,7 @@ object RowSetup {
             .put("mal", JSONObject().put("skipFiller", false).put("skipRecap", false).put("allowEpisodeMarking", false).put("skipMixedFiller", false).put("useImdbIdForCatalogAndSearch", false))
             .put("tmdb", JSONObject().put("scrapeImdb", false).put("forceLatinCastNames", false))
             .put("apiKeys", JSONObject().put("gemini", "").put("tmdb", tmdbKey).put("tvdb", "").put("fanart", "").put("rpdb", "")
-                .put("topPoster", "").put("mdblist", "").put("openrouter", "").put("publicmetadb", ""))
+                .put("topPoster", "").put("mdblist", p.mdblistKey.trim()).put("openrouter", "").put("publicmetadb", ""))
             .put("posterRatingProvider", "none").put("usePosterProxy", true)
             .put("enableRatingPostersForLibrary", true).put("showRateMeButton", false).put("ageRating", "None").put("allowUnratedContent", true)
             .put("searchEnabled", true).put("sessionId", "").put("catalogSetupComplete", true).put("timezone", p.region.timezone)
@@ -162,13 +196,14 @@ object RowSetup {
     class Created(val installUrl: String)
 
     /** Creates a new AIOMetadata install on [server] (blocking). Throws [AioRows.Failed] with a plain reason. */
-    fun create(p: Picks, password: String, tmdbKey: String = "", server: String = SERVER): Created {
+    fun create(p: Picks, password: String, tmdbKey: String = p.tmdbKey, server: String = SERVER): Created {
         val body = JSONObject().put("config", newConfig(p, tmdbKey)).put("password", password)
         val (code, text) = Http.sendJson("$server/api/config/save", "POST", body.toString(), timeoutMs = 60_000)
         val o = runCatching { JSONObject(text) }.getOrNull()
         if (code >= 400 || o == null) {
             val msg = o?.optString("error").orEmpty()
             throw AioRows.Failed(when {
+                "mdblist" in msg.lowercase() -> "the MDBList key wasn't accepted ($msg)"
                 "tmdb" in msg.lowercase() -> "this server wants your own TMDB key"
                 msg.isNotBlank() -> msg
                 else -> "the server answered $code"

@@ -15,7 +15,7 @@ object RowsSetup {
         val rows = mutableListOf<Row>()
         if (aio.isNotEmpty()) {
             rows += Row("Categories and streaming services", "►", opens = {
-                RowPicker.entry { _, l, pw -> checklist(RowSetup.picksFrom(l.catalogs), edit = l, password = pw) }
+                RowPicker.entry { _, l, pw -> checklist(RowSetup.picksFrom(l.config), edit = l, password = pw) }
             })
             rows += Row("Switch single rows on or off", "►", opens = { RowPicker.entry() })
         }
@@ -70,6 +70,20 @@ object RowsSetup {
                 })
                 rows += r
             }
+            rows += Row("──── Optional keys ────")
+            rows += Row("MDBList key", (if (p.mdblistKey.isNotBlank()) "set ✓" else "adds ${RowSetup.mdblistCount(p)} rows") + "  ►", opens = {
+                keyScreen("MDBList key", RowSetup.MDBLIST_KEY_PAGE, listOf(
+                    "Free account at mdblist.com, then Preferences › API key.",
+                    "Adds MDBList rows: Top 100 Today, IMDb Top 250, Certified Fresh,",
+                    "Trending Kids, Bollywood releases and a few genre lists.",
+                ), { p.mdblistKey }, { p.mdblistKey = it })
+            })
+            rows += Row("Your own TMDB key", (if (p.tmdbKey.isNotBlank()) "set ✓" else "not needed") + "  ►", opens = {
+                keyScreen("TMDB key", RowSetup.TMDB_KEY_PAGE, listOf(
+                    "Only needed if the server asks for one.",
+                    "Free account at themoviedb.org, then Settings › API › API Key.",
+                ), { p.tmdbKey }, { p.tmdbKey = it })
+            })
             rows += Row("────────────────────")
             rows += if (edit != null) Row("Save to AIOMetadata", "►", action = { save(edit, password!!, p) })
             else Row("Create my rows", "►", action = { askNewPassword(p) })
@@ -77,10 +91,26 @@ object RowsSetup {
         }
         s = Screen(if (edit != null) "Categories" else "Create your rows", emptyList())
         s.rows = build()
+        s.onShow = { s.rows = build(); App.refresh() }
+        return s
+    }
+
+    private fun keyScreen(title: String, page: String, about: List<String>, get: () -> String, set: (String) -> Unit): Screen {
+        lateinit var s: Screen
+        fun build(): List<Row> = about.map { Row(it) } + listOf(
+            Row(""),
+            Row("Get your key", "opens browser  ►", action = { WebLink.open(page) }),
+            Row(if (get().isBlank()) "Enter the key" else "Change the key", if (get().isBlank()) "" else "…" + get().takeLast(4), action = {
+                App.ask("$title (ctrl+shift+v pastes)", get()) { v -> if (v != null) { set(v.trim()); s.rows = build(); App.refresh() } }
+            }),
+        ) + (if (get().isNotBlank()) listOf(Row("Remove the key", action = { set(""); s.rows = build(); App.refresh() })) else emptyList()) +
+            listOf(Row("Done", action = { App.back() }))
+        s = Screen(title, build())
         return s
     }
 
     private fun save(l: AioRows.Loaded, password: String, p: RowSetup.Picks) {
+        RowSetup.putKeys(l.config, p)
         RowSetup.apply(l.catalogs, p)
         App.toast("Saving…")
         App.async({ AioRows.save(l, password) }) { r ->
@@ -105,7 +135,7 @@ object RowsSetup {
         val status = Screen("Creating your rows", listOf(Row("Creating your AIOMetadata… (up to a minute)")))
         App.push(status)
         App.async({
-            val made = RowSetup.create(p, password, tmdbKey)
+            val made = RowSetup.create(p, password, tmdbKey.ifBlank { p.tmdbKey })
             Stremio.installAddon(key, made.installUrl)
             made
         }) { r ->

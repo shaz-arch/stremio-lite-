@@ -14,7 +14,7 @@ object RowsSetup {
         val rows = mutableListOf<Row>()
         if (aio.isNotEmpty()) {
             rows += Row("Categories and streaming services", "►", opens = {
-                RowPicker.entry(app) { _, l, pw -> checklist(app, RowSetup.picksFrom(l.catalogs), edit = l, password = pw) }
+                RowPicker.entry(app) { _, l, pw -> checklist(app, RowSetup.picksFrom(l.config), edit = l, password = pw) }
             })
             rows += Row("Switch single rows on or off", "►", opens = { RowPicker.entry(app) })
         }
@@ -70,6 +70,20 @@ object RowsSetup {
                 })
                 rows += r
             }
+            rows += Row("──── Optional keys ────")
+            rows += Row("MDBList key", (if (p.mdblistKey.isNotBlank()) "set ✓" else "adds ${RowSetup.mdblistCount(p)} rows") + "  ►", opens = {
+                keyScreen(app, "MDBList key", RowSetup.MDBLIST_KEY_PAGE, listOf(
+                    "Free account at mdblist.com, then Preferences › API key.",
+                    "Adds MDBList rows: Top 100 Today, IMDb Top 250, Certified Fresh,",
+                    "Trending Kids, Bollywood releases and a few genre lists.",
+                ), { p.mdblistKey }, { p.mdblistKey = it })
+            })
+            rows += Row("Your own TMDB key", (if (p.tmdbKey.isNotBlank()) "set ✓" else "not needed") + "  ►", opens = {
+                keyScreen(app, "TMDB key", RowSetup.TMDB_KEY_PAGE, listOf(
+                    "Only needed if the server asks for one.",
+                    "Free account at themoviedb.org, then Settings › API › API Key.",
+                ), { p.tmdbKey }, { p.tmdbKey = it })
+            })
             rows += Row("────────────────────")
             rows += if (edit != null) Row("Save to AIOMetadata", "►", action = { save(app, edit, password!!, p) })
             else Row("Create my rows", "►", action = { askNewPassword(app, p) })
@@ -77,10 +91,30 @@ object RowsSetup {
         }
         s = Screen(if (edit != null) "Categories" else "Create your rows", emptyList())
         s.rows = build()
+        s.onShow = { s.rows = build(); app.refresh(s) }
+        return s
+    }
+
+    /** One optional key: where to get it (link or QR code), and entering, changing or removing it. */
+    private fun keyScreen(app: MainActivity, title: String, page: String, about: List<String>, get: () -> String, set: (String) -> Unit): Screen {
+        lateinit var s: Screen
+        fun build(): List<Row> = about.map { Row(it) } + listOf(
+            Row(""),
+            LinkOut.row(app, "Get your key", title, page),
+            Row(if (get().isBlank()) "Enter the key" else "Change the key", if (get().isBlank()) "" else "…" + get().takeLast(4), action = {
+                val input = EditText(app).apply { hint = title; setSingleLine(); setText(get()) }
+                android.app.AlertDialog.Builder(app).setTitle(title).setMessage("Type or paste it.").setView(input)
+                    .setPositiveButton("OK") { _, _ -> set(input.text.toString().trim()); s.rows = build(); app.refresh(s) }
+                    .setNegativeButton("Cancel", null).show()
+            }),
+        ) + (if (get().isNotBlank()) listOf(Row("Remove the key", action = { set(""); s.rows = build(); app.refresh(s) })) else emptyList()) +
+            listOf(Row("Done", action = { app.back() }))
+        s = Screen(title, build())
         return s
     }
 
     private fun save(app: MainActivity, l: AioRows.Loaded, password: String, p: RowSetup.Picks) {
+        RowSetup.putKeys(l.config, p)
         RowSetup.apply(l.catalogs, p)
         app.toast("Saving…")
         Net.async({ AioRows.save(l, password) }) { r ->
@@ -114,7 +148,7 @@ object RowsSetup {
         val status = Screen("Creating your rows", listOf(Row("Creating your AIOMetadata… (up to a minute)")))
         app.push(status)
         Net.async({
-            val made = RowSetup.create(p, password, tmdbKey)
+            val made = RowSetup.create(p, password, tmdbKey.ifBlank { p.tmdbKey })
             Stremio.installAddon(key, made.installUrl)
             made
         }) { r ->
