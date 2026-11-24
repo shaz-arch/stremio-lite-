@@ -26,7 +26,9 @@ object Folders {
     /** Splits "Folder: Name" (short folder part only, so titles with colons are left alone). */
     fun split(name: String): Pair<String?, String> {
         val i = name.indexOf(": ")
-        if (i in 1..24) return name.substring(0, i).trim() to name.substring(i + 2).trim()
+        // A folder path ("World > Korean") may be longer than a plain folder name.
+        val max = if (name.substring(0, maxOf(i, 0)).contains(" > ")) 44 else 24
+        if (i in 1..max) return name.substring(0, i).trim() to name.substring(i + 2).trim()
         return null to name
     }
 

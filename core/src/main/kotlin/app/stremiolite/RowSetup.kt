@@ -36,7 +36,8 @@ object RowSetup {
     /** Categories in the catalogue, in the order shown; the first ones are ticked to start with. */
     val categories = listOf(
         "Top 10", "Streaming", "Genres", "Kids & Family", "Charts", "Decades", "Documentaries", "Collections",
-        "Themes", "Sitcoms", "Studios", "Directors", "Anime", "Indian", "Pakistani",
+        "Themes", "Sitcoms", "Studios", "Directors", "New & Latest", "World", "Channels", "More services", "Franchises", "Actors",
+        "Anime", "Seasonal", "Runtime", "Reality", "Indian", "Pakistani",
     )
     val defaultCategories = setOf("Top 10", "Streaming", "Genres", "Kids & Family", "Charts", "Decades", "Documentaries", "Collections")
 
@@ -45,6 +46,8 @@ object RowSetup {
         MINIMAL("Minimal", setOf("Top 10", "Streaming", "Genres", "Kids & Family")),
         STANDARD("Standard", setOf("Top 10", "Streaming", "Genres", "Kids & Family", "Charts", "Decades", "Documentaries", "Collections",
             "Themes", "Sitcoms", "Studios", "Directors")),
+        FULL("Full", STANDARD.categories + setOf("New & Latest", "World", "Channels", "More services", "Franchises", "Actors",
+            "Anime", "Seasonal", "Runtime", "Reality")),
     }
 
     /** The genres Minimal keeps (for Movies and Shows). */
@@ -70,16 +73,16 @@ object RowSetup {
 
     /** Rows that would be on with these picks (front page included, merged parts not counted). */
     fun count(p: Picks): Int = lite(p.region).count {
-        !it.part && (it.id !in needsMdblist || p.mdblistKey.isNotBlank()) && wanted(it.name, p)
+        !it.part && (it.id !in needsMdblist || p.mdblistKey.isNotBlank()) && sizeOk(it.id, it.type, p) && wanted(it.name, p)
     }
 
     /** id, name and whether it's part of a merged row, for each row of a region (cached: counting runs on every tick). */
-    private class Lite(val id: String, val name: String, val part: Boolean)
+    private class Lite(val id: String, val type: String, val name: String, val part: Boolean)
     private val liteCache = HashMap<Region, List<Lite>>()
     private fun lite(r: Region): List<Lite> = synchronized(liteCache) {
         liteCache.getOrPut(r) {
             val all = forRegion(r)
-            (0 until all.length()).map { all.getJSONObject(it) }.map { Lite(it.optString("id"), it.optString("name"), it.optString("mergedInto").isNotBlank()) }
+            (0 until all.length()).map { all.getJSONObject(it) }.map { Lite(it.optString("id"), it.optString("type"), it.optString("name"), it.optString("mergedInto").isNotBlank()) }
         }
     }
 
@@ -87,7 +90,8 @@ object RowSetup {
     fun countIn(p: Picks, category: String): Int {
         val q = Picks(p.region, p.services, (p.categories + category).toMutableSet(), p.size).also { it.mdblistKey = p.mdblistKey }
         return lite(p.region).count {
-            !it.part && group(it.name).first == category && (it.id !in needsMdblist || p.mdblistKey.isNotBlank()) && wanted(it.name, q)
+            !it.part && group(it.name).first == category && (it.id !in needsMdblist || p.mdblistKey.isNotBlank()) &&
+                sizeOk(it.id, it.type, q) && wanted(it.name, q)
         }
     }
 
@@ -123,13 +127,20 @@ object RowSetup {
 
     fun catalogue(): JSONArray = JSONArray(file.getJSONArray("catalogs").toString())
 
+    /** Rows only in the Full size (extra directors, studios, themes and so on inside the usual folders), as "id|type". */
+    val fullOnly: Set<String> by lazy {
+        file.optJSONArray("fullOnly")?.let { a -> (0 until a.length()).map { a.getString(it) }.toSet() } ?: emptySet()
+    }
+
+    private fun sizeOk(id: String, type: String, p: Picks) = p.size == Size.FULL || "$id|$type" !in fullOnly
+
     /** Rows that need an MDBList key (lists from MDBList, or merged rows using them). */
     val needsMdblist: Set<String> by lazy {
         file.optJSONArray("needsMdblist")?.let { a -> (0 until a.length()).map { a.getString(it) }.toSet() } ?: emptySet()
     }
 
     /** How many rows an MDBList key adds for these picks. */
-    fun mdblistCount(p: Picks): Int = lite(p.region).count { !it.part && it.id in needsMdblist && wanted(it.name, p, ignoreKey = true) }
+    fun mdblistCount(p: Picks): Int = lite(p.region).count { !it.part && it.id in needsMdblist && sizeOk(it.id, it.type, p) && wanted(it.name, p, ignoreKey = true) }
 
     /** The catalogue for a region: Top 10 rows use its country, streaming rows its watch region. */
     fun forRegion(r: Region): JSONArray {
@@ -162,7 +173,7 @@ object RowSetup {
             val (cat, _) = group(name)
             if (cat.isNotEmpty() && cat !in categories) continue
             val keyOk = o.optString("id") !in needsMdblist || p.mdblistKey.isNotBlank()
-            o.put("enabled", keyOk && wanted(name, p))
+            o.put("enabled", keyOk && sizeOk(o.optString("id"), o.optString("type"), p) && wanted(name, p))
             if (cat.isNotEmpty()) o.put("showInHome", false)
         }
     }
@@ -199,7 +210,12 @@ object RowSetup {
             val n = o.optString("name")
             if (o.optBoolean("enabled") && group(n).first == "Genres" && n.substringAfterLast(':').trim() !in coreGenres) extraGenre = true
         }
-        val size = if ("Genres" in cats && !extraGenre) Size.MINIMAL else Size.STANDARD
+        var full = false
+        for (i in 0 until catalogs.length()) {
+            val o = catalogs.optJSONObject(i) ?: continue
+            if (o.optBoolean("enabled") && "${o.optString("id")}|${o.optString("type")}" in fullOnly) full = true
+        }
+        val size = if (full) Size.FULL else if ("Genres" in cats && !extraGenre) Size.MINIMAL else Size.STANDARD
         return Picks(if (us) Region.US else Region.UK, svcs, cats, size)
     }
 
