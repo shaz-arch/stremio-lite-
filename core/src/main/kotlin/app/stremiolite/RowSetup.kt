@@ -88,6 +88,8 @@ object RowSetup {
             .replace("\"watch_region\":\"GB\"", "\"watch_region\":\"US\"")
             .replace("\"watchRegion\":\"GB\"", "\"watchRegion\":\"US\"")
             .replace("\"region\":\"GB\"", "\"region\":\"US\"")
+            .replace("\"certification_country\":\"GB\"", "\"certification_country\":\"US\"")
+            .replace("\"certificationCountry\":\"GB\"", "\"certificationCountry\":\"US\"")
             .replace("watch_region=GB", "watch_region=US")
             .replace("region=GB", "region=US")
             .replace(" (US)", "")

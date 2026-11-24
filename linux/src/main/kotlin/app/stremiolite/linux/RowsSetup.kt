@@ -100,12 +100,12 @@ object RowsSetup {
         }
     }
 
-    private fun create(p: RowSetup.Picks, password: String) {
+    private fun create(p: RowSetup.Picks, password: String, tmdbKey: String = "") {
         val key = Account.authKey ?: return
         val status = Screen("Creating your rows", listOf(Row("Creating your AIOMetadata… (up to a minute)")))
         App.push(status)
         App.async({
-            val made = RowSetup.create(p, password)
+            val made = RowSetup.create(p, password, tmdbKey)
             Stremio.installAddon(key, made.installUrl)
             made
         }) { r ->
@@ -121,7 +121,17 @@ object RowsSetup {
                     Row("Keep your password: you need it to change rows on another device."),
                 )
             }.onFailure { e ->
-                status.rows = listOf(Row("Couldn't create the rows: " + (if (e is AioRows.Failed) e.message else Net.describe(e))))
+                val needsKey = e is AioRows.Failed && e.message?.contains("TMDB") == true
+                status.rows = listOfNotNull(
+                    Row("Couldn't create the rows: " + (if (e is AioRows.Failed) e.message else Net.describe(e))),
+                    if (needsKey) Row("Free key: themoviedb.org › Settings › API (copy the 'API Key')") else null,
+                    if (needsKey) Row("Enter a TMDB key", "►", action = {
+                        App.ask("TMDB API key (ctrl+shift+v pastes)") { k ->
+                            val key2 = k?.trim().orEmpty()
+                            if (key2.isNotEmpty()) { App.back(); create(p, password, key2) }
+                        }
+                    }) else Row("Try again", action = { App.back(); create(p, password, tmdbKey) }),
+                )
             }
             App.refresh()
         }
