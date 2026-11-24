@@ -206,7 +206,7 @@ object Guide {
             if (!hit) return
             keep += id
         }
-        found.forEach { names.putIfAbsent(it, id) }
+        found.forEach { if (!names.containsKey(it)) names[it] = id }
     }
 
     private fun programme(el: String, now: Long, until: Long): Pair<String, Prog>? {
