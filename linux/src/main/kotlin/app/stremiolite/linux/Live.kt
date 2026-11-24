@@ -353,7 +353,7 @@ object Live {
         fun build() {
             s.rows = rows()
             // Always open on "Watch now", so OK, OK plays.
-            if (!placed) { placed = true; s.moveTo = 0; s.position = 0 }
+            if (!placed) { placed = true; s.moveTo = 0; s.pos = 0 }
             App.refresh()
         }
         s = Screen(c.name, emptyList())
