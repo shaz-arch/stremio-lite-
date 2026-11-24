@@ -57,16 +57,6 @@ object Account {
         Store.writeJson("account.json", o)
     }
 
-    /** This profile's Live TV (playlists, favourites, guide link), for copying. */
-    fun live() = app.stremiolite.LiveTv.Bundle(playlists, favourites, liveGuide)
-
-    /** Adds someone's Live TV to this profile's and sends it to the account. */
-    fun addLive(theirs: app.stremiolite.LiveTv.Bundle) {
-        val b = theirs.into(live())
-        playlists = b.playlists; favourites = b.favourites; liveGuide = b.guide
-        syncOut()
-    }
-
     /** Forgets what's in memory (after switching profile). */
     fun reload() { cache = null }
 
@@ -139,6 +129,16 @@ object Prefs {
     var hiddenRows: Set<String>
         get() = data().optJSONArray("hiddenRows")?.let { a -> (0 until a.length()).map { a.optString(it) }.toSet() } ?: emptySet()
         set(v) { data().put("hiddenRows", JSONArray(v.toList())); save() }
+
+    /** This profile's Live TV (playlists, favourites, guide link), for copying. */
+    fun live() = app.stremiolite.LiveTv.Bundle(playlists, favourites, liveGuide)
+
+    /** Adds someone's Live TV to this profile's and sends it to the account. */
+    fun addLive(theirs: app.stremiolite.LiveTv.Bundle) {
+        val b = theirs.into(live())
+        playlists = b.playlists; favourites = b.favourites; liveGuide = b.guide
+        syncOut()
+    }
 
     fun language(): Language = Languages.all.getOrElse(subLang) { Languages.all[1] }
 
