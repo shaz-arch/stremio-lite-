@@ -331,15 +331,17 @@ object Live {
     /** One channel: watch it, or add it to (or take it off) your favourites. */
     fun channelMenu(c: LiveTv.Channel, from: String): Screen {
         lateinit var s: Screen
-        fun build() {
+        var placed = false
+        var redraw: () -> Unit = {}
+        fun rows(): List<Row> {
             val fav = LiveTv.isFavourite(Prefs.favourites, c)
-            s.rows = listOfNotNull(
+            return listOfNotNull(
                 Row("Watch now", status(c).let { if (it == "checking…") "►" else "$it  ►" }, action = { play(c) }),
                 Row(if (fav) "Remove from favourites" else "Add to favourites", if (fav) "★" else "☆", action = {
                     Prefs.favourites = LiveTv.toggle(Prefs.favourites, c, from)
                     Prefs.syncOut()
                     App.toast(if (fav) "Removed from favourites" else "Added to favourites")
-                    build()
+                    redraw()
                 }),
                 Row(""),
             ) + guideRows(c) + listOfNotNull(
@@ -347,9 +349,16 @@ object Live {
                 Row(info("From", from)),
                 c.note.takeIf { it.isNotEmpty() }?.let { Row(info("Note", it)) },
             )
+        }
+        fun build() {
+            s.rows = rows()
+            // Always open on "Watch now", so OK, OK plays.
+            if (!placed) { placed = true; s.moveTo = 0; s.position = 0 }
             App.refresh()
         }
         s = Screen(c.name, emptyList())
+        s.rows = rows()
+        redraw = { build() }
         s.onShow = { build(); loadGuides(guidesFor(c)) { if (App.inStack(s)) build() } }
         return s
     }

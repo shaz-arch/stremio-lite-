@@ -138,12 +138,12 @@ object LiveTv {
      * Reads an M3U playlist: each #EXTINF line names the channel (group-title gives its group),
      * and the next link line is its stream. Groups keep the playlist's order.
      */
-    fun parseM3u(text: String, fallbackGroup: String = "Channels"): List<Group> {
+    fun parseM3u(text: String, fallbackGroup: String = "Channels", guideUrl: String = guideLink(text)): List<Group> {
         val order = LinkedHashMap<String, MutableList<Channel>>()
         var name: String? = null
         var group: String? = null
         var tvg = ""
-        val guide = guideLink(text)
+        val guide = guideUrl
         for (raw in text.lineSequence()) {
             val line = raw.trim()
             when {
@@ -173,6 +173,19 @@ object LiveTv {
         return attr(head, "url-tvg").ifEmpty { attr(head, "x-tvg-url") }.split(',').first().trim()
     }
 
+    /**
+     * Many IPTV services give the playlist as …/get.php?username=…&password=… and the guide beside
+     * it as …/xmltv.php with the same login. Returns that guide link, or "" for other playlists.
+     */
+    fun providerGuide(url: String): String {
+        val u = runCatching { URL(url) }.getOrNull() ?: return ""
+        if (!u.path.endsWith("/get.php")) return ""
+        val q = (u.query ?: "").split('&').associate { it.substringBefore('=') to it.substringAfter('=', "") }
+        val user = q["username"] ?: return ""
+        val pass = q["password"] ?: return ""
+        return "${u.protocol}://${u.authority}${u.path.removeSuffix("get.php")}xmltv.php?username=$user&password=$pass"
+    }
+
     private fun attr(line: String, key: String): String =
         Regex("""$key="([^"]*)"""", RegexOption.IGNORE_CASE).find(line)?.groupValues?.get(1)?.trim() ?: ""
 
@@ -191,8 +204,8 @@ object LiveTv {
         val bytes = Http.getBytes(p.url, 30_000)
         val text = bytes.toString(Charsets.UTF_8)
         if (!text.contains("#EXTINF", ignoreCase = true)) throw IllegalStateException("That link isn't an M3U playlist")
-        val guide = guideLink(text)
-        return Loaded(System.currentTimeMillis(), parseM3u(text), bytes.size, guide).also { loaded[p.url] = it }
+        val guide = guideLink(text).ifEmpty { providerGuide(p.url) }
+        return Loaded(System.currentTimeMillis(), parseM3u(text, guideUrl = guide), bytes.size, guide).also { loaded[p.url] = it }
     }
 
     /**
@@ -220,7 +233,12 @@ object LiveTv {
         val seen = HashSet<String>()
         val repeats = all.count { !seen.add(it.urls.first()) }
         if (repeats > 0) out += "Listed twice" to "$repeats (same link)"
-        out += "TV guide" to if (l.guide.isEmpty()) "none in the playlist" else "included"
+        val matched = if (l.guide.isEmpty()) 0 else all.count { Guide.lookup(it, listOf(l.guide)).isNotEmpty() }
+        out += "TV guide" to when {
+            l.guide.isEmpty() -> "none: add your own in Live TV"
+            Guide.get(l.guide) == null -> (if (l.guide == providerGuide(p.url)) "from your provider" else "included") + ", not read yet (open a group)"
+            else -> (if (l.guide == providerGuide(p.url)) "from your provider" else "included") + ": $matched of ${all.size} channels listed"
+        }
         out += "Size" to if (l.bytes >= 1_000_000) "%.1f MB".format(l.bytes / 1_000_000.0) else "${(l.bytes + 999) / 1000} KB"
         out += "Read" to day(l.at)
         val u = runCatching { URL(p.url) }.getOrNull()
