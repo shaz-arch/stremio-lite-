@@ -43,6 +43,9 @@ class Screen(
     /** Called when the cursor moves to a line (lists use it to load the next page). */
     var onSelect: ((Int) -> Unit)? = null
     var onHide: (() -> Unit)? = null
+
+    /** Games: takes the arrows, OK and Play/Pause ("up", "down", "left", "right", "ok", "play") instead of the list. */
+    var onKey: ((String) -> Unit)? = null
 }
 
 

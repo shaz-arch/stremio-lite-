@@ -411,6 +411,22 @@ class MainActivity : Activity() {
     // ---- remote keys --------------------------------------------------------
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        // A game screen takes the arrows, OK and Play/Pause itself (Back still goes back).
+        stack.lastOrNull()?.onKey?.let { handler ->
+            val name = when (event.keyCode) {
+                KeyEvent.KEYCODE_DPAD_UP -> "up"
+                KeyEvent.KEYCODE_DPAD_DOWN -> "down"
+                KeyEvent.KEYCODE_DPAD_LEFT -> "left"
+                KeyEvent.KEYCODE_DPAD_RIGHT -> "right"
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> "ok"
+                KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY -> "play"
+                else -> null
+            }
+            if (name != null) {
+                if (event.action == KeyEvent.ACTION_DOWN) handler(name)
+                return true
+            }
+        }
         when (event.keyCode) {
             KeyEvent.KEYCODE_BACK -> {
                 // Act on key-up only, so one press never goes back two screens.

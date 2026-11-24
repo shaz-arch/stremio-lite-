@@ -127,6 +127,11 @@ object Prefs {
         get() = runCatching { JSONArray(data().optString("liveFreeHide", "[]")).let { a -> (0 until a.length()).map { a.getString(it) }.toSet() } }.getOrDefault(emptySet())
         set(v) { data().put("liveFreeHide", JSONArray(v.toList()).toString()); save() }
 
+    /** Game scores (this profile, this computer: not in SHARED, so never synced). */
+    var games: String?
+        get() = data().optString("games").ifEmpty { null }
+        set(v) { data().put("games", v); save() }
+
     /** Channels played lately (this computer only: not in SHARED, so never synced). */
     var recent: List<app.stremiolite.LiveTv.Channel>
         get() = app.stremiolite.LiveTv.favourites(data().optString("liveRecent", ""))

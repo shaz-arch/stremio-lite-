@@ -156,6 +156,8 @@ object Profiles {
                     Row("────────────────────"),
                     Row("Add a profile (another Stremio account)", "►", opens = { adding = true; SignIn.screen() }),
                     Row("Manage profiles", "►", opens = { manage() }),
+                    Row("────────────────────"),
+                    Row("Games", "2048, Minesweeper, noughts & crosses, film quiz  ►", opens = { GamesScreen.screen() }),
                 )
             App.refresh()
         }

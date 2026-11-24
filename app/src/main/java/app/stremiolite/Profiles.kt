@@ -145,6 +145,8 @@ object Profiles {
             rows += Row("────────────────────")
             rows += Row("Add a profile", "►", opens = { addScreen(app) })
             rows += Row("Manage profiles", "►", opens = { manageScreen(app) })
+            rows += Row("────────────────────")
+            rows += Row("Games", "2048, Minesweeper, noughts & crosses, film quiz  ►", opens = { GamesScreen.screen(app) })
             return rows
         }
         screen = Screen("Who's watching?", build())

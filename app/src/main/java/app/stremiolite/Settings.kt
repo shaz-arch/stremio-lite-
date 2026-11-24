@@ -158,6 +158,11 @@ object Settings {
         syncOut(c)
     }
 
+    /** Game scores (this profile, this device). */
+    fun gameStats(c: Context): String? = prefs(c).getString("games", null)
+
+    fun setGameStats(c: Context, json: String) = prefs(c).edit().putString("games", json).apply()
+
     /** Channels played lately (this device only). */
     fun recent(c: Context): List<LiveTv.Channel> = LiveTv.favourites(prefs(c).getString("liveRecent", null))
 

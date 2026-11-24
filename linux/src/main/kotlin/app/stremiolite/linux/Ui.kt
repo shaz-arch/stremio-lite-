@@ -32,6 +32,8 @@ class Screen(val title: String, var rows: List<Row>, var tag: String = "") {
     var onShow: (() -> Unit)? = null
     var onHide: (() -> Unit)? = null
     var onSelect: ((Int) -> Unit)? = null
+    /** Games: takes the arrows, Enter/space and p ("up", "down", "left", "right", "ok", "play") instead of the list. */
+    var onKey: ((String) -> Unit)? = null
     /** Lists worth coming back to: the cursor returns to the same line next time. */
     var key: String? = null
 }
@@ -194,6 +196,22 @@ object App {
         prompt?.let { p -> promptKey(p, k); return }
         val s = top() ?: return
         val n = s.rows.size
+        s.onKey?.let { handler ->
+            val name = when (k.keyType) {
+                KeyType.ArrowUp -> "up"
+                KeyType.ArrowDown -> "down"
+                KeyType.ArrowLeft -> "left"
+                KeyType.ArrowRight -> "right"
+                KeyType.Enter -> "ok"
+                KeyType.Character -> when (k.character) {
+                    ' ' -> "ok"; 'p', 'P', 'f', 'F' -> "play"
+                    'k', 'w' -> "up"; 'j', 's' -> "down"; 'h', 'a' -> "left"; 'l', 'd' -> "right"
+                    else -> null
+                }
+                else -> null
+            }
+            if (name != null) { handler(name); return }
+        }
         when (k.keyType) {
             KeyType.ArrowUp -> move(s, -1)
             KeyType.ArrowDown -> move(s, 1)
