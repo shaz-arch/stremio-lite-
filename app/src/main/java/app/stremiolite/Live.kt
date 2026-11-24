@@ -143,6 +143,7 @@ object Live {
         tail = listOf(
             Row("────────────────────"),
             Row("Reload this playlist", action = { LiveTv.forget(); reload { screen.onShow?.invoke() } }),
+            Row("Rename this playlist", "►", action = { rename(app, p) }),
             Row("Remove this playlist", "►", opens = {
                 confirmScreen(app, "Remove ${p.name}?", "Takes it off Live TV on all your devices.", "Yes, remove it") {
                     Settings.setPlaylists(app, Settings.playlists(app).filter { it.url != p.url })
@@ -230,5 +231,26 @@ object Live {
         val status = when (LiveTv.known(c)) { null -> "checking…"; "" -> "off air"; else -> "live" }
         val go = { Player.play(app, LiveTv.known(c)?.ifEmpty { null } ?: c.urls.first(), c.name) }
         return Row(c.name, status, action = go, play = go)
+    }
+
+    /** A new name for a playlist; Live TV shows it straight away (and so do your other devices). */
+    private fun rename(app: MainActivity, p: LiveTv.Playlist) {
+        val input = android.widget.EditText(app).apply {
+            setText(p.name)
+            setSelection(p.name.length)
+            setSingleLine()
+        }
+        android.app.AlertDialog.Builder(app)
+            .setTitle("Rename playlist")
+            .setView(input)
+            .setPositiveButton("Rename") { _, _ ->
+                val name = input.text.toString().trim()
+                if (name.isEmpty() || name == p.name) return@setPositiveButton
+                Settings.setPlaylists(app, Settings.playlists(app).map { if (it.url == p.url) LiveTv.Playlist(name, it.url) else it })
+                app.toast("Renamed to $name")
+                app.back()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 }

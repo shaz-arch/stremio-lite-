@@ -131,6 +131,16 @@ object Live {
         val tail = listOf(
             Row("────────────────────"),
             Row("Reload this playlist", action = { LiveTv.forget(); reload { screen.onShow?.invoke() } }),
+            Row("Rename this playlist", "►", action = {
+                App.ask("New name", p.name) { v ->
+                    val name = v?.trim().orEmpty()
+                    if (name.isEmpty() || name == p.name) return@ask
+                    Prefs.playlists = Prefs.playlists.map { if (it.url == p.url) LiveTv.Playlist(name, it.url) else it }
+                    Prefs.syncOut()
+                    App.toast("Renamed to $name")
+                    App.back()
+                }
+            }),
             Row("Remove this playlist", "►", opens = {
                 confirmScreen("Remove ${p.name}?", "Takes it off Live TV on all your devices.", "Yes, remove it") {
                     Prefs.playlists = Prefs.playlists.filter { it.url != p.url }
