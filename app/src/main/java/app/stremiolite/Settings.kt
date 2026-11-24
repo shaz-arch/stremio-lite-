@@ -91,6 +91,12 @@ object Settings {
     /** Takes the account's settings if they're newer than this device's. Returns true if anything changed. */
     fun syncIn(c: Context): Boolean {
         val p = prefs(c)
+        // Copied into this profile while another was in use: send it to the account first.
+        if (p.getBoolean("pendingSync", false)) {
+            p.edit().remove("pendingSync").apply()
+            syncOut(c)
+            return false
+        }
         val raw = History.rawRemote(c, SYNC_ID)
         if (raw == null) {
             // Nothing on the account yet: this device's settings become the shared ones.
@@ -146,6 +152,22 @@ object Settings {
         prefs(c).edit().putString("liveGuide", url).apply()
         syncOut(c)
     }
+
+    /** This profile's Live TV (playlists, favourites, guide link), for copying. */
+    fun live(c: Context): LiveTv.Bundle = liveOf(prefs(c))
+
+    fun liveOf(p: android.content.SharedPreferences) =
+        LiveTv.Bundle(LiveTv.playlists(p.getString("playlists", null)), LiveTv.favourites(p.getString("liveFavs", null)), p.getString("liveGuide", "") ?: "")
+
+    /** Writes [b] into a profile's settings; [send] syncs it now (the current profile), otherwise on its next start. */
+    fun putLive(p: android.content.SharedPreferences, b: LiveTv.Bundle, c: Context?, send: Boolean) {
+        p.edit().putString("playlists", LiveTv.playlistsJson(b.playlists)).putString("liveFavs", LiveTv.favouritesJson(b.favourites))
+            .putString("liveGuide", b.guide).putBoolean("pendingSync", !send).apply()
+        if (send && c != null) syncOut(c)
+    }
+
+    /** Adds someone's Live TV to this profile's. */
+    fun addLive(c: Context, theirs: LiveTv.Bundle) = putLive(prefs(c), theirs.into(live(c)), c, send = true)
 
     fun setPlaylists(c: Context, list: List<LiveTv.Playlist>) {
         prefs(c).edit().putString("playlists", LiveTv.playlistsJson(list)).apply()

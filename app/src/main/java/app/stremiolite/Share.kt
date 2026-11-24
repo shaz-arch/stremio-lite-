@@ -32,7 +32,7 @@ object Share {
 
     // ---- sending ---------------------------------------------------------------------------
 
-    private fun payload(app: MainActivity): JSONObject {
+    private fun payload(app: MainActivity, withLive: Boolean): JSONObject {
         val all = Home.allAddons().filter { !it.isLocal }
         val streams = all.filter { "stream" in it.resources }
         val share = all - streams.toSet()
@@ -47,6 +47,7 @@ object Share {
             .put("s", Settings.exportShared(app))
             .put("h", JSONArray(personal))
             .put("st", streams.isNotEmpty())
+            .also { o -> if (withLive) Settings.live(app).takeIf { !it.isEmpty }?.let { o.put("lt", it.json()) } }
     }
 
     private fun encode(o: JSONObject): String {
@@ -75,12 +76,14 @@ object Share {
 
     fun screen(app: MainActivity): Screen {
         if (Home.allAddons().isEmpty()) return Screen("Export my setup", listOf(Row("Your add-ons are still loading. Go back and try again in a moment.")))
-        val p = payload(app)
-        val link = encode(p)
-        val streams = p.optBoolean("st")
-        val s = Screen(
-            "Export my setup",
-            listOf(
+        val live = Settings.live(app)
+        var withLive = false
+        lateinit var s: Screen
+        fun build() {
+            val p = payload(app, withLive)
+            val link = encode(p)
+            val streams = p.optBoolean("st")
+            val rows = mutableListOf(
                 Row("For someone else's Stremio account. On their phone:"),
                 Row("install Stremonino, sign in with their account, then"),
                 Row("point the phone's camera at this code. It opens"),
@@ -92,17 +95,29 @@ object Share {
                 Row(info("Settings", "theme, clock, subtitles, hidden rows")),
                 Row(info("Your watchlist", "hidden on theirs")),
                 Row(info("Stream add-on", if (streams) "not shared (yours uses your TorBox)" else "none")),
-                Row("────────────────────"),
-                Row("Send it as a message instead", "►", action = {
-                    val text = "My Stremonino setup. On your phone, tap this link to open it in Stremonino, or copy it and choose " +
-                        "'Import a setup from another account' → 'Paste a link':\n$link"
-                    runCatching {
-                        app.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text), "Share setup"))
-                    }.onFailure { app.toast("No app to share with on this device") }
-                }),
-            ),
-        )
-        s.image = Qr.make(link, 600)
+            )
+            if (!live.isEmpty) {
+                rows += Row("Include my Live TV", "◄ ${if (withLive) "Yes: " + live.summary() else "No"} ►", action = { withLive = !withLive; build() })
+                if (withLive && live.hasLogins()) {
+                    rows += Row("   Careful: your playlist links hold your logins.")
+                    rows += Row("   Anyone with this code can use those accounts.")
+                }
+            }
+            rows += Row("────────────────────")
+            rows += Row("Send it as a message instead", "►", action = {
+                val text = "My Stremonino setup. On your phone, tap this link to open it in Stremonino, or copy it and choose " +
+                    "'Import a setup from another account' → 'Paste a link':\n$link"
+                runCatching {
+                    app.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text), "Share setup"))
+                }.onFailure { app.toast("No app to share with on this device") }
+            })
+            s.image = Qr.make(link, 600)
+            if (s.image == null) rows.add(rows.size - 1, Row("Too much for one code: send it as a message instead."))
+            s.rows = rows
+            app.refresh(s)
+        }
+        s = Screen("Export my setup", emptyList())
+        build()
         return s
     }
 
@@ -175,6 +190,8 @@ object Share {
         rows.forEach { list += Row("  rows for this app: " + host(it)) }
         list += Row("  their settings and hidden rows")
         if (hide.isNotEmpty()) list += Row("  (their personal watchlist stays hidden)")
+        val live = LiveTv.bundle(p.optJSONObject("lt"))
+        if (live != null) list += Row("  Live TV: " + live.summary() + " (added to yours)")
         list += Row("────────────────────")
         list += status
         list += Row("Add it to my account", action = {
@@ -190,6 +207,7 @@ object Share {
             }) { r ->
                 val failed = r.getOrDefault(emptyList())
                 p.optJSONObject("s")?.let { Settings.importShared(app, it, hide) }
+                live?.let { Settings.addLive(app, it) }
                 app.applyLook()
                 Home.forget()
                 runCatching { Account.addonCache(app).delete() }

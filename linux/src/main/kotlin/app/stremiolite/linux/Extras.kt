@@ -201,6 +201,27 @@ object Profiles {
                 })
             })
         })
+        if (others.isNotEmpty()) rows += Row("Copy Live TV from another profile", "►", opens = {
+            Screen("Copy Live TV into ${p.name}", others.map { o ->
+                val theirs = liveOf(o.id)
+                Row("From ${o.name}", theirs.summary() + if (theirs.isEmpty) "" else "  ►", action = {
+                    if (theirs.isEmpty) { App.toast("${o.name} has no Live TV playlists or favourites"); return@Row }
+                    if (current()?.id == p.id) Prefs.addLive(theirs)
+                    else {
+                        // Not the profile in use: write its settings file; it syncs next time it's used.
+                        val f = File(dirFor(p.id), "settings.json")
+                        val d = runCatching { JSONObject(f.readText()) }.getOrDefault(JSONObject())
+                        val b = theirs.into(liveOf(p.id))
+                        d.put("playlists", app.stremiolite.LiveTv.playlistsJson(b.playlists))
+                            .put("liveFavs", app.stremiolite.LiveTv.favouritesJson(b.favourites))
+                            .put("liveGuide", b.guide).put("pendingSync", true)
+                        f.parentFile?.mkdirs(); f.writeText(d.toString(2))
+                    }
+                    App.toast("Added ${o.name}'s Live TV to ${p.name}: ${theirs.summary()}")
+                    App.back()
+                })
+            } + listOf(Row("────────────────────"), Row("Adds their playlists, favourites and guide link. ${p.name} keeps everything it already has.")))
+        })
         rows += Row("────────────────────")
         rows += Row("Remove ${p.name} from this computer", action = {
             val wasCurrent = current()?.id == p.id
@@ -209,6 +230,16 @@ object Profiles {
             if (wasCurrent) App.resetTo(if (Account.authKey != null) Home.screen() else SignIn.screen()) else App.back()
         })
         return Screen(p.name, rows)
+    }
+
+    /** A profile's Live TV, read from its own settings file. */
+    private fun liveOf(id: String): app.stremiolite.LiveTv.Bundle {
+        val d = runCatching { JSONObject(File(dirFor(id), "settings.json").readText()) }.getOrDefault(JSONObject())
+        return app.stremiolite.LiveTv.Bundle(
+            app.stremiolite.LiveTv.playlists(d.optString("playlists")),
+            app.stremiolite.LiveTv.favourites(d.optString("liveFavs")),
+            d.optString("liveGuide"),
+        )
     }
 
     /** One account's add-ons onto another; very large setups are copied in slim form if Stremio refuses the size. */
@@ -362,7 +393,7 @@ object Share {
     private const val STREAMS_CONFIGURE = "https://aiostreams.elfhosted.com/stremio/configure"
     private const val STREAMS_CONFIG_FILE = "https://raw.githubusercontent.com/shaz-arch/stremio-lite-/main/setup/aiostreams-config.json"
 
-    private fun payload(): JSONObject {
+    private fun payload(withLive: Boolean): JSONObject {
         val all = Home.all().filter { !it.isLocal }
         val streams = all.filter { "stream" in it.resources }
         val share = all - streams.toSet()
@@ -375,6 +406,7 @@ object Share {
             .put("s", Prefs.exportShared())
             .put("h", JSONArray(personal))
             .put("st", streams.isNotEmpty())
+            .also { o -> if (withLive) Prefs.live().takeIf { !it.isEmpty }?.let { o.put("lt", it.json()) } }
     }
 
     private fun encode(o: JSONObject): String {
@@ -402,12 +434,14 @@ object Share {
 
     fun screen(): Screen {
         if (Home.all().isEmpty()) return Screen("Export my setup", listOf(Row("Your add-ons are still loading. Go back and try again in a moment.")))
-        val p = payload()
-        val link = encode(p)
-        val streams = p.optBoolean("st")
-        val s = Screen(
-            "Export my setup",
-            listOf(
+        val live = Prefs.live()
+        var withLive = false
+        lateinit var s: Screen
+        fun build() {
+            val p = payload(withLive)
+            val link = encode(p)
+            val streams = p.optBoolean("st")
+            val rows = mutableListOf(
                 Row("For someone else's Stremio account. On their phone: install"),
                 Row("Stremonino, sign in with their account, then point the camera"),
                 Row("at this code. It opens Stremonino and asks before adding anything."),
@@ -418,13 +452,21 @@ object Share {
                 Row(info("Settings", "theme, clock, subtitles, hidden rows")),
                 Row(info("Your watchlist", "hidden on theirs")),
                 Row(info("Stream add-on", if (streams) "not shared (yours uses your own debrid)" else "none")),
-                Row("────────────────────"),
-                Row("Copy the link to send as a message", action = { Clipboard.copyOrShow(link, "Setup link") }),
-            ),
-        )
-        // Long setups make a code too big for a terminal: the link is the way then.
-        val code = qrLines(link)
-        if (code.size <= 60) s.qr = code
+            )
+            if (!live.isEmpty) {
+                rows += Row("Include my Live TV", "◄ ${if (withLive) "Yes: " + live.summary() else "No"} ►", action = { withLive = !withLive; build() })
+                if (withLive && live.hasLogins()) rows += Row("   Careful: your playlist links hold your logins. Anyone with this can use them.")
+            }
+            rows += Row("────────────────────")
+            rows += Row("Copy the link to send as a message", action = { Clipboard.copyOrShow(link, "Setup link") })
+            s.rows = rows
+            // Long setups make a code too big for a terminal: the link is the way then.
+            val code = qrLines(link)
+            s.qr = if (code.size <= 60) code else null
+            App.refresh()
+        }
+        s = Screen("Export my setup", emptyList())
+        build()
         return s
     }
 
@@ -471,6 +513,8 @@ object Share {
         rows.forEach { list += Row("  rows for this app: " + host(it)) }
         list += Row("  their settings and hidden rows")
         if (hide.isNotEmpty()) list += Row("  (their personal watchlist stays hidden)")
+        val live = app.stremiolite.LiveTv.bundle(p.optJSONObject("lt"))
+        if (live != null) list += Row("  Live TV: " + live.summary() + " (added to yours)")
         list += Row("────────────────────")
         list += status
         list += Row("Add it to my account", action = {
@@ -486,6 +530,7 @@ object Share {
             }) { r ->
                 val failed = r.getOrDefault(emptyList())
                 p.optJSONObject("s")?.let { Prefs.importShared(it, hide) }
+                live?.let { Prefs.addLive(it) }
                 File(Store.dir, "addons.json").delete()
                 Home.forget()
                 App.replaceTop(done(from, failed, p.optBoolean("st") && !hadStreams))

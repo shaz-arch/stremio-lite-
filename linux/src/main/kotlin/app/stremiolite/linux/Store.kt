@@ -57,6 +57,16 @@ object Account {
         Store.writeJson("account.json", o)
     }
 
+    /** This profile's Live TV (playlists, favourites, guide link), for copying. */
+    fun live() = app.stremiolite.LiveTv.Bundle(playlists, favourites, liveGuide)
+
+    /** Adds someone's Live TV to this profile's and sends it to the account. */
+    fun addLive(theirs: app.stremiolite.LiveTv.Bundle) {
+        val b = theirs.into(live())
+        playlists = b.playlists; favourites = b.favourites; liveGuide = b.guide
+        syncOut()
+    }
+
     /** Forgets what's in memory (after switching profile). */
     fun reload() { cache = null }
 
@@ -132,6 +142,16 @@ object Prefs {
 
     fun language(): Language = Languages.all.getOrElse(subLang) { Languages.all[1] }
 
+    /** This profile's Live TV (playlists, favourites, guide link), for copying. */
+    fun live() = app.stremiolite.LiveTv.Bundle(playlists, favourites, liveGuide)
+
+    /** Adds someone's Live TV to this profile's and sends it to the account. */
+    fun addLive(theirs: app.stremiolite.LiveTv.Bundle) {
+        val b = theirs.into(live())
+        playlists = b.playlists; favourites = b.favourites; liveGuide = b.guide
+        syncOut()
+    }
+
     /** Forgets what's in memory (after switching profile). */
     fun reload() { cache = null }
 
@@ -172,6 +192,12 @@ object Prefs {
 
     /** Takes the account's shared settings if they're newer than this computer's. */
     fun syncIn(): Boolean {
+        // Copied into this profile while another was in use: send it to the account first.
+        if (data().optBoolean("pendingSync")) {
+            data().remove("pendingSync"); save()
+            syncOut()
+            return false
+        }
         val raw = Lib.raw(SYNC_ID) ?: return false
         val o = runCatching { JSONObject(raw.optString("name")) }.getOrNull() ?: return false
         val updated = o.optLong("updated")

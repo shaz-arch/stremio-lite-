@@ -87,6 +87,10 @@ object Profiles {
         return c.getSharedPreferences(if (id == "main") base else "$base-$id", Context.MODE_PRIVATE)
     }
 
+    /** A profile's own settings (not just the current one's). */
+    fun settingsOf(c: Context, id: String): android.content.SharedPreferences =
+        c.getSharedPreferences(if (id == "main") "settings" else "settings-$id", Context.MODE_PRIVATE)
+
     /** A new profile starts with a copy of the settings of the profile it was made from. */
     private fun copySettings(c: Context, fromId: String, toId: String) {
         for (base in listOf("settings", "search")) {
@@ -320,6 +324,21 @@ object Profiles {
                         }
                     })
                 })
+            })
+        }
+        if (others.isNotEmpty()) {
+            rows += Row("Copy Live TV from another profile", "►", opens = {
+                Screen("Copy Live TV into ${p.name}", others.map { o ->
+                    val theirs = Settings.liveOf(settingsOf(app, o.id))
+                    Row("From ${o.name}", theirs.summary() + if (theirs.isEmpty) "" else "  ►", action = {
+                        if (theirs.isEmpty) { app.toast("${o.name} has no Live TV playlists or favourites"); return@Row }
+                        val target = settingsOf(app, p.id)
+                        val isCurrent = current(app)?.id == p.id
+                        Settings.putLive(target, theirs.into(Settings.liveOf(target)), app, send = isCurrent)
+                        app.toast("Added ${o.name}'s Live TV to ${p.name}: ${theirs.summary()}")
+                        app.back()
+                    })
+                } + listOf(Row("────────────────────"), Row("Adds their playlists, favourites and guide link."), Row("${p.name} keeps everything it already has.")))
             })
         }
         rows += Row("Sign ${p.name} in again", "►", opens = { signInAgain(app, p.id) })

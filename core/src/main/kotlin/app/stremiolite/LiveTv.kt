@@ -315,4 +315,35 @@ object LiveTv {
         if (done.size >= channels.size) return ""
         return "Checking ${done.size} of ${channels.size} · ${done.count { it.isNotEmpty() }} live"
     }
+
+    // ---- copying Live TV (to another profile, or in a shared setup) ---------------------------
+
+    /** Someone's Live TV: their playlists, favourites and TV guide link. */
+    class Bundle(val playlists: List<Playlist>, val favourites: List<Channel>, val guide: String) {
+        val isEmpty get() = playlists.isEmpty() && favourites.isEmpty() && guide.isEmpty()
+
+        /** "2 playlists, 5 favourites, a TV guide link" */
+        fun summary(): String = listOfNotNull(
+            playlists.size.takeIf { it > 0 }?.let { "$it playlist${if (it == 1) "" else "s"}" },
+            favourites.size.takeIf { it > 0 }?.let { "$it favourite${if (it == 1) "" else "s"}" },
+            if (guide.isNotEmpty()) "a TV guide link" else null,
+        ).joinToString(", ").ifEmpty { "nothing yet" }
+
+        /** True if any link carries a login, so whoever gets it can use that account. */
+        fun hasLogins() = playlists.any { hasLogin(it.url) } || hasLogin(guide)
+
+        fun json(): JSONObject = JSONObject().put("p", playlistsJson(playlists)).put("f", favouritesJson(favourites)).put("g", guide)
+
+        /** These added to [mine]: playlists and favourites it doesn't have yet; its guide link stays if it has one. */
+        fun into(mine: Bundle) = Bundle(
+            mine.playlists + playlists.filter { t -> mine.playlists.none { it.url == t.url } },
+            mine.favourites + favourites.filter { t -> !isFavourite(mine.favourites, t) },
+            mine.guide.ifEmpty { guide },
+        )
+    }
+
+    fun bundle(o: JSONObject?): Bundle? {
+        o ?: return null
+        return Bundle(playlists(o.optString("p")), favourites(o.optString("f")), o.optString("g")).takeIf { !it.isEmpty }
+    }
 }
