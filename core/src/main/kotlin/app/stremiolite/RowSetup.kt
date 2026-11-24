@@ -13,6 +13,16 @@ import org.json.JSONObject
  * row and is always on.
  */
 object RowSetup {
+    /** Most rows ElfHosted's free AIOMetadata server lets one install switch on. */
+    const val SERVER_LIMIT = 200
+
+    /** Rows the server counts against its limit (everything not switched off). */
+    fun serverCount(catalogs: JSONArray): Int = (0 until catalogs.length()).count { catalogs.optJSONObject(it)?.optBoolean("enabled", true) == true }
+
+    /** The biggest ticked categories, to suggest unticking when over the limit. */
+    fun biggest(p: Picks, n: Int = 4): List<Pair<String, Int>> =
+        p.categories.map { it to countIn(p, it) }.sortedByDescending { it.second }.take(n)
+
     /** ElfHosted's free public AIOMetadata server (it supplies a TMDB key, so none is needed). */
     const val SERVER = "https://aiometadata.elfhosted.com"
 
@@ -168,7 +178,8 @@ object RowSetup {
     fun apply(catalogs: JSONArray, p: Picks) {
         for (i in 0 until catalogs.length()) {
             val o = catalogs.optJSONObject(i) ?: continue
-            if (o.optString("mergedInto").isNotBlank()) continue
+            // Parts of a merged row stay off (the merged row fetches them); a row with no setting counts as on.
+            if (o.optString("mergedInto").isNotBlank()) { if (!o.has("enabled")) o.put("enabled", false); continue }
             val name = o.optString("name")
             val (cat, _) = group(name)
             if (cat.isNotEmpty() && cat !in categories) continue

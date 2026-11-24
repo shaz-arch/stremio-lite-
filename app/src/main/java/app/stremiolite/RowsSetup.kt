@@ -40,7 +40,7 @@ object RowsSetup {
                 s.rows = build(); app.refresh(s)
             })
             else rows += Row("Region", p.region.label + " (set when created)")
-            rows += Row("Size", "◄ ${p.size.label} ►   about ${RowSetup.count(p)} rows", action = {
+            rows += Row("Size", "◄ ${p.size.label} ►   about ${RowSetup.count(p)} rows" + (if (RowSetup.count(p) > RowSetup.SERVER_LIMIT) " (over 200!)" else ""), action = {
                 val sizes = RowSetup.Size.values()
                 RowSetup.resize(p, sizes[(p.size.ordinal + 1) % sizes.size])
                 s.rows = build(); app.refresh(s)
@@ -78,8 +78,8 @@ object RowsSetup {
                 ), { p.tmdbKey }, { p.tmdbKey = it })
             })
             rows += Row("────────────────────")
-            rows += if (edit != null) Row("Save to AIOMetadata", "►", action = { save(app, edit, password!!, p) })
-            else Row("Create my rows", "►", action = { askNewPassword(app, p) })
+            rows += if (edit != null) Row("Save to AIOMetadata", "►", action = { if (fits(app, p)) save(app, edit, password!!, p) })
+            else Row("Create my rows", "►", action = { if (fits(app, p)) askNewPassword(app, p) })
             return rows
         }
         s = Screen(if (edit != null) "Categories" else "Create your rows", emptyList())
@@ -174,4 +174,15 @@ object RowsSetup {
             app.refresh(status)
         }
     }
+    /** ElfHosted's free server takes at most 200 rows per install: say what to untick if it's over. */
+    private fun fits(app: MainActivity, p: RowSetup.Picks): Boolean {
+        val n = RowSetup.count(p)
+        if (n <= RowSetup.SERVER_LIMIT - 10) return true
+        val big = RowSetup.biggest(p).joinToString(", ") { "${it.first} (${it.second})" }
+        android.app.AlertDialog.Builder(app).setTitle("Too many rows: about $n")
+            .setMessage("ElfHosted's free AIOMetadata allows 200 rows per install. Untick some of the biggest: $big.")
+            .setPositiveButton("OK", null).show()
+        return false
+    }
+
 }
