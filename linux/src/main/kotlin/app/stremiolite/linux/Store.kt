@@ -107,6 +107,15 @@ object Prefs {
         get() = data().optString("layout", "")
         set(v) { data().put("layout", v); save() }
 
+    /** Live TV on Home (on unless turned off). */
+    var liveTv: Boolean
+        get() = data().optBoolean("liveTv", true)
+        set(v) { data().put("liveTv", v); save() }
+    /** Your M3U playlists for Live TV: follow the account, but never go out with "Share my setup". */
+    var playlists: List<app.stremiolite.LiveTv.Playlist>
+        get() = app.stremiolite.LiveTv.playlists(data().optString("playlists", ""))
+        set(v) { data().put("playlists", app.stremiolite.LiveTv.playlistsJson(v)); save() }
+
     var hiddenRows: Set<String>
         get() = data().optJSONArray("hiddenRows")?.let { a -> (0 until a.length()).map { a.optString(it) }.toSet() } ?: emptySet()
         set(v) { data().put("hiddenRows", JSONArray(v.toList())); save() }
@@ -120,14 +129,14 @@ object Prefs {
     fun exportShared(): JSONObject {
         val d = data()
         val o = JSONObject()
-        SHARED.forEach { k -> if (d.has(k)) o.put(k, d.opt(k)) }
+        SHARED.forEach { k -> if (d.has(k) && k !in NOT_SHARED) o.put(k, d.opt(k)) }
         return o.put("hiddenRows", JSONArray(hiddenRows.toList()))
     }
 
     /** Takes someone's shared settings, plus their hidden rows and [alsoHide]. */
     fun importShared(o: JSONObject, alsoHide: Set<String>) {
         val d = data()
-        SHARED.forEach { k -> if (o.has(k)) d.put(k, o.opt(k)) }
+        SHARED.forEach { k -> if (o.has(k) && k !in NOT_SHARED) d.put(k, o.opt(k)) }
         val theirs = o.optJSONArray("hiddenRows")?.let { a -> (0 until a.length()).map { a.optString(it) }.toSet() } ?: emptySet()
         d.put("hiddenRows", JSONArray((hiddenRows + theirs + alsoHide).toList()))
         save()
@@ -139,7 +148,9 @@ object Prefs {
     private const val SYNC_ID = "stremiolite:settings"
 
     /** Shared settings this build knows; one this computer has never had is always taken from the account. */
-    private val SHARED = listOf("theme", "subLang", "autoNext", "clock", "hideWatched", "layout", "autoFollow")
+    private val SHARED = listOf("theme", "subLang", "autoNext", "clock", "hideWatched", "layout", "autoFollow", "liveTv", "playlists")
+    /** Synced with your own devices, but never sent to someone else with "Share my setup". */
+    private val NOT_SHARED = setOf("playlists")
     /** The look: shared by default, or kept to this computer ("lookLocal", which itself never syncs). */
     private val LOOK = setOf("theme", "clock")
 

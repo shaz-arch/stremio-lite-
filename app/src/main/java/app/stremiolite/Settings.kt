@@ -37,7 +37,7 @@ object Settings {
 
     private const val SYNC_ID = "stremiolite:settings"
     private val INT_KEYS = listOf("subLang", "theme", "clock", "textSize")
-    private val BOOL_KEYS = listOf("autoNext", "hideWatched", "autoFollow")
+    private val BOOL_KEYS = listOf("autoNext", "hideWatched", "autoFollow", "liveTv")
     /** The look: shared by default, or kept to this device ("lookLocal", which itself never syncs). */
     private val LOOK_KEYS = setOf("theme", "clock", "textSize")
 
@@ -78,6 +78,8 @@ object Settings {
         val o = runCatching { JSONObject(item.optString("name")) }.getOrNull() ?: JSONObject()
         val mine = exportShared(c)
         mine.keys().forEach { k -> o.put(k, mine.get(k)) }
+        // Your playlists follow the account, but never go out with "Share my setup".
+        p.getString("playlists", null)?.let { o.put("playlists", it) }
         o.put("updated", now)
         p.edit().putLong("syncedAt", now).apply()
         item.put("name", o.toString()).put("removed", true).put("temp", false).put("_mtime", Sync.iso(now))
@@ -104,6 +106,7 @@ object Settings {
         INT_KEYS.forEach { k -> if (o.has(k) && shares(c, k)) e.putInt(k, o.optInt(k)) }
         BOOL_KEYS.forEach { k -> if (o.has(k)) e.putBoolean(k, o.optBoolean(k)) }
         if (o.has("layout")) e.putString("layout", o.optString("layout"))
+        if (o.has("playlists")) e.putString("playlists", o.optString("playlists"))
         e.putStringSet("hiddenRows", hidden)
         e.putLong("syncedAt", updated).apply()
         if (hidden != remoteHidden) syncOut(c)
@@ -117,6 +120,17 @@ object Settings {
     fun autoFollow(c: Context) = prefs(c).getBoolean("autoFollow", false)
 
     fun rowKey(a: Addon, c: Addon.Catalog) = Folders.rowKey(a, c)
+
+    /** Live TV on Home (on unless turned off). */
+    fun liveTv(c: Context) = prefs(c).getBoolean("liveTv", true)
+
+    /** Your M3U playlists for Live TV, shared with your other devices through the account. */
+    fun playlists(c: Context): List<LiveTv.Playlist> = LiveTv.playlists(prefs(c).getString("playlists", null))
+
+    fun setPlaylists(c: Context, list: List<LiveTv.Playlist>) {
+        prefs(c).edit().putString("playlists", LiveTv.playlistsJson(list)).apply()
+        syncOut(c)
+    }
 
     /** Your arrangement of the Index (see Layout), shared with the other devices. */
     fun layout(c: Context): Layout.Data = Layout.parse(prefs(c).getString("layout", null))
@@ -176,6 +190,7 @@ object Settings {
         lateinit var clockRow: Row
         lateinit var watchedRow: Row
         lateinit var lookRow: Row
+        lateinit var liveRow: Row
 
         fun show() {
             lookRow.detail = "◄ ${if (lookLocal(app)) "This device only" else "Same on all devices"} ►"
@@ -187,6 +202,7 @@ object Settings {
             langRow.detail = "◄ ${subtitleLanguage(app).name} ►"
             nextRow.detail = "◄ ${if (autoNext(app)) "On" else "Off"} ►"
             followRow.detail = "◄ ${if (autoFollow(app)) "On" else "Off: I choose"} ►"
+            liveRow.detail = "◄ ${if (liveTv(app)) "Shown" else "Hidden"} ►"
             app.refresh(screen)
         }
         lateinit var updateRow: Row
@@ -215,6 +231,12 @@ object Settings {
             syncOut(app)
             show()
         })
+        liveRow = Row("Live TV on Home", action = {
+            prefs(app).edit().putBoolean("liveTv", !liveTv(app)).apply()
+            syncOut(app)
+            Home.redraw()
+            show()
+        })
         nextRow = Row("Auto-play next episode", action = {
             prefs(app).edit().putBoolean("autoNext", !autoNext(app)).apply()
             syncOut(app)
@@ -237,7 +259,7 @@ object Settings {
             listOf(
                 Row("──── Playback ────"), playerRow, langRow, nextRow, followRow,
                 Row("──── Look ────"),
-                lookRow, themeRow, sizeRow, clockRow, watchedRow,
+                lookRow, themeRow, sizeRow, clockRow, watchedRow, liveRow,
                 Row("──── Index ────"),
                 Row("Arrange your Index", "►", opens = { Arrange.screen(app) }),
                 Row("Hide rows", "►", opens = { rowsScreen(app) }),

@@ -194,6 +194,7 @@ object Home {
             rows += Row("Calendar", NewEpisodes.weekCount()?.let { if (it == 0) "nothing this week  ►" else "$it this week  ►" } ?: "", opens = { NewEpisodes.calendar() })
             rows += Row("Watched", Watched.list().size.let { if (it == 0) "" else "$it  ►" }, opens = { watchedScreen() })
             rows += Row("Waiting for streams", Waiting.summary(), opens = { Waiting.screen() })
+            if (Prefs.liveTv) rows += Row("Live TV", Live.homeDetail(), opens = { Live.screen() })
             if (list != null) {
                 rows += Row("──── Browse ────")
                 val entries = Index.entries(list)
@@ -861,6 +862,9 @@ object Settings {
                 }),
                 Row("Watched films in lists", "◄ ${if (Prefs.hideWatched) "Hide them" else "Show with ✓"} ►", action = {
                     Prefs.hideWatched = !Prefs.hideWatched; Prefs.syncOut(); build()
+                }),
+                Row("Live TV on Home", "◄ ${if (Prefs.liveTv) "Shown" else "Hidden"} ►", action = {
+                    Prefs.liveTv = !Prefs.liveTv; Prefs.syncOut(); Home.redraw(); build()
                 }),
                 Row("──── Index ────"),
                 Row("Arrange your Index", "►", opens = { Arrange.screen() }),
