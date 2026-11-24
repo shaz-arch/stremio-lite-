@@ -47,6 +47,28 @@ object Guide {
         if (url == null) { cache.clear(); failed.clear() } else { cache.remove(url); failed.remove(url) }
     }
 
+    /** A plain reason a guide couldn't be read. */
+    fun why(e: Throwable): String {
+        var t: Throwable? = e
+        while (t != null) {
+            when (t) {
+                is java.net.UnknownHostException -> return "the address ${t.message?.substringAfter('"')?.substringBefore('"')?.ifBlank { null } ?: ""} doesn't exist (or you're offline)".replace("  ", " ")
+                is java.net.SocketTimeoutException -> return "the server took too long"
+                is java.net.ConnectException -> return "the server refused the connection"
+                is javax.net.ssl.SSLException -> return "couldn't make a secure connection"
+                is java.util.zip.ZipException -> return "the file isn't a proper .gz guide"
+                is Http.HttpError -> return when (t.code) {
+                    404, 410 -> "the guide isn't there any more (${t.code})"
+                    401, 403 -> "the server won't give it out (${t.code})"
+                    else -> "the server said ${t.code}"
+                }
+                is IllegalStateException -> return t.message ?: "no programmes in it"
+            }
+            t = t.cause
+        }
+        return e.message ?: e.javaClass.simpleName
+    }
+
     /** Downloads and reads a guide. Blocking: a big guide takes a while on the stick. */
     fun load(url: String): Data {
         loading[url] = true
@@ -67,7 +89,7 @@ object Guide {
                 c.disconnect()
             }
         } catch (e: Exception) {
-            failed[url] = e.message ?: e.javaClass.simpleName
+            failed[url] = why(e)
             throw e
         } finally {
             loading.remove(url)

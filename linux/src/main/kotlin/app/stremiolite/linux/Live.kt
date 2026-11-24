@@ -291,7 +291,7 @@ object Live {
 
     private fun guideRows(c: LiveTv.Channel): List<Row> {
         val progs = Guide.lookup(c, guidesFor(c))
-        if (progs.isEmpty()) return listOf(Row(noGuide(c)))
+        if (progs.isEmpty()) return listOf(Row(noGuide(c))) + guidesFor(c).map { Row(info("Guide link", it)) }
         val now = System.currentTimeMillis()
         val width = (App.columns() - 10).coerceAtMost(90)
         val rows = mutableListOf<Row>()

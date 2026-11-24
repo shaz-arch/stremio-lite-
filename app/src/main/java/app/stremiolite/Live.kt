@@ -296,7 +296,7 @@ object Live {
     /** Now, next and later today for a channel, as rows. */
     private fun guideRows(app: MainActivity, c: LiveTv.Channel): List<Row> {
         val progs = Guide.lookup(c, guidesFor(app, c))
-        if (progs.isEmpty()) return listOf(Row(noGuide(app, c)))
+        if (progs.isEmpty()) return listOf(Row(noGuide(app, c))) + guidesFor(app, c).map { Row(info("Guide link", it.removePrefix("https://").removePrefix("http://").take(if (narrow) 30 else 48))) }
         val now = System.currentTimeMillis()
         val width = if (narrow) 34 else 50
         val rows = mutableListOf<Row>()

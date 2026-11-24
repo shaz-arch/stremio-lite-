@@ -246,6 +246,9 @@ object LiveTv {
             needed.none { Guide.get(it) != null } -> "$kind, not read yet (open a group)"
             else -> "$kind: $matched of ${all.size} channels listed"
         }
+        needed.mapNotNull { u -> Guide.error(u)?.let { u to it } }.forEach { (u, e) ->
+            out += "Guide problem" to "${u.substringAfter("://").take(40)}: $e"
+        }
         out += "Size" to if (l.bytes >= 1_000_000) "%.1f MB".format(l.bytes / 1_000_000.0) else "${(l.bytes + 999) / 1000} KB"
         out += "Read" to day(l.at)
         val u = runCatching { URL(p.url) }.getOrNull()
