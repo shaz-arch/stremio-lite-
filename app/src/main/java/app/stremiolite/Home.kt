@@ -89,7 +89,11 @@ object Home {
                 Row("Calendar", NewEpisodes.weekCount()?.let { if (it == 0) "nothing this week  ►" else "$it this week  ►" } ?: "", opens = { NewEpisodes.calendar(app) }),
                 Row("Watched", History.watched(app).size.let { if (it == 0) "" else "$it  ►" }, opens = { watchedScreen(app) }),
                 Row("Waiting for streams", Waiting.summary(app), opens = { Waiting.screen(app) }),
-            ) + (if (Settings.liveTv(app)) listOf(Row("Live TV", Live.homeDetail(app), opens = { Live.screen(app) })) else emptyList()) + listOf(
+            ) + (if (Settings.liveTv(app)) listOf(Row("Live TV", Live.homeDetail(app), opens = { Live.screen(app) })) else emptyList()) +
+                (if (Settings.newsOn(app)) listOf(
+                    Row("News", "film & TV headlines  ►", opens = { Feeds.news(app) }),
+                    Row("Coming soon", "films out in the next weeks  ►", opens = { Feeds.comingSoon(app) }),
+                ) else emptyList()) + listOf(
                 Row("──── Browse ────"),
             ))
             screen.rows = rows + tools

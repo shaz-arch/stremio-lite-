@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "note": "Film and TV news feeds (RSS or Atom) for Stremonino's News. Stremonino reads this file from GitHub, so a moved or dead feed can be fixed here without a new build. Only feeds the publishers offer for reading in other apps; Stremonino shows each story's headline and summary and links to the full article.",
+  "feeds": [
+    { "name": "BBC Entertainment", "url": "https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml" },
+    { "name": "Variety", "url": "https://variety.com/feed/" },
+    { "name": "Deadline", "url": "https://deadline.com/feed/" },
+    { "name": "The Hollywood Reporter", "url": "https://www.hollywoodreporter.com/feed/" },
+    { "name": "IndieWire", "url": "https://www.indiewire.com/feed/" },
+    { "name": "Den of Geek", "url": "https://www.denofgeek.com/feed/" },
+    { "name": "Collider", "url": "https://collider.com/feed/" },
+    { "name": "Screen Rant", "url": "https://screenrant.com/feed/" }
+  ]
+}

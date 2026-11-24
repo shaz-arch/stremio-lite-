@@ -127,6 +127,19 @@ object Prefs {
         get() = runCatching { JSONArray(data().optString("liveFreeHide", "[]")).let { a -> (0 until a.length()).map { a.getString(it) }.toSet() } }.getOrDefault(emptySet())
         set(v) { data().put("liveFreeHide", JSONArray(v.toList()).toString()); save() }
 
+    /** News and Coming soon on Home (on unless turned off). */
+    var newsOn: Boolean
+        get() = data().optBoolean("newsOn", true)
+        set(v) { data().put("newsOn", v); save() }
+    /** News feeds you've added (kept as text, as on Android, so they sync between them). */
+    var newsFeeds: List<app.stremiolite.News.Feed>
+        get() = app.stremiolite.News.feeds(data().optString("newsFeeds", ""))
+        set(v) { data().put("newsFeeds", app.stremiolite.News.feedsJson(v)); save() }
+    /** Starter feeds switched off (their links). */
+    var newsHidden: Set<String>
+        get() = runCatching { JSONArray(data().optString("newsHide", "[]")).let { a -> (0 until a.length()).map { a.getString(it) }.toSet() } }.getOrDefault(emptySet())
+        set(v) { data().put("newsHide", JSONArray(v.toList()).toString()); save() }
+
     /** Game scores (this profile, this computer: not in SHARED, so never synced). */
     var games: String?
         get() = data().optString("games").ifEmpty { null }
@@ -183,7 +196,7 @@ object Prefs {
     private const val SYNC_ID = "stremiolite:settings"
 
     /** Shared settings this build knows; one this computer has never had is always taken from the account. */
-    private val SHARED = listOf("theme", "subLang", "autoNext", "clock", "hideWatched", "layout", "autoFollow", "liveTv", "playlists", "liveFavs", "liveGuide", "liveFreeHide")
+    private val SHARED = listOf("theme", "subLang", "autoNext", "clock", "hideWatched", "layout", "autoFollow", "liveTv", "playlists", "liveFavs", "liveGuide", "liveFreeHide", "newsOn", "newsFeeds", "newsHide")
     /** Synced with your own devices, but never sent to someone else with "Share my setup". */
     private val NOT_SHARED = setOf("playlists", "liveFavs", "liveGuide")
     /** The look: shared by default, or kept to this computer ("lookLocal", which itself never syncs). */

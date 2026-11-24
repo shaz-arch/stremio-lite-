@@ -195,6 +195,10 @@ object Home {
             rows += Row("Watched", Watched.list().size.let { if (it == 0) "" else "$it  ►" }, opens = { watchedScreen() })
             rows += Row("Waiting for streams", Waiting.summary(), opens = { Waiting.screen() })
             if (Prefs.liveTv) rows += Row("Live TV", Live.homeDetail(), opens = { Live.screen() })
+            if (Prefs.newsOn) {
+                rows += Row("News", "film & TV headlines  ►", opens = { Feeds.news() })
+                rows += Row("Coming soon", "films out in the next weeks  ►", opens = { Feeds.comingSoon() })
+            }
             if (list != null) {
                 rows += Row("──── Browse ────")
                 val entries = Index.entries(list)
@@ -872,6 +876,9 @@ object Settings {
                 }),
                 Row("Live TV on Home", "◄ ${if (Prefs.liveTv) "Shown" else "Hidden"} ►", action = {
                     Prefs.liveTv = !Prefs.liveTv; Prefs.syncOut(); Home.redraw(); build()
+                }),
+                Row("News & Coming soon on Home", "◄ ${if (Prefs.newsOn) "Shown" else "Hidden"} ►", action = {
+                    Prefs.newsOn = !Prefs.newsOn; Prefs.syncOut(); Home.redraw(); build()
                 }),
                 Row("──── Index ────"),
                 Row("Arrange your Index", "►", opens = { Arrange.screen() }),

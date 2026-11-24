@@ -37,7 +37,7 @@ object Settings {
 
     private const val SYNC_ID = "stremiolite:settings"
     private val INT_KEYS = listOf("subLang", "theme", "clock", "textSize")
-    private val BOOL_KEYS = listOf("autoNext", "hideWatched", "autoFollow", "liveTv")
+    private val BOOL_KEYS = listOf("autoNext", "hideWatched", "autoFollow", "liveTv", "newsOn")
     /** The look: shared by default, or kept to this device ("lookLocal", which itself never syncs). */
     private val LOOK_KEYS = setOf("theme", "clock", "textSize")
 
@@ -83,6 +83,8 @@ object Settings {
         p.getString("liveFavs", null)?.let { o.put("liveFavs", it) }
         p.getString("liveGuide", null)?.let { o.put("liveGuide", it) }
         p.getString("liveFreeHide", null)?.let { o.put("liveFreeHide", it) }
+        p.getString("newsFeeds", null)?.let { o.put("newsFeeds", it) }
+        p.getString("newsHide", null)?.let { o.put("newsHide", it) }
         o.put("updated", now)
         p.edit().putLong("syncedAt", now).apply()
         item.put("name", o.toString()).put("removed", true).put("temp", false).put("_mtime", Sync.iso(now))
@@ -119,6 +121,8 @@ object Settings {
         if (o.has("liveFavs")) e.putString("liveFavs", o.optString("liveFavs"))
         if (o.has("liveGuide")) e.putString("liveGuide", o.optString("liveGuide"))
         if (o.has("liveFreeHide")) e.putString("liveFreeHide", o.optString("liveFreeHide"))
+        if (o.has("newsFeeds")) e.putString("newsFeeds", o.optString("newsFeeds"))
+        if (o.has("newsHide")) e.putString("newsHide", o.optString("newsHide"))
         e.putStringSet("hiddenRows", hidden)
         e.putLong("syncedAt", updated).apply()
         if (hidden != remoteHidden) syncOut(c)
@@ -157,6 +161,22 @@ object Settings {
         prefs(c).edit().putString("liveFreeHide", org.json.JSONArray(h.toList()).toString()).apply()
         syncOut(c)
     }
+
+    /** News and Coming soon on Home (on unless turned off). */
+    fun newsOn(c: Context) = prefs(c).getBoolean("newsOn", true)
+
+    /** News feeds you've added (synced). */
+    fun newsFeeds(c: Context): List<News.Feed> = News.feeds(prefs(c).getString("newsFeeds", null))
+
+    fun setNewsFeeds(c: Context, list: List<News.Feed>) { prefs(c).edit().putString("newsFeeds", News.feedsJson(list)).apply(); syncOut(c) }
+
+    /** Starter feeds switched off (their links; synced). */
+    fun newsHidden(c: Context): Set<String> = runCatching {
+        val a = org.json.JSONArray(prefs(c).getString("newsHide", "[]"))
+        (0 until a.length()).map { a.getString(it) }.toSet()
+    }.getOrDefault(emptySet())
+
+    fun setNewsHidden(c: Context, h: Set<String>) { prefs(c).edit().putString("newsHide", org.json.JSONArray(h.toList()).toString()).apply(); syncOut(c) }
 
     /** Game scores (this profile, this device). */
     fun gameStats(c: Context): String? = prefs(c).getString("games", null)
@@ -256,6 +276,7 @@ object Settings {
         lateinit var watchedRow: Row
         lateinit var lookRow: Row
         lateinit var liveRow: Row
+        lateinit var newsRow: Row
 
         fun show() {
             lookRow.detail = "◄ ${if (lookLocal(app)) "This device only" else "Same on all devices"} ►"
@@ -268,6 +289,7 @@ object Settings {
             nextRow.detail = "◄ ${if (autoNext(app)) "On" else "Off"} ►"
             followRow.detail = "◄ ${if (autoFollow(app)) "On" else "Off: I choose"} ►"
             liveRow.detail = "◄ ${if (liveTv(app)) "Shown" else "Hidden"} ►"
+            newsRow.detail = "◄ ${if (newsOn(app)) "Shown" else "Hidden"} ►"
             app.refresh(screen)
         }
         lateinit var updateRow: Row
@@ -302,6 +324,12 @@ object Settings {
             Home.redraw()
             show()
         })
+        newsRow = Row("News & Coming soon on Home", action = {
+            prefs(app).edit().putBoolean("newsOn", !newsOn(app)).apply()
+            syncOut(app)
+            Home.redraw()
+            show()
+        })
         nextRow = Row("Auto-play next episode", action = {
             prefs(app).edit().putBoolean("autoNext", !autoNext(app)).apply()
             syncOut(app)
@@ -324,7 +352,7 @@ object Settings {
             listOf(
                 Row("──── Playback ────"), playerRow, langRow, nextRow, followRow,
                 Row("──── Look ────"),
-                lookRow, themeRow, sizeRow, clockRow, watchedRow, liveRow,
+                lookRow, themeRow, sizeRow, clockRow, watchedRow, liveRow, newsRow,
                 Row("──── Index ────"),
                 Row("Arrange your Index", "►", opens = { Arrange.screen(app) }),
                 Row("Hide rows", "►", opens = { rowsScreen(app) }),
