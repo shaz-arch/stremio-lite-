@@ -27,7 +27,7 @@ object Folders {
     fun split(name: String): Pair<String?, String> {
         val i = name.indexOf(": ")
         // A folder path ("World > Korean") may be longer than a plain folder name.
-        val max = if (name.substring(0, maxOf(i, 0)).contains(" > ")) 44 else 24
+        val max = if (name.substring(0, maxOf(i, 0)).contains(" > ")) 60 else 24
         if (i in 1..max) return name.substring(0, i).trim() to name.substring(i + 2).trim()
         return null to name
     }

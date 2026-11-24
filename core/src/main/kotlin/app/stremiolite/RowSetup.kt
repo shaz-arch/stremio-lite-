@@ -46,8 +46,10 @@ object RowSetup {
     /** Categories in the catalogue, in the order shown; the first ones are ticked to start with. */
     val categories = listOf(
         "Top 10", "Streaming", "Genres", "Kids & Family", "Charts", "Decades", "Documentaries", "Collections",
-        "Themes", "Sitcoms", "Studios", "Directors", "New & Latest", "World", "Channels", "More services", "Franchises", "Actors",
-        "Anime", "Seasonal", "Runtime", "Reality", "Indian", "Pakistani",
+        "Themes", "Sitcoms", "Studios", "Directors", "New & Latest",
+        "World: European", "World: East Asian", "World: South Asian", "World: Middle Eastern",
+        "Channels", "UK services", "Free services", "Film & specialist", "Indian services", "Asian services", "Other countries",
+        "Franchises", "Actors", "Anime", "Seasonal", "Runtime", "Reality", "Indian", "Pakistani",
     )
     val defaultCategories = setOf("Top 10", "Streaming", "Genres", "Kids & Family", "Charts", "Decades", "Documentaries", "Collections")
 
@@ -56,7 +58,8 @@ object RowSetup {
         MINIMAL("Minimal", setOf("Top 10", "Streaming", "Genres", "Kids & Family")),
         STANDARD("Standard", setOf("Top 10", "Streaming", "Genres", "Kids & Family", "Charts", "Decades", "Documentaries", "Collections",
             "Themes", "Sitcoms", "Studios", "Directors")),
-        FULL("Full", STANDARD.categories + setOf("New & Latest", "World", "Channels", "More services", "Franchises", "Actors",
+        FULL("Full", STANDARD.categories + setOf("New & Latest", "World: European", "World: East Asian", "World: South Asian",
+            "World: Middle Eastern", "Channels", "UK services", "Free services", "Film & specialist", "Franchises", "Actors",
             "Anime", "Seasonal", "Runtime", "Reality")),
     }
 
@@ -110,6 +113,11 @@ object RowSetup {
     /** A row's category ("" = front page) and service (or null). */
     fun group(name: String): Pair<String, String?> {
         val cat = prefix.find(name)?.groupValues?.get(1)?.trim() ?: return "" to null
+        // World and More services are split one level down: "World > European > French: Popular".
+        if (cat == "World" || cat == "More services") {
+            val second = name.substringBefore(": ").split(" > ").getOrNull(1)?.trim()
+            if (second != null) return (if (cat == "World") "World: $second" else second) to null
+        }
         if (cat != "Top 10" && cat != "Streaming") return cat to null
         val tail = name.substringAfterLast(':').trim()
         val service = when {
