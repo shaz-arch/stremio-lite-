@@ -287,7 +287,10 @@ object Profiles {
     private fun manageScreen(app: MainActivity): Screen {
         lateinit var screen: Screen
         fun build(): List<Row> = all(app).map { p -> Row(p.name, p.email + "  ►", opens = { profileScreen(app, p) }) }
-            .ifEmpty { listOf(Row("No profiles yet.")) }
+            .ifEmpty { listOf(Row("No profiles yet.")) } + listOf(
+            Row("────────────────────"),
+            Row("Copy my add-ons to other accounts", "►", opens = { CloneScreen.screen(app) }),
+        )
         screen = Screen("Manage profiles", build())
         screen.onShow = { screen.rows = build(); app.refresh(screen) }
         return screen

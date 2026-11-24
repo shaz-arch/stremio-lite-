@@ -142,7 +142,7 @@ object Profiles {
         }
     }
 
-    private fun keyOf(p: Profile): String? =
+    fun keyOf(p: Profile): String? =
         runCatching { JSONObject(File(dirFor(p.id), "account.json").readText()).optString("authKey") }.getOrNull()?.ifEmpty { null }
 
     // ---- screens ------------------------------------------------------------------------------
@@ -169,7 +169,8 @@ object Profiles {
     private fun manage(): Screen {
         lateinit var s: Screen
         fun build() {
-            s.rows = all().map { p -> Row(p.name, p.email + "  ►", opens = { profile(p) }) }.ifEmpty { listOf(Row("No profiles yet.")) }
+            s.rows = all().map { p -> Row(p.name, p.email + "  ►", opens = { profile(p) }) }.ifEmpty { listOf(Row("No profiles yet.")) } +
+                listOf(Row("────────────────────"), Row("Copy my add-ons to other accounts", "►", opens = { CloneScreen.screen() }))
             App.refresh()
         }
         s = Screen("Manage profiles", emptyList())

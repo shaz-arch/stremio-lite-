@@ -46,6 +46,11 @@ object Stremio {
         call("addonCollectionSet", JSONObject().put("type", "AddonCollectionSet").put("authKey", authKey).put("addons", addons))
     }
 
+    /** Ends a sign-in (used after copying to an account that isn't one of your profiles). */
+    fun logout(authKey: String) {
+        runCatching { call("logout", JSONObject().put("type", "Logout").put("authKey", authKey)) }
+    }
+
     fun userEmail(authKey: String): String =
         call("getUser", JSONObject().put("type", "GetUser").put("authKey", authKey)).optString("email")
 
