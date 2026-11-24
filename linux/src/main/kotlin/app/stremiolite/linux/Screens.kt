@@ -195,10 +195,6 @@ object Home {
             rows += Row("Watched", Watched.list().size.let { if (it == 0) "" else "$it  ►" }, opens = { watchedScreen() })
             rows += Row("Waiting for streams", Waiting.summary(), opens = { Waiting.screen() })
             if (Prefs.liveTv) rows += Row("Live TV", Live.homeDetail(), opens = { Live.screen() })
-            if (Prefs.newsOn) {
-                rows += Row("News", "film & TV headlines  ►", opens = { Feeds.news() })
-                rows += Row("Coming soon", "films out in the next weeks  ►", opens = { Feeds.comingSoon() })
-            }
             if (list != null) {
                 rows += Row("──── Browse ────")
                 val entries = Index.entries(list)
@@ -216,6 +212,10 @@ object Home {
             }
             rows += Row("──── App ────")
             // Same order and wording as the phone and stick.
+            if (Prefs.newsOn) {
+                rows += Row("News", "film & TV headlines  ►", opens = { Feeds.news() })
+                rows += Row("Coming soon", "films out in the next weeks  ►", opens = { Feeds.comingSoon() })
+            }
             // Setup items (add-ons, export/import, device check, about) live inside Settings.
             rows += Row("Settings", "►", opens = { Settings.screen() })
             rows += Row("Reload my rows and add-ons", action = { load(force = true) })

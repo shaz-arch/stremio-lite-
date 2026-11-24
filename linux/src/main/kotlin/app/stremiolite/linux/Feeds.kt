@@ -130,16 +130,21 @@ object Feeds {
         lateinit var s: Screen
         var entries: List<ComingSoon.Entry>? = null
         var pending = false
+        var loadedFrom: String? = null
 
         fun build() {
             pending = false
             val list = entries
+            val used = ComingSoon.catalogs(Home.all(), Prefs.comingFrom)
             val rows = mutableListOf<Row>()
+            rows += Row("From", (if (used.isEmpty()) "none" else used.joinToString(" + ") { it.second.name }) + "  ►", opens = { chooseList() })
             when {
                 list == null -> rows += Row("Looking at what's coming…")
-                list.isEmpty() && ComingSoon.catalogs(Home.all()).isEmpty() ->
-                    rows += Row("None of your catalogues has an Upcoming films list. Your rows setup can add one (New & Latest: Upcoming).")
-                list.isEmpty() -> rows += Row("Nothing coming up just now.")
+                used.isEmpty() -> {
+                    rows += Row("None of your catalogues has an Upcoming or In Cinemas list.")
+                    rows += Row("Pick any film list with From, or tick New & Latest in Your rows (AIOMetadata).")
+                }
+                list.isEmpty() -> rows += Row("Nothing in that list just now.")
             }
             if (list != null && list.isNotEmpty()) {
                 val left = list.count { it.date < 0 }
@@ -161,20 +166,40 @@ object Feeds {
         s.key = "coming-soon"
         s.onShow = {
             val addons = Home.all()
-            App.async({ ComingSoon.entries(addons) }) { r ->
-                entries = r.getOrDefault(emptyList())
+            val chosen = Prefs.comingFrom
+            if (loadedFrom == chosen && entries != null) build()
+            else {
+                loadedFrom = chosen
+                entries = null
                 build()
-                val todo = ArrayDeque(entries!!.filter { it.date < 0 })
-                fun next() {
-                    if (!App.inStack(s)) return
-                    val e = todo.removeFirstOrNull() ?: return
-                    App.async({ ComingSoon.lookUp(addons, e) }) { soon(); next() }
+                App.async({ ComingSoon.entries(addons, chosen) }) { r ->
+                    entries = r.getOrDefault(emptyList())
+                    build()
+                    val todo = ArrayDeque(entries!!.filter { it.date < 0 })
+                    fun next() {
+                        if (!App.inStack(s)) return
+                        val e = todo.removeFirstOrNull() ?: return
+                        App.async({ ComingSoon.lookUp(addons, e) }) { soon(); next() }
+                    }
+                    // Linux can look up three at a time.
+                    repeat(3) { next() }
                 }
-                // Linux can look up three at a time.
-                repeat(3) { next() }
             }
         }
         return s
+    }
+
+    private fun chooseList(): Screen {
+        val chosen = Prefs.comingFrom
+        val rows = mutableListOf(
+            Row("Automatic: Upcoming and In Cinemas", if (chosen.isEmpty()) "✓" else "", action = { Prefs.comingFrom = ""; App.back() }),
+            Row("──── Or one of your film lists ────"),
+        )
+        ComingSoon.choices(Home.all()).forEach { (a, c) ->
+            val k = app.stremiolite.Folders.rowKey(a, c)
+            rows += Row(c.name, if (k == chosen) "✓" else "", action = { Prefs.comingFrom = k; App.back() })
+        }
+        return Screen("Coming soon from", rows)
     }
 
     private fun wrap(text: String, width: Int): List<String> {

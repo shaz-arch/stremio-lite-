@@ -140,6 +140,11 @@ object Prefs {
         get() = runCatching { JSONArray(data().optString("newsHide", "[]")).let { a -> (0 until a.length()).map { a.getString(it) }.toSet() } }.getOrDefault(emptySet())
         set(v) { data().put("newsHide", JSONArray(v.toList()).toString()); save() }
 
+    /** The film list Coming soon reads ("" = automatic). */
+    var comingFrom: String
+        get() = data().optString("comingFrom", "")
+        set(v) { data().put("comingFrom", v); save() }
+
     /** Game scores (this profile, this computer: not in SHARED, so never synced). */
     var games: String?
         get() = data().optString("games").ifEmpty { null }

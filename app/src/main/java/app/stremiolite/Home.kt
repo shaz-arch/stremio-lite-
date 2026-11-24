@@ -41,8 +41,11 @@ object Home {
 
         val search = Row("Search", "☰  ►", opens = { Search.menu(app) })
         var placed = false
-        val tools = listOf(
-            Row("──── App ────"),
+        val news = listOf(
+            Row("News", "film & TV headlines  ►", opens = { Feeds.news(app) }),
+            Row("Coming soon", "films out in the next weeks  ►", opens = { Feeds.comingSoon(app) }),
+        )
+        val appRows = listOf(
             // Setup items (add-ons, export/import, device check, about) live inside Settings.
             Row("Settings", "►", opens = { Settings.screen(app) }),
             Row("Reload my rows and add-ons", action = {
@@ -55,6 +58,8 @@ object Home {
             Row("Switch profile", "►", opens = { Profiles.chooser(app) }),
             Row("Sign out of this profile", opens = { signOut(app) }),
         )
+        // The App rows; News and Coming soon sit above Settings unless hidden in Settings → Look.
+        fun tools() = listOf(Row("──── App ────")) + (if (Settings.newsOn(app)) news else emptyList()) + appRows
 
         fun rebuild() {
             val list = addons
@@ -89,21 +94,17 @@ object Home {
                 Row("Calendar", NewEpisodes.weekCount()?.let { if (it == 0) "nothing this week  ►" else "$it this week  ►" } ?: "", opens = { NewEpisodes.calendar(app) }),
                 Row("Watched", History.watched(app).size.let { if (it == 0) "" else "$it  ►" }, opens = { watchedScreen(app) }),
                 Row("Waiting for streams", Waiting.summary(app), opens = { Waiting.screen(app) }),
-            ) + (if (Settings.liveTv(app)) listOf(Row("Live TV", Live.homeDetail(app), opens = { Live.screen(app) })) else emptyList()) +
-                (if (Settings.newsOn(app)) listOf(
-                    Row("News", "film & TV headlines  ►", opens = { Feeds.news(app) }),
-                    Row("Coming soon", "films out in the next weeks  ►", opens = { Feeds.comingSoon(app) }),
-                ) else emptyList()) + listOf(
+            ) + (if (Settings.liveTv(app)) listOf(Row("Live TV", Live.homeDetail(app), opens = { Live.screen(app) })) else emptyList()) + listOf(
                 Row("──── Browse ────"),
             ))
-            screen.rows = rows + tools
+            screen.rows = rows + tools()
             // Open on Search, not on the "Watching" header above it.
             if (!placed) { placed = true; screen.moveTo = screen.rows.indexOf(search) }
             app.refresh(screen)
         }
         rebuildHome = { rebuild() }
 
-        screen = Screen(title = "Stremonino", rows = listOf(Row("Loading your rows…")) + tools, tag = Profiles.current(app)?.name ?: "")
+        screen = Screen(title = "Stremonino", rows = listOf(Row("Loading your rows…")) + tools(), tag = Profiles.current(app)?.name ?: "")
         screen.onShow = {
             // A renamed profile shows its new name in the title straight away.
             screen.tag = Profiles.current(app)?.name ?: ""

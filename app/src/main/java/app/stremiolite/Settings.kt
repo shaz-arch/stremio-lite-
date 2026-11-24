@@ -178,6 +178,11 @@ object Settings {
 
     fun setNewsHidden(c: Context, h: Set<String>) { prefs(c).edit().putString("newsHide", org.json.JSONArray(h.toList()).toString()).apply(); syncOut(c) }
 
+    /** The film list Coming soon reads ("" = automatic). */
+    fun comingFrom(c: Context): String = prefs(c).getString("comingFrom", "") ?: ""
+
+    fun setComingFrom(c: Context, key: String) = prefs(c).edit().putString("comingFrom", key).apply()
+
     /** Game scores (this profile, this device). */
     fun gameStats(c: Context): String? = prefs(c).getString("games", null)
 

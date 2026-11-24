@@ -17,26 +17,43 @@ object ComingSoon {
 
     private const val KEEP_MS = 6 * 3600_000L
     @Volatile private var cached: Pair<Long, List<Entry>>? = null
+    @Volatile private var cachedFrom = ""
 
-    /** Upcoming-film lists in your add-ons (not anime: those have their own rows). */
-    fun catalogs(addons: List<Addon>): List<Pair<Addon, Addon.Catalog>> =
-        addons.flatMap { a ->
-            a.catalogs.filter { c ->
-                c.type == "movie" && c.required.isEmpty() &&
-                    (c.id.contains("upcoming", true) || c.name.contains("upcoming", true) || c.name.contains("coming soon", true)) &&
-                    !c.id.contains("anime", true) && !c.name.contains("anime", true)
-            }.map { a to it }
-        }.take(2)
+    private fun upcoming(c: Addon.Catalog) =
+        c.id.contains("upcoming", true) || c.name.contains("upcoming", true) || c.name.contains("coming soon", true)
+
+    private fun inCinemas(c: Addon.Catalog) =
+        c.id.contains("now_playing", true) || Regex("in cinemas|in theat|now playing|box office", RegexOption.IGNORE_CASE).containsMatchIn(c.name)
+
+    private fun anime(c: Addon.Catalog) = c.id.contains("anime", true) || c.name.contains("anime", true)
+
+    /** Film lists that can be read without extra choices: what Coming soon can use. */
+    fun choices(addons: List<Addon>): List<Pair<Addon, Addon.Catalog>> =
+        addons.flatMap { a -> a.catalogs.filter { it.type == "movie" && it.required.isEmpty() }.map { a to it } }
+
+    /** The list [chosen] (a row key), if it's still there. */
+    fun find(addons: List<Addon>, chosen: String): Pair<Addon, Addon.Catalog>? =
+        choices(addons).firstOrNull { (a, c) -> Folders.rowKey(a, c) == chosen }
+
+    /**
+     * The lists to read: the one you chose, or else your Upcoming list (not anime: those have
+     * their own rows) and your In Cinemas list, so films just out show too.
+     */
+    fun catalogs(addons: List<Addon>, chosen: String = ""): List<Pair<Addon, Addon.Catalog>> {
+        if (chosen.isNotEmpty()) find(addons, chosen)?.let { return listOf(it) }
+        val all = choices(addons).filter { (_, c) -> !anime(c) }
+        return (all.filter { upcoming(it.second) }.take(1) + all.filter { inCinemas(it.second) }.take(1))
+    }
 
     /** The upcoming films (dates not yet looked up), kept for six hours. Blocking. */
-    fun entries(addons: List<Addon>): List<Entry> {
-        cached?.takeIf { System.currentTimeMillis() - it.first < KEEP_MS }?.let { return it.second }
+    fun entries(addons: List<Addon>, chosen: String = ""): List<Entry> {
+        cached?.takeIf { System.currentTimeMillis() - it.first < KEEP_MS && cachedFrom == chosen }?.let { return it.second }
         val seen = HashSet<String>()
-        val list = catalogs(addons).flatMap { (a, c) ->
+        val list = catalogs(addons, chosen).flatMap { (a, c) ->
             (runCatching { MetaParse.page(a, c) }.getOrDefault(emptyList()) +
                 runCatching { MetaParse.page(a, c, 20) }.getOrDefault(emptyList())).map { Entry(a, it) }
         }.filter { seen.add(it.meta.id) }
-        if (list.isNotEmpty()) cached = System.currentTimeMillis() to list
+        if (list.isNotEmpty()) { cached = System.currentTimeMillis() to list; cachedFrom = chosen }
         return list
     }
 

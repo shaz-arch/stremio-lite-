@@ -139,16 +139,23 @@ object Feeds {
         lateinit var s: Screen
         var entries: List<ComingSoon.Entry>? = null
         var pending = false
+        var loadedFrom: String? = null
 
         fun build() {
             pending = false
             val list = entries
+            val addons = Home.allAddons()
+            val chosen = Settings.comingFrom(app)
+            val used = ComingSoon.catalogs(addons, chosen)
             val rows = mutableListOf<Row>()
+            rows += Row("From", (if (used.isEmpty()) "none" else used.joinToString(" + ") { it.second.name }) + "  ►", opens = { chooseList(app) })
             when {
                 list == null -> rows += Row("Looking at what's coming…")
-                list.isEmpty() && ComingSoon.catalogs(Home.allAddons()).isEmpty() ->
-                    rows += Row("None of your catalogues has an Upcoming films list. Your rows setup can add one (New & Latest: Upcoming).")
-                list.isEmpty() -> rows += Row("Nothing coming up just now.")
+                used.isEmpty() -> {
+                    rows += Row("None of your catalogues has an Upcoming or In Cinemas list.")
+                    rows += Row("Pick any film list with From, or tick New & Latest in Your rows (AIOMetadata).")
+                }
+                list.isEmpty() -> rows += Row("Nothing in that list just now.")
             }
             if (list != null && list.isNotEmpty()) {
                 val left = list.count { it.date < 0 }
@@ -170,19 +177,40 @@ object Feeds {
         s.key = "coming-soon"
         s.onShow = {
             val addons = Home.allAddons()
-            Net.async({ ComingSoon.entries(addons) }) { r ->
-                entries = r.getOrDefault(emptyList())
+            val chosen = Settings.comingFrom(app)
+            if (loadedFrom == chosen && entries != null) build()
+            else {
+                loadedFrom = chosen
+                entries = null
                 build()
-                // Dates one at a time, so the stick stays responsive.
-                val todo = entries!!.filter { it.date < 0 }
-                fun next(i: Int) {
-                    if (i >= todo.size || !app.inStack(s)) return
-                    Net.async({ ComingSoon.lookUp(addons, todo[i]) }) { soon(); next(i + 1) }
+                Net.async({ ComingSoon.entries(addons, chosen) }) { r ->
+                    entries = r.getOrDefault(emptyList())
+                    build()
+                    // Dates one at a time, so the stick stays responsive.
+                    val todo = entries!!.filter { it.date < 0 }
+                    fun next(i: Int) {
+                        if (i >= todo.size || !app.inStack(s)) return
+                        Net.async({ ComingSoon.lookUp(addons, todo[i]) }) { soon(); next(i + 1) }
+                    }
+                    next(0)
                 }
-                next(0)
             }
         }
         return s
+    }
+
+    /** Which film list Coming soon reads: automatic (Upcoming and In Cinemas), or any one you pick. */
+    private fun chooseList(app: MainActivity): Screen {
+        val chosen = Settings.comingFrom(app)
+        val rows = mutableListOf(
+            Row("Automatic: Upcoming and In Cinemas", if (chosen.isEmpty()) "✓" else "", action = { Settings.setComingFrom(app, ""); app.back() }),
+            Row("──── Or one of your film lists ────"),
+        )
+        ComingSoon.choices(Home.allAddons()).forEach { (a, c) ->
+            val k = Folders.rowKey(a, c)
+            rows += Row(c.name, if (k == chosen) "✓" else "", action = { Settings.setComingFrom(app, k); app.back() })
+        }
+        return Screen("Coming soon from", rows)
     }
 
     private fun wrap(text: String, width: Int): List<String> {
