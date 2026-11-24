@@ -37,7 +37,7 @@ object Settings {
 
     private const val SYNC_ID = "stremiolite:settings"
     private val INT_KEYS = listOf("subLang", "theme", "clock", "textSize")
-    private val BOOL_KEYS = listOf("autoNext", "hideWatched")
+    private val BOOL_KEYS = listOf("autoNext", "hideWatched", "autoFollow")
     /** The look: shared by default, or kept to this device ("lookLocal", which itself never syncs). */
     private val LOOK_KEYS = setOf("theme", "clock", "textSize")
 
@@ -113,6 +113,9 @@ object Settings {
     /** Lists show watched films with a ✓, or leave them out. */
     fun hideWatched(c: Context) = prefs(c).getBoolean("hideWatched", false)
 
+    /** Follow a show for new episodes as soon as you start watching it (off: you choose which). */
+    fun autoFollow(c: Context) = prefs(c).getBoolean("autoFollow", false)
+
     fun rowKey(a: Addon, c: Addon.Catalog) = Folders.rowKey(a, c)
 
     /** Your arrangement of the Index (see Layout), shared with the other devices. */
@@ -167,6 +170,7 @@ object Settings {
         lateinit var playerRow: Row
         lateinit var langRow: Row
         lateinit var nextRow: Row
+        lateinit var followRow: Row
         lateinit var themeRow: Row
         lateinit var sizeRow: Row
         lateinit var clockRow: Row
@@ -182,6 +186,7 @@ object Settings {
             playerRow.detail = "◄ ${player(app).name} ►"
             langRow.detail = "◄ ${subtitleLanguage(app).name} ►"
             nextRow.detail = "◄ ${if (autoNext(app)) "On" else "Off"} ►"
+            followRow.detail = "◄ ${if (autoFollow(app)) "On" else "Off: I choose"} ►"
             app.refresh(screen)
         }
         lateinit var updateRow: Row
@@ -205,6 +210,11 @@ object Settings {
         })
         clockRow = Row("Clock", action = { Look.nextClock(app); app.updateClock(); show() })
         watchedRow = Row("Watched films in lists", action = { prefs(app).edit().putBoolean("hideWatched", !hideWatched(app)).apply(); syncOut(app); show() })
+        followRow = Row("Follow shows I start watching", action = {
+            prefs(app).edit().putBoolean("autoFollow", !autoFollow(app)).apply()
+            syncOut(app)
+            show()
+        })
         nextRow = Row("Auto-play next episode", action = {
             prefs(app).edit().putBoolean("autoNext", !autoNext(app)).apply()
             syncOut(app)
@@ -225,7 +235,7 @@ object Settings {
         screen = Screen(
             "Settings",
             listOf(
-                Row("──── Playback ────"), playerRow, langRow, nextRow,
+                Row("──── Playback ────"), playerRow, langRow, nextRow, followRow,
                 Row("──── Look ────"),
                 lookRow, themeRow, sizeRow, clockRow, watchedRow,
                 Row("──── Index ────"),

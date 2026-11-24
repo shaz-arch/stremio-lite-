@@ -5,7 +5,7 @@ import org.json.JSONObject
 
 /**
  * Which shows you follow for new episodes and seasons, kept apart from the Library:
- *  - shows you've started watching are followed automatically;
+ *  - shows you've started watching, only if you've turned that on (off by default);
  *  - shows you follow on purpose (the "Tell me about new episodes and seasons" button);
  *  - your own list rows (e.g. the MDBList Watchlist);
  *  minus anything you've stopped following. Stored on the account as one hidden record.
@@ -53,9 +53,9 @@ object Following {
      * Every followed show (id to name): started shows, chosen ones, and [fromLists] (your list
      * rows), minus the ones you've stopped following.
      */
-    fun shows(infos: List<LibraryItems.Info>, record: JSONObject?, fromLists: List<Pair<String, String>> = emptyList()): List<Pair<String, String>> {
+    fun shows(infos: List<LibraryItems.Info>, record: JSONObject?, fromLists: List<Pair<String, String>> = emptyList(), autoStarted: Boolean = false): List<Pair<String, String>> {
         val c = read(record)
-        val auto = infos.filter { started(it) }.sortedByDescending { it.updated }.map { it.id to it.name }
+        val auto = if (!autoStarted) emptyList() else infos.filter { started(it) }.sortedByDescending { it.updated }.map { it.id to it.name }
         return (auto + c.follow.map { it.key to it.value } + fromLists).distinctBy { it.first }.filter { it.first !in c.unfollow }
     }
 
@@ -72,10 +72,10 @@ object Following {
         return "no date yet"
     }
 
-    fun isFollowed(id: String, infos: List<LibraryItems.Info>, record: JSONObject?): Boolean {
+    fun isFollowed(id: String, infos: List<LibraryItems.Info>, record: JSONObject?, autoStarted: Boolean = false): Boolean {
         val c = read(record)
         if (id in c.unfollow) return false
-        return id in c.follow || infos.any { it.id == id && started(it) }
+        return id in c.follow || (autoStarted && infos.any { it.id == id && started(it) })
     }
 
     /** Where a followed show belongs, given its episodes and the ones you've watched. */

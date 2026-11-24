@@ -83,6 +83,10 @@ object Prefs {
     var autoNext: Boolean
         get() = data().optBoolean("autoNext", true)
         set(v) { data().put("autoNext", v); save() }
+    /** Follow a show for new episodes as soon as you start watching it (off: you choose which). */
+    var autoFollow: Boolean
+        get() = data().optBoolean("autoFollow", false)
+        set(v) { data().put("autoFollow", v); save() }
     var clock: Int
         get() = data().optInt("clock", 0)
         set(v) { data().put("clock", v); save() }
@@ -135,7 +139,7 @@ object Prefs {
     private const val SYNC_ID = "stremiolite:settings"
 
     /** Shared settings this build knows; one this computer has never had is always taken from the account. */
-    private val SHARED = listOf("theme", "subLang", "autoNext", "clock", "hideWatched", "layout")
+    private val SHARED = listOf("theme", "subLang", "autoNext", "clock", "hideWatched", "layout", "autoFollow")
     /** The look: shared by default, or kept to this computer ("lookLocal", which itself never syncs). */
     private val LOOK = setOf("theme", "clock")
 

@@ -842,6 +842,9 @@ object Settings {
                 Row("Auto-play next episode", "◄ ${if (Prefs.autoNext) "On" else "Off"} ►", action = {
                     Prefs.autoNext = !Prefs.autoNext; Prefs.syncOut(); build()
                 }),
+                Row("Follow shows I start watching", "◄ ${if (Prefs.autoFollow) "On" else "Off: I choose"} ►", action = {
+                    Prefs.autoFollow = !Prefs.autoFollow; Prefs.syncOut(); build()
+                }),
                 Row("──── Look ────"),
                 Row("Theme, text size and clock", "◄ ${if (Prefs.lookLocal) "This computer only" else "Same on all devices"} ►", action = {
                     Prefs.lookLocal = !Prefs.lookLocal
@@ -1259,8 +1262,8 @@ object NewEpisodes {
 /** Following shows for new episodes and seasons (rules in the shared Following), apart from the Library. */
 object Follow {
     private fun record() = Lib.raw(app.stremiolite.Following.ID)
-    fun shows(lists: List<Pair<String, String>> = emptyList()) = app.stremiolite.Following.shows(Lib.infos(), record(), lists)
-    fun isFollowed(id: String) = app.stremiolite.Following.isFollowed(id, Lib.infos(), record())
+    fun shows(lists: List<Pair<String, String>> = emptyList()) = app.stremiolite.Following.shows(Lib.infos(), record(), lists, Prefs.autoFollow)
+    fun isFollowed(id: String) = app.stremiolite.Following.isFollowed(id, Lib.infos(), record(), Prefs.autoFollow)
     fun stopped() = app.stremiolite.Following.stopped(record())
     fun follow(id: String, name: String) = Lib.put(app.stremiolite.Following.follow(record(), id, name))
     fun unfollow(id: String) = Lib.put(app.stremiolite.Following.unfollow(record(), id))
