@@ -37,12 +37,12 @@ object Guide {
     fun needs(channels: List<LiveTv.Channel>, yours: String): Map<String, Set<String>> {
         val out = HashMap<String, MutableSet<String>>()
         for (c in channels) for (u in guidesFor(c, yours)) out.getOrPut(u) { HashSet() } += keys(c)
-        return out.filter { (u, k) -> isDue(u, k) }.mapValues { (u, k) -> k + (cache[u]?.covered ?: emptySet()) }
+        return out.filter { (u, k) -> isDue(u, k) }.mapValues { (u, k) -> k + (cached(u)?.covered ?: emptySet()) }
     }
 
     private fun isDue(u: String, k: Set<String>): Boolean {
         if (u.isBlank() || loading.containsKey(u) || failed.containsKey(u)) return false
-        val d = cache[u] ?: return true
+        val d = cached(u) ?: return true
         return System.currentTimeMillis() - d.at > KEEP_MS || (d.covered != null && !d.covered.containsAll(k))
     }
 
@@ -51,11 +51,65 @@ object Guide {
     private const val DESC_MAX = 240
 
     private val cache = ConcurrentHashMap<String, Data>()
+
+    /**
+     * Where read guides are kept between app starts (set by the app), so the guide shows straight
+     * away instead of downloading again first. Only the channels asked for are kept: a few KB.
+     */
+    @Volatile var dir: java.io.File? = null
+    private val diskTried = ConcurrentHashMap<String, Boolean>()
+
+    private fun file(u: String) = dir?.let { java.io.File(it, "guide-" + Integer.toHexString(u.hashCode()) + "-" + u.length + ".json") }
+
+    /** The guide in memory, or else as kept on disk. */
+    private fun cached(u: String): Data? {
+        cache[u]?.let { return it }
+        if (diskTried.put(u, true) != null) return null
+        val d = runCatching { fromDisk(u) }.getOrNull() ?: return null
+        cache[u] = d
+        return d
+    }
+
+    private fun save(u: String, d: Data) {
+        val f = file(u) ?: return
+        runCatching {
+            val progs = org.json.JSONObject()
+            d.progs.forEach { (id, list) ->
+                progs.put(id, org.json.JSONArray(list.map { p -> org.json.JSONArray().put(p.start).put(p.stop).put(p.title).put(p.desc) }))
+            }
+            val o = org.json.JSONObject().put("u", u).put("at", d.at).put("names", org.json.JSONObject(d.names as Map<*, *>)).put("progs", progs)
+            d.covered?.let { o.put("covered", org.json.JSONArray(it)) }
+            f.parentFile?.mkdirs()
+            val tmp = java.io.File(f.path + ".tmp")
+            tmp.writeText(o.toString())
+            tmp.renameTo(f)
+        }
+    }
+
+    private fun fromDisk(u: String): Data? {
+        val f = file(u) ?: return null
+        if (!f.exists()) return null
+        val o = org.json.JSONObject(f.readText())
+        if (o.optString("u") != u) return null
+        val now = System.currentTimeMillis()
+        val progs = HashMap<String, List<Prog>>()
+        val po = o.getJSONObject("progs")
+        po.keys().forEach { id ->
+            val a = po.getJSONArray(id)
+            val list = (0 until a.length()).map { i -> a.getJSONArray(i).let { p -> Prog(p.getLong(0), p.getLong(1), p.getString(2), p.optString(3)) } }
+                .filter { it.stop > now }
+            if (list.isNotEmpty()) progs[id] = list
+        }
+        val names = HashMap<String, String>()
+        o.optJSONObject("names")?.let { n -> n.keys().forEach { k -> names[k] = n.getString(k) } }
+        val covered = o.optJSONArray("covered")?.let { a -> (0 until a.length()).map { a.getString(it) }.toSet() }
+        return Data(o.getLong("at"), progs, names, covered)
+    }
     private val loading = ConcurrentHashMap<String, Boolean>()
     private val failed = ConcurrentHashMap<String, String>()
 
     /** The guide if it has been read (even if due a refresh). */
-    fun get(url: String): Data? = cache[url]
+    fun get(url: String): Data? = cached(url)
 
     /** Why the guide couldn't be read, if it couldn't. */
     fun error(url: String): String? = failed[url]
@@ -68,7 +122,12 @@ object Guide {
     }.distinct()
 
     fun forget(url: String? = null) {
-        if (url == null) { cache.clear(); failed.clear() } else { cache.remove(url); failed.remove(url) }
+        if (url == null) {
+            cache.clear(); failed.clear(); diskTried.clear()
+            dir?.listFiles()?.filter { it.name.startsWith("guide-") }?.forEach { it.delete() }
+        } else {
+            cache.remove(url); failed.remove(url); diskTried.remove(url); file(url)?.delete()
+        }
     }
 
     /** A plain reason a guide couldn't be read. */
@@ -109,6 +168,7 @@ object Guide {
                 if (d.progs.isEmpty() && wanted == null) throw IllegalStateException("No programmes in that guide")
                 cache[url] = d
                 failed.remove(url)
+                save(url, d)
                 return d
             } finally {
                 c.disconnect()
@@ -263,7 +323,7 @@ object Guide {
     /** The programmes for [c] (now first), from the first of [guides] that knows it. */
     fun lookup(c: LiveTv.Channel, guides: List<String>, now: Long = System.currentTimeMillis()): List<Prog> {
         for (u in guides) {
-            val d = cache[u] ?: continue
+            val d = cached(u) ?: continue
             val id = c.tvgId.takeIf { it.isNotEmpty() && d.progs.containsKey(it) }
                 ?: c.tvgId.takeIf { it.isNotEmpty() }?.let { d.names[simple(it)] }
                 ?: d.names[simple(c.name)]

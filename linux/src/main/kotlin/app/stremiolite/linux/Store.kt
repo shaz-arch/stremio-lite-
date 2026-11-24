@@ -121,6 +121,11 @@ object Prefs {
         get() = app.stremiolite.LiveTv.favourites(data().optString("liveFavs", ""))
         set(v) { data().put("liveFavs", app.stremiolite.LiveTv.favouritesJson(v)); save() }
 
+    /** Channels played lately (this computer only: not in SHARED, so never synced). */
+    var recent: List<app.stremiolite.LiveTv.Channel>
+        get() = app.stremiolite.LiveTv.favourites(data().optString("liveRecent", ""))
+        set(v) { data().put("liveRecent", app.stremiolite.LiveTv.favouritesJson(v)); save() }
+
     /** Your TV guide link (XMLTV) for Live TV, or "" (synced, never shared). */
     var liveGuide: String
         get() = data().optString("liveGuide", "")

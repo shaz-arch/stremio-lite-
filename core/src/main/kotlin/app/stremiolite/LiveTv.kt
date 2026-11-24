@@ -105,9 +105,34 @@ object LiveTv {
     // ---- your playlists (M3U links) --------------------------------------------------------
 
     /** [added] is when it was added (0 if not known: added before this was kept). */
-    class Playlist(val name: String, val url: String, val added: Long = 0) {
-        fun renamed(to: String) = Playlist(to, url, added)
+    /** [hidden]: groups ("g:News") and channels ([channelKey]) not shown. They stay in the playlist. */
+    class Playlist(val name: String, val url: String, val added: Long = 0, val hidden: Set<String> = emptySet()) {
+        fun renamed(to: String) = Playlist(to, url, added, hidden)
+        fun withHidden(h: Set<String>) = Playlist(name, url, added, h)
+
+        /** [key] hidden if it was shown, shown if it was hidden. */
+        fun toggled(key: String) = withHidden(if (key in hidden) hidden - key else hidden + key)
     }
+
+    fun groupKey(g: Group) = "g:" + g.name
+    fun channelKey(c: Channel) = "c:" + c.name + "|" + c.urls.first()
+
+    /** [groups] without what [p] hides (and without groups left empty). */
+    fun visible(p: Playlist, groups: List<Group>): List<Group> {
+        if (p.hidden.isEmpty()) return groups
+        return groups.filter { groupKey(it) !in p.hidden }
+            .map { g -> Group(g.name, g.channels.filter { channelKey(it) !in p.hidden }) }
+            .filter { it.channels.isNotEmpty() }
+    }
+
+    /** Radio stations in a playlist (by name or group), for "Hide radio stations". */
+    fun radio(groups: List<Group>): List<Channel> {
+        val re = Regex("""\bradio\b""", RegexOption.IGNORE_CASE)
+        return groups.flatMap { g -> g.channels.filter { re.containsMatchIn(it.name) || re.containsMatchIn(g.name) } }
+    }
+
+    /** Recently played channels: [c] first, then the others (up to five). */
+    fun played(recent: List<Channel>, c: Channel): List<Channel> = (listOf(c) + recent.filterNot { same(it, c) }).take(5)
 
     fun playlists(json: String?): List<Playlist> {
         if (json.isNullOrBlank()) return emptyList()
@@ -115,12 +140,20 @@ object LiveTv {
         return (0 until a.length()).mapNotNull { i ->
             val o = a.optJSONObject(i) ?: return@mapNotNull null
             val url = o.optString("url")
-            if (url.isBlank()) null else Playlist(o.optString("name").ifBlank { nameFor(url) }, url, o.optLong("added"))
+            if (url.isBlank()) null else Playlist(
+                o.optString("name").ifBlank { nameFor(url) }, url, o.optLong("added"),
+                o.optJSONArray("hide")?.let { h -> (0 until h.length()).map { h.optString(it) }.toSet() } ?: emptySet(),
+            )
         }
     }
 
     fun playlistsJson(list: List<Playlist>): String =
-        JSONArray(list.map { p -> JSONObject().put("name", p.name).put("url", p.url).also { if (p.added > 0) it.put("added", p.added) } }).toString()
+        JSONArray(list.map { p ->
+            JSONObject().put("name", p.name).put("url", p.url).also {
+                if (p.added > 0) it.put("added", p.added)
+                if (p.hidden.isNotEmpty()) it.put("hide", JSONArray(p.hidden.toList()))
+            }
+        }).toString()
 
     /** A short name for a playlist link: its site, e.g. "example.com". */
     fun nameFor(url: String): String {
@@ -232,6 +265,11 @@ object LiveTv {
         if (p.added > 0) out += "Added" to day(p.added)
         out += "Channels" to "${all.size} in ${l.groups.size} group${if (l.groups.size == 1) "" else "s"}"
         if (l.groups.size > 1) out += "Biggest groups" to l.groups.sortedByDescending { it.channels.size }.take(3).joinToString(", ") { "${it.name} ${it.channels.size}" }
+        if (p.hidden.isNotEmpty()) {
+            val hg = l.groups.count { groupKey(it) in p.hidden }
+            val hc = all.count { channelKey(it) in p.hidden }
+            out += "Hidden" to listOfNotNull(if (hg > 0) "$hg group${if (hg == 1) "" else "s"}" else null, if (hc > 0) "$hc channel${if (hc == 1) "" else "s"}" else null).joinToString(", ")
+        }
         val checked = all.mapNotNull { known(it) }
         out += "On air" to if (checked.isEmpty()) "not checked yet (open a group)" else
             "${checked.count { it.isNotEmpty() }} live, ${checked.count { it.isEmpty() }} off air (of ${checked.size} checked)"
@@ -302,6 +340,22 @@ object LiveTv {
     fun toggle(favs: List<Channel>, c: Channel, from: String): List<Channel> =
         if (isFavourite(favs, c)) favs.filterNot { same(it, c) } else favs + c.from(from)
 
+    /**
+     * Favourites saved from a playlist keep its guide link and channel id as they were then. After
+     * the playlist loads, this brings them up to date (null if nothing changed). It fixes favourites
+     * saved before build 124, which kept only a playlist's first guide (Albania's, for Free-TV).
+     */
+    fun refreshFavourites(favs: List<Channel>, groups: List<Group>): List<Channel>? {
+        val all = groups.flatMap { it.channels }
+        var changed = false
+        val out = favs.map { f ->
+            val now = all.firstOrNull { same(it, f) } ?: return@map f
+            if (now.guide == f.guide && now.tvgId == f.tvgId) f
+            else { changed = true; Channel(f.name, f.group, f.urls, f.note, now.tvgId, now.guide) }
+        }
+        return if (changed) out else null
+    }
+
     // ---- search --------------------------------------------------------------------------------
 
     private fun simple(s: String) = s.lowercase().filter { it.isLetterOrDigit() }
@@ -323,7 +377,7 @@ object LiveTv {
         val out = ArrayList<Channel>(favs)
         runCatching { load() }.getOrNull()?.forEach { g -> g.channels.forEach { out += it.from("Live TV · " + g.name) } }
         for (p in playlists) {
-            val groups = runCatching { loadPlaylist(p, fresh = false) }.getOrNull() ?: continue
+            val groups = runCatching { visible(p, loadPlaylist(p, fresh = false)) }.getOrNull() ?: continue
             groups.forEach { g -> g.channels.forEach { out += it.from(p.name + " · " + g.name) } }
         }
         return out

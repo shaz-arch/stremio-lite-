@@ -145,6 +145,11 @@ object Settings {
         syncOut(c)
     }
 
+    /** Channels played lately (this device only). */
+    fun recent(c: Context): List<LiveTv.Channel> = LiveTv.favourites(prefs(c).getString("liveRecent", null))
+
+    fun setRecent(c: Context, list: List<LiveTv.Channel>) = prefs(c).edit().putString("liveRecent", LiveTv.favouritesJson(list)).apply()
+
     /** Your TV guide link (XMLTV) for Live TV, or "". */
     fun liveGuide(c: Context): String = prefs(c).getString("liveGuide", "") ?: ""
 
