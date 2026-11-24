@@ -207,7 +207,7 @@ object RowSetup {
         for (i in 0 until catalogs.length()) {
             val o = catalogs.optJSONObject(i) ?: continue
             // Parts of a merged row stay off (the merged row fetches them); a row with no setting counts as on.
-            if (o.optString("mergedInto").isNotBlank()) { if (!o.has("enabled")) o.put("enabled", false); continue }
+            if (o.optString("mergedInto").isNotBlank()) { o.put("enabled", false); continue }
             val name = o.optString("name")
             val (cat, _) = group(name)
             if (cat.isNotEmpty() && cat !in categories) continue
