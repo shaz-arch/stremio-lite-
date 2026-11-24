@@ -96,7 +96,7 @@ object RowsSetup {
     }
 
     /** One optional key: where to get it (link or QR code), and entering, changing or removing it. */
-    private fun keyScreen(app: MainActivity, title: String, page: String, about: List<String>, get: () -> String, set: (String) -> Unit): Screen {
+    fun keyScreen(app: MainActivity, title: String, page: String, about: List<String>, get: () -> String, set: (String) -> Unit): Screen {
         lateinit var s: Screen
         fun build(): List<Row> = about.map { Row(it) } + listOf(
             Row(""),

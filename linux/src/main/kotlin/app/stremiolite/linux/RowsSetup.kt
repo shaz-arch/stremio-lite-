@@ -95,7 +95,7 @@ object RowsSetup {
         return s
     }
 
-    private fun keyScreen(title: String, page: String, about: List<String>, get: () -> String, set: (String) -> Unit): Screen {
+    fun keyScreen(title: String, page: String, about: List<String>, get: () -> String, set: (String) -> Unit): Screen {
         lateinit var s: Screen
         fun build(): List<Row> = about.map { Row(it) } + listOf(
             Row(""),

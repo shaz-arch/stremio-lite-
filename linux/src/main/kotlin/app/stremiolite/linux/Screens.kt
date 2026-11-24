@@ -864,6 +864,7 @@ object Settings {
                 Row("──── Setup ────"),
                 Row("Your add-ons", (Home.all().size.takeIf { it > 0 }?.let { "$it  " } ?: "") + "►", opens = { Addons.screen() }),
                 Row("Your rows: categories and setup", "►", opens = { RowsSetup.screen() }),
+                Row("Your streams: set up AIOStreams", "►", opens = { StreamsSetup.screen() }),
                 Row("Export my setup to another account", "►", opens = { Share.screen() }),
                 Row("Import a setup from another account", "►", opens = { Share.importScreen() }),
                 Row("Device check", "►", opens = { DeviceCheck.screen() }),
