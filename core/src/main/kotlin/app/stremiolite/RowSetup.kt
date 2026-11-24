@@ -37,6 +37,11 @@ object RowSetup {
             ?: "https://61ab9c85a149-tmdb-collections.baby-beamup.club/manifest.json"
     }
 
+    /** TMDB Collections' own settings page (to make an install link with other settings). */
+    val collectionsPage: String get() = Regex("""^(https?://[^/]+)""").find(collectionsAddon)?.value?.let { "$it/configure" } ?: collectionsAddon
+
+    fun collectionsAddons(list: List<Addon>) = list.filter { "tmdb-collections" in it.transportUrl || "tmdbcollections" in it.id.lowercase() }
+
     fun hasCollectionsAddon(list: List<Addon>) = list.any { "tmdb-collections" in it.transportUrl || "tmdbcollections" in it.id.lowercase() }
 
     /** The biggest ticked categories, to suggest unticking when over the limit. */

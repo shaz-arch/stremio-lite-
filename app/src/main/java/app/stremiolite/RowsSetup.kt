@@ -18,16 +18,7 @@ object RowsSetup {
             })
             rows += Row("Switch single rows on or off", "►", opens = { RowPicker.entry(app) })
         }
-        if (!RowSetup.hasCollectionsAddon(Home.allAddons())) rows += Row("Add TMDB Collections (opens film series)", "►", action = {
-            val key = Account.authKey(app)
-            if (key != null) {
-                app.toast("Adding TMDB Collections…")
-                Net.async({ Stremio.installAddon(key, RowSetup.collectionsAddon, detailsOnly = true) }) { r ->
-                    r.onSuccess { Home.forget(); app.toast("Added. Collections rows now open their film series."); app.back() }
-                        .onFailure { e -> app.toast("Couldn't add it: " + Net.describe(e)) }
-                }
-            }
-        })
+        rows += Row("TMDB Collections add-on", (if (onAccount(app)) "on your account ✓" else "needed for Collections") + "  ►", opens = { collections(app) })
         rows += Row("────────────────────")
         rows += Row(if (aio.isEmpty()) "Create your rows" else "Start again from the full catalogue", "►",
             opens = { checklist(app, RowSetup.defaults(), edit = null, password = null) })
@@ -72,6 +63,12 @@ object RowsSetup {
                 })
                 rows += r
             }
+            rows += Row("──── Add-ons these rows need ────")
+            rows += Row("TMDB Collections", (when {
+                onAccount(app) -> "on your account ✓"
+                "Collections" in p.categories -> if (edit == null) "added with your rows" else "needed: add it"
+                else -> "only for Collections"
+            }) + "  ►", opens = { collections(app) })
             rows += Row("──── Optional keys ────")
             rows += Row("MDBList key", (if (p.mdblistKey.isNotBlank()) "set ✓" else "adds ${RowSetup.mdblistCount(p)} rows") + "  ►", opens = {
                 keyScreen(app, "MDBList key", RowSetup.MDBLIST_KEY_PAGE, listOf(
@@ -125,6 +122,48 @@ object RowsSetup {
                 Home.forget(); app.back()
             }.onFailure { e -> app.toast("Couldn't save: " + (if (e is AioRows.Failed) e.message else Net.describe(e))) }
         }
+    }
+
+    private var addedHere = false
+    private fun onAccount(app: MainActivity) = addedHere || RowSetup.hasCollectionsAddon(Home.allAddons())
+
+    /** The TMDB Collections add-on: Collections rows list film series, and this add-on opens them. */
+    fun collections(app: MainActivity): Screen {
+        lateinit var s: Screen
+        fun install(link: String) {
+            val key = Account.authKey(app) ?: return
+            app.toast("Adding TMDB Collections…")
+            Net.async({ Stremio.installAddon(key, link, detailsOnly = true) }) { r ->
+                r.onSuccess { addedHere = true; Home.forget(); app.toast("Added. Collections now open their film series."); s.rows = build(); app.refresh(s) }
+                    .onFailure { e -> app.toast("Couldn't add it: " + Net.describe(e)) }
+            }
+        }
+        fun build(): List<Row> = listOfNotNull(
+            Row("Collections rows list film series (Harry Potter, Alien…)."),
+            Row("Opening one needs the TMDB Collections add-on on your"),
+            Row("account. It's added for details only: no extra rows."),
+            Row(info("On your account", if (onAccount(app)) "yes ✓" else "no")),
+            Row(""),
+            if (!onAccount(app)) Row("Add it now (standard settings)", "►", action = { install(RowSetup.collectionsAddon) }) else null,
+            Row("Use my own install link", "paste  ►", action = {
+                val input = EditText(app).apply { hint = "https://…/manifest.json"; setSingleLine() }
+                android.app.AlertDialog.Builder(app).setTitle("TMDB Collections install link")
+                    .setMessage("From its settings page: Install, or copy the link.").setView(input)
+                    .setPositiveButton("Add") { _, _ -> input.text.toString().trim().takeIf { it.isNotEmpty() }?.let { install(it) } }
+                    .setNegativeButton("Cancel", null).show()
+            }),
+            LinkOut.row(app, "Its settings page (language, adult, search)", "TMDB Collections settings", RowSetup.collectionsPage),
+            if (onAccount(app)) Row("Take it off the account", action = {
+                val key = Account.authKey(app)
+                if (key != null) Net.async({ RowSetup.collectionsAddons(Stremio.parseAddons(Stremio.addonsJson(key))).forEach { Stremio.removeAddon(key, it.transportUrl) } }) { r ->
+                    r.onSuccess { addedHere = false; Home.forget(); app.toast("Taken off. Collections rows won't open."); s.rows = build(); app.refresh(s) }
+                        .onFailure { e -> app.toast("Couldn't: " + Net.describe(e)) }
+                }
+            }) else null,
+            Row("Done", action = { app.back() }),
+        )
+        s = Screen("TMDB Collections", build())
+        return s
     }
 
     private fun askNewPassword(app: MainActivity, p: RowSetup.Picks) {
