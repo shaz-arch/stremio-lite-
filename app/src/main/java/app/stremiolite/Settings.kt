@@ -82,6 +82,7 @@ object Settings {
         p.getString("playlists", null)?.let { o.put("playlists", it) }
         p.getString("liveFavs", null)?.let { o.put("liveFavs", it) }
         p.getString("liveGuide", null)?.let { o.put("liveGuide", it) }
+        p.getString("liveFreeHide", null)?.let { o.put("liveFreeHide", it) }
         o.put("updated", now)
         p.edit().putLong("syncedAt", now).apply()
         item.put("name", o.toString()).put("removed", true).put("temp", false).put("_mtime", Sync.iso(now))
@@ -117,6 +118,7 @@ object Settings {
         if (o.has("playlists")) e.putString("playlists", o.optString("playlists"))
         if (o.has("liveFavs")) e.putString("liveFavs", o.optString("liveFavs"))
         if (o.has("liveGuide")) e.putString("liveGuide", o.optString("liveGuide"))
+        if (o.has("liveFreeHide")) e.putString("liveFreeHide", o.optString("liveFreeHide"))
         e.putStringSet("hiddenRows", hidden)
         e.putLong("syncedAt", updated).apply()
         if (hidden != remoteHidden) syncOut(c)
@@ -142,6 +144,17 @@ object Settings {
 
     fun setFavourites(c: Context, list: List<LiveTv.Channel>) {
         prefs(c).edit().putString("liveFavs", LiveTv.favouritesJson(list)).apply()
+        syncOut(c)
+    }
+
+    /** What's hidden in Live TV's built-in Free channels (synced to your devices). */
+    fun builtinHidden(c: Context): Set<String> = runCatching {
+        val a = org.json.JSONArray(prefs(c).getString("liveFreeHide", "[]"))
+        (0 until a.length()).map { a.getString(it) }.toSet()
+    }.getOrDefault(emptySet())
+
+    fun setBuiltinHidden(c: Context, h: Set<String>) {
+        prefs(c).edit().putString("liveFreeHide", org.json.JSONArray(h.toList()).toString()).apply()
         syncOut(c)
     }
 

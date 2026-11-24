@@ -121,6 +121,12 @@ object Prefs {
         get() = app.stremiolite.LiveTv.favourites(data().optString("liveFavs", ""))
         set(v) { data().put("liveFavs", app.stremiolite.LiveTv.favouritesJson(v)); save() }
 
+    /** What's hidden in Live TV's built-in Free channels (synced to your devices). */
+    var freeHidden: Set<String>
+        // Kept as text, as on Android, so it syncs between them.
+        get() = runCatching { JSONArray(data().optString("liveFreeHide", "[]")).let { a -> (0 until a.length()).map { a.getString(it) }.toSet() } }.getOrDefault(emptySet())
+        set(v) { data().put("liveFreeHide", JSONArray(v.toList()).toString()); save() }
+
     /** Channels played lately (this computer only: not in SHARED, so never synced). */
     var recent: List<app.stremiolite.LiveTv.Channel>
         get() = app.stremiolite.LiveTv.favourites(data().optString("liveRecent", ""))
@@ -172,7 +178,7 @@ object Prefs {
     private const val SYNC_ID = "stremiolite:settings"
 
     /** Shared settings this build knows; one this computer has never had is always taken from the account. */
-    private val SHARED = listOf("theme", "subLang", "autoNext", "clock", "hideWatched", "layout", "autoFollow", "liveTv", "playlists", "liveFavs", "liveGuide")
+    private val SHARED = listOf("theme", "subLang", "autoNext", "clock", "hideWatched", "layout", "autoFollow", "liveTv", "playlists", "liveFavs", "liveGuide", "liveFreeHide")
     /** Synced with your own devices, but never sent to someone else with "Share my setup". */
     private val NOT_SHARED = setOf("playlists", "liveFavs", "liveGuide")
     /** The look: shared by default, or kept to this computer ("lookLocal", which itself never syncs). */

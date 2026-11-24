@@ -3,26 +3,19 @@ package app.stremiolite.linux
 import app.stremiolite.Guide
 import app.stremiolite.LiveTv
 
-/** Live TV: the broadcasters' own free channels, checked when the list opens, and your playlists. */
+/** Live TV: recent channels, favourites, and playlists (the broadcasters' own free channels are the first). */
 object Live {
     fun homeDetail(): String {
         val n = Prefs.playlists.size
         return if (n == 0) "►" else "$n playlist${if (n == 1) "" else "s"}  ►"
     }
 
+    /** Live TV: your recent channels, favourites and playlists (the built-in free channels are one of them). */
     fun screen(): Screen {
         lateinit var screen: Screen
-        var groups: List<LiveTv.Group>? = null
-        var error: String? = null
-        var guides: () -> Unit = {}
 
         fun build() {
             val rows = mutableListOf<Row>()
-            val list = groups
-            when {
-                list == null && error != null -> rows += Row("Couldn't load the channel list: $error")
-                list == null -> rows += Row("Loading channels…")
-            }
             val favs = Prefs.favourites
             val recent = Prefs.recent
             if (recent.isNotEmpty()) {
@@ -34,46 +27,82 @@ object Live {
                 favs.forEach { c -> rows += channelRow(c, c.group, favs) }
                 if (favs.size > 1) rows += Row("Arrange favourites", "►", opens = { arrange() })
             }
-            val off = mutableListOf<LiveTv.Channel>()
-            list?.forEach { g ->
-                val shown = g.channels.filter { LiveTv.known(it) != "" }
-                off += g.channels.filter { LiveTv.known(it) == "" }
-                if (shown.isEmpty()) return@forEach
-                rows += Row("──── ${g.name} ────")
-                shown.forEach { c -> rows += channelRow(c, "Live TV · " + g.name, favs) }
-            }
-            if (off.isNotEmpty()) rows += Row("Off air right now", "${off.size}  ►", opens = { offAir(off) })
-            rows += Row("──── Your playlists ────")
+            if (recent.isEmpty() && favs.isEmpty()) rows += Row("Channels you play or favourite show up here.")
+            rows += Row("──── Playlists ────")
+            rows += Row("Free channels", "news, Welsh, shopping  ►", opens = { freeChannels() })
             Prefs.playlists.forEach { p -> rows += Row(p.name, "►", opens = { playlist(p) }) }
             rows += Row("Add a playlist (M3U link)", "►", action = { addPlaylist { build() } })
             rows += Row("──── TV guide ────")
             val yours = Prefs.liveGuide
-            rows += Row("Your TV guide link (XMLTV)", if (yours.isEmpty()) "none  ►" else guideState(yours) + "  ►", action = { setGuide { build(); guides() } })
-            rows += Row("──── About ────")
+            rows += Row("Your TV guide link (XMLTV)", if (yours.isEmpty()) "none  ►" else guideState(yours) + "  ►", action = { setGuide { build(); loadGuides(mine()) { if (App.inStack(screen)) build() } } })
+            screen.rows = rows
+            App.refresh()
+        }
+
+        screen = Screen("Live TV", listOf(Row("Loading…")))
+        screen.key = "live"
+        screen.onShow = {
+            build()
+            for (c in mine()) {
+                if (LiveTv.known(c) != null) continue
+                App.async({ LiveTv.check(c) }) { if (App.inStack(screen)) build() }
+            }
+            loadGuides(mine()) { if (App.inStack(screen)) build() }
+        }
+        return screen
+    }
+
+    private fun mine() = Prefs.recent + Prefs.favourites
+
+    /** The built-in list (the broadcasters' own free streams), shown like a playlist. */
+    private fun freeChannels(): Screen {
+        lateinit var screen: Screen
+        var groups: List<LiveTv.Group>? = null
+        var error: String? = null
+        fun shown() = groups?.let { LiveTv.visible(LiveTv.Playlist("", "", 0, Prefs.freeHidden), it) }
+
+        fun build() {
+            val rows = mutableListOf<Row>()
+            val list = shown()
+            when {
+                list == null && error != null -> rows += Row("Couldn't load the channel list: $error")
+                list == null -> rows += Row("Loading channels…")
+                list.isEmpty() -> rows += Row("Everything here is hidden: see Choose what to show.")
+            }
+            val favs = Prefs.favourites
+            val off = mutableListOf<LiveTv.Channel>()
+            list?.forEach { g ->
+                val on = g.channels.filter { LiveTv.known(it) != "" }
+                off += g.channels.filter { LiveTv.known(it) == "" }
+                if (on.isEmpty()) return@forEach
+                rows += Row("──── ${g.name} ────")
+                on.forEach { c -> rows += channelRow(c, "Free channels · " + g.name, favs) }
+            }
+            if (off.isNotEmpty()) rows += Row("Off air right now", "${off.size}  ►", opens = { offAir(off) })
+            rows += Row("────────────────────")
+            rows += Row("Choose what to show", "►", opens = {
+                chooser(groups ?: emptyList(), { Prefs.freeHidden }) { Prefs.freeHidden = it; Prefs.syncOut() }
+            })
             rows += Row("About these channels", "►", opens = { about() })
             screen.rows = rows
             App.refresh()
         }
 
         fun checkAll() {
-            val list = groups ?: return
-            for (c in Prefs.recent + Prefs.favourites + list.flatMap { it.channels }) {
+            val all = shown()?.flatMap { it.channels } ?: emptyList()
+            for (c in all) {
                 if (LiveTv.known(c) != null) continue
                 App.async({ LiveTv.check(c) }) { if (App.inStack(screen)) build() }
             }
+            loadGuides(all) { if (App.inStack(screen)) build() }
         }
 
-        guides = {
-            loadGuides(Prefs.recent + Prefs.favourites + (groups?.flatMap { it.channels } ?: emptyList())) { if (App.inStack(screen)) build() }
-        }
-
-        screen = Screen("Live TV", listOf(Row("Loading channels…")))
-        screen.key = "live"
+        screen = Screen("Free channels", listOf(Row("Loading channels…")))
+        screen.key = "live-free"
         screen.onShow = {
-            guides()
             if (groups == null) {
                 App.async({ LiveTv.load() }) { r ->
-                    r.onSuccess { groups = it; build(); checkAll(); guides() }.onFailure { error = Net.describe(it); build() }
+                    r.onSuccess { groups = it; build(); checkAll() }.onFailure { error = Net.describe(it); build() }
                 }
             } else { build(); checkAll() }
         }
@@ -94,11 +123,11 @@ object Live {
     private fun offAir(off: List<LiveTv.Channel>) = Screen(
         "Off air right now",
         listOf(Row("These didn't answer just now. Press Enter to try one anyway."), Row("")) +
-            off.map { c -> Row(c.name, c.group, opens = { channelMenu(c, "Live TV · " + c.group) }, play = { Player.play(c.urls.first(), c.name, null, 0) { } }) },
+            off.map { c -> Row(c.name, c.group, opens = { channelMenu(c, "Free channels · " + c.group) }, play = { Player.play(c.urls.first(), c.name, null, 0) { } }) },
     )
 
     private fun about() = Screen(
-        "About Live TV",
+        "About Free channels",
         listOf(
             Row("These are channels the broadcasters stream free themselves:"),
             Row("news, S4C and shopping. They play in your player (mpv)."),
@@ -109,9 +138,7 @@ object Live {
             Row("Each channel is checked when the list opens. Any that don't"),
             Row("answer go to \"Off air right now\"."),
             Row(""),
-            Row("Your playlists: add an M3U link you're entitled to use."),
-            Row("That's your responsibility. They follow your account to"),
-            Row("your other devices."),
+            Row("Don't want some? Choose what to show hides them on all your devices."),
         ),
     )
 
@@ -396,7 +423,8 @@ object Live {
         if (!Prefs.liveTv) return
         val favs = Prefs.favourites
         val lists = Prefs.playlists
-        App.async({ LiveTv.matching(LiveTv.everything(favs, lists), query) }) { r -> r.getOrNull()?.let(done) }
+        val hide = Prefs.freeHidden
+        App.async({ LiveTv.matching(LiveTv.everything(favs, lists, hide), query) }) { r -> r.getOrNull()?.let(done) }
     }
 
     /** A search result: Enter opens it, p plays it. */
@@ -423,9 +451,12 @@ object Live {
     // ---- choosing what a playlist shows -------------------------------------------------------
 
     /** Hide groups or channels you don't want (radio, ones always off air). They stay in the playlist. */
-    private fun chooser(url: String, groups: List<LiveTv.Group>): Screen {
-        fun hidden() = Prefs.playlists.firstOrNull { it.url == url }?.hidden ?: emptySet()
-        fun setHidden(h: Set<String>) { Prefs.playlists = Prefs.playlists.map { if (it.url == url) it.withHidden(h) else it }; Prefs.syncOut() }
+    private fun chooser(url: String, groups: List<LiveTv.Group>): Screen = chooser(
+        groups,
+        { Prefs.playlists.firstOrNull { it.url == url }?.hidden ?: emptySet() },
+    ) { h -> Prefs.playlists = Prefs.playlists.map { if (it.url == url) it.withHidden(h) else it }; Prefs.syncOut() }
+
+    private fun chooser(groups: List<LiveTv.Group>, hidden: () -> Set<String>, setHidden: (Set<String>) -> Unit): Screen {
         fun toggle(key: String) = hidden().let { h -> setHidden(if (key in h) h - key else h + key) }
         fun mark(isHidden: Boolean) = if (isHidden) "✗ hidden" else "✓ shown"
         fun channelRows(list: List<LiveTv.Channel>, redraw: () -> Unit): List<Row> {

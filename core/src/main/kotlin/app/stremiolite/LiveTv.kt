@@ -373,9 +373,10 @@ object LiveTv {
      * Every channel Live TV knows: your favourites, the broadcasters' list and your playlists
      * (each channel's group says where it's from). Blocking; a playlist that fails is skipped.
      */
-    fun everything(favs: List<Channel>, playlists: List<Playlist>): List<Channel> {
+    fun everything(favs: List<Channel>, playlists: List<Playlist>, freeHidden: Set<String> = emptySet()): List<Channel> {
         val out = ArrayList<Channel>(favs)
-        runCatching { load() }.getOrNull()?.forEach { g -> g.channels.forEach { out += it.from("Live TV · " + g.name) } }
+        runCatching { visible(Playlist("", "", 0, freeHidden), load()) }.getOrNull()
+            ?.forEach { g -> g.channels.forEach { out += it.from("Free channels · " + g.name) } }
         for (p in playlists) {
             val groups = runCatching { visible(p, loadPlaylist(p, fresh = false)) }.getOrNull() ?: continue
             groups.forEach { g -> g.channels.forEach { out += it.from(p.name + " · " + g.name) } }
