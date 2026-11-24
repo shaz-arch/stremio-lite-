@@ -12,36 +12,42 @@ import android.widget.LinearLayout
 object RowPicker {
     private fun prefs(app: MainActivity) = Profiles.prefsFor(app, "aio")
 
-    fun entry(app: MainActivity): Screen {
+    /** Remembers a password on this device for the install with this link (after creating it). */
+    fun remember(app: MainActivity, installUrl: String, password: String) {
+        val m = Regex("""^(https?://[^/]+(?:/.*?)?)/stremio/([^/]+)/manifest\.json$""").find(installUrl) ?: return
+        prefs(app).edit().putString("pw:" + m.groupValues[1] + "/" + m.groupValues[2], password).apply()
+    }
+
+    fun entry(app: MainActivity, then: ((Addon, AioRows.Loaded, String) -> Screen)? = null): Screen {
         val list = Home.allAddons().filter { AioRows.isAio(it) }
         if (list.isEmpty()) return Screen("Choose your rows", listOf(
             Row("No AIOMetadata add-on found on this account."),
             Row("If Home is still loading, go back and try again."),
         ))
-        if (list.size == 1) return start(app, list[0])
+        if (list.size == 1) return start(app, list[0], then)
         return Screen("Choose your rows", listOf(Row("Which rows do you want to change?"), Row("")) + list.map { a ->
             Row(if (a.stickRows) "Stremonino's rows" else if (list.any { it.stickRows }) "Stremio's rows" else a.name.substringBefore('|').trim(),
                 (if (a.stickRows) "stick rows install" else a.name.substringBefore('|').trim()) + "  ►",
-                opens = { start(app, a) })
+                opens = { start(app, a, then) })
         })
     }
 
     /** Asks for the password (unless this device remembers it), then loads. */
-    private fun start(app: MainActivity, a: Addon): Screen {
+    private fun start(app: MainActivity, a: Addon, then: ((Addon, AioRows.Loaded, String) -> Screen)?): Screen {
         val inst = AioRows.install(a) ?: return Screen("Choose your rows", listOf(Row("Couldn't read this add-on's install link.")))
         val status = Screen("Choose your rows", listOf(Row("Loading your AIOMetadata settings…")))
         val saved = prefs(app).getString("pw:" + inst.server + "/" + inst.id, null)
         status.onShow = {
             if (status.rows.size == 1 && status.rows[0].label.startsWith("Loading")) {
                 status.onShow = null
-                if (saved != null) load(app, status, a, inst, saved, remember = true)
-                else askPassword(app, status, a, inst)
+                if (saved != null) load(app, status, a, inst, saved, true, then)
+                else askPassword(app, status, a, inst, then)
             }
         }
         return status
     }
 
-    private fun askPassword(app: MainActivity, status: Screen, a: Addon, inst: AioRows.Install) {
+    private fun askPassword(app: MainActivity, status: Screen, a: Addon, inst: AioRows.Install, then: ((Addon, AioRows.Loaded, String) -> Screen)?) {
         val pw = EditText(app).apply {
             hint = "AIOMetadata password"
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
@@ -59,26 +65,27 @@ object RowPicker {
             .setView(box)
             .setPositiveButton("Open") { _, _ ->
                 val p = pw.text.toString()
-                if (p.isEmpty()) app.back() else load(app, status, a, inst, p, keep.isChecked)
+                if (p.isEmpty()) app.back() else load(app, status, a, inst, p, keep.isChecked, then)
             }
             .setNegativeButton("Cancel") { _, _ -> app.back() }
             .setOnCancelListener { app.back() }
             .show()
     }
 
-    private fun load(app: MainActivity, status: Screen, a: Addon, inst: AioRows.Install, password: String, remember: Boolean) {
+    private fun load(app: MainActivity, status: Screen, a: Addon, inst: AioRows.Install, password: String, remember: Boolean, then: ((Addon, AioRows.Loaded, String) -> Screen)?) {
         status.rows = listOf(Row("Loading your AIOMetadata settings…"))
         app.refresh(status)
         val key = "pw:" + inst.server + "/" + inst.id
         Net.async({ AioRows.load(inst, password) }) { r ->
             r.onSuccess { l ->
                 if (remember) prefs(app).edit().putString(key, password).apply()
-                if (app.isTop(status)) app.replaceTop(picker(app, a, l, password)) else app.push(picker(app, a, l, password))
+                val next = then?.invoke(a, l, password) ?: picker(app, a, l, password)
+                if (app.isTop(status)) app.replaceTop(next) else app.push(next)
             }.onFailure { e ->
                 if (e is AioRows.Failed && e.message == "wrong password") prefs(app).edit().remove(key).apply()
                 status.rows = listOf(
                     Row("Couldn't open the settings: " + (if (e is AioRows.Failed) e.message else Net.describe(e))),
-                    Row("Try again", action = { askPassword(app, status, a, inst) }),
+                    Row("Try again", action = { askPassword(app, status, a, inst, then) }),
                 )
                 app.refresh(status)
             }

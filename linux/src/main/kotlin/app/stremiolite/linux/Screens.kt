@@ -863,7 +863,7 @@ object Settings {
                 Row("Hide rows", "►", opens = { rowsScreen() }),
                 Row("──── Setup ────"),
                 Row("Your add-ons", (Home.all().size.takeIf { it > 0 }?.let { "$it  " } ?: "") + "►", opens = { Addons.screen() }),
-                Row("Choose your rows (AIOMetadata)", "►", opens = { RowPicker.entry() }),
+                Row("Your rows: categories and setup", "►", opens = { RowsSetup.screen() }),
                 Row("Export my setup to another account", "►", opens = { Share.screen() }),
                 Row("Import a setup from another account", "►", opens = { Share.importScreen() }),
                 Row("Device check", "►", opens = { DeviceCheck.screen() }),
