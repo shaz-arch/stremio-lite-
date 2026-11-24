@@ -213,7 +213,23 @@ object Guide {
     }
 
     /** The guides worth trying for [c]: its playlist's own, then your TV guide link. */
-    fun guidesFor(c: LiveTv.Channel, yours: String): List<String> = listOf(c.guide, yours).filter { it.isNotBlank() }.distinct()
+    fun guidesFor(c: LiveTv.Channel, yours: String): List<String> = (pick(c) + yours).filter { it.isNotBlank() }.distinct()
+
+    /**
+     * Of a playlist's guide links, the ones for this channel. One link: that one. Several (one per
+     * country, like "…_UK1.xml.gz"): those for the country in the channel's tvg-id ("BBCOne.uk").
+     * Never all of them: dozens of country guides would be far too much for the stick.
+     */
+    fun pick(c: LiveTv.Channel): List<String> {
+        val links = c.guide.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+        if (links.size <= 1) return links
+        val cc = c.tvgId.substringAfterLast('.', "").uppercase().takeIf { it.length == 2 } ?: return emptyList()
+        val codes = if (cc == "UK" || cc == "GB") listOf("UK", "GB") else listOf(cc)
+        return links.filter { u ->
+            val file = u.substringAfterLast('/').substringBefore('?').uppercase()
+            codes.any { code -> Regex("""(^|[_\-.])$code(\d*|_[A-Z]+\d*)?\.""").containsMatchIn(file) }
+        }.take(2)
+    }
 
     /** "13:00" in the device's time. */
     fun clock(ms: Long): String = java.text.SimpleDateFormat("HH:mm", java.util.Locale.UK).format(java.util.Date(ms))

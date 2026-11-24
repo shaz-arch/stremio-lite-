@@ -58,7 +58,7 @@ object Live {
         }
 
         guides = {
-            val urls = listOf(Settings.liveGuide(app)) + Settings.favourites(app).map { it.guide }
+            val urls = listOf(Settings.liveGuide(app)) + Settings.favourites(app).flatMap { Guide.guidesFor(it, "") }
             loadGuides(app, urls) { if (app.inStack(screen)) build() }
         }
 
@@ -234,7 +234,7 @@ object Live {
         screen = Screen(title, listOf(Row("Loading…")))
         screen.onShow = {
             build()
-            channels()?.let { list -> loadGuides(app, list.map { it.guide }.distinct() + Settings.liveGuide(app)) { if (app.inStack(screen)) soon() } }
+            channels()?.let { list -> loadGuides(app, list.flatMap { Guide.pick(it) }.distinct() + Settings.liveGuide(app)) { if (app.inStack(screen)) soon() } }
             channels()?.let { list ->
                 queue.clear()
                 queue.addAll(list.filter { LiveTv.known(it) == null && it !in busy })

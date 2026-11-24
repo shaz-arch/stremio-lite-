@@ -167,10 +167,13 @@ object LiveTv {
         return order.map { (g, list) -> Group(g, list) }
     }
 
-    /** The TV guide link in a playlist's #EXTM3U line (url-tvg or x-tvg-url; the first if several). */
+    /**
+     * The TV guide links in a playlist's #EXTM3U line (url-tvg or x-tvg-url), comma-separated.
+     * Some playlists list one guide per country; [Guide.guidesFor] picks the ones each channel needs.
+     */
     fun guideLink(text: String): String {
         val head = text.lineSequence().take(5).firstOrNull { it.trim().startsWith("#EXTM3U", ignoreCase = true) } ?: return ""
-        return attr(head, "url-tvg").ifEmpty { attr(head, "x-tvg-url") }.split(',').first().trim()
+        return attr(head, "url-tvg").ifEmpty { attr(head, "x-tvg-url") }.split(',').map { it.trim() }.filter { it.isNotEmpty() }.joinToString(",")
     }
 
     /**
@@ -233,11 +236,15 @@ object LiveTv {
         val seen = HashSet<String>()
         val repeats = all.count { !seen.add(it.urls.first()) }
         if (repeats > 0) out += "Listed twice" to "$repeats (same link)"
-        val matched = if (l.guide.isEmpty()) 0 else all.count { Guide.lookup(it, listOf(l.guide)).isNotEmpty() }
+        val links = l.guide.split(',').filter { it.isNotBlank() }
+        val needed = all.flatMap { Guide.guidesFor(it, "") }.distinct()
+        val matched = if (links.isEmpty()) 0 else all.count { Guide.lookup(it, Guide.guidesFor(it, "")).isNotEmpty() }
+        val kind = (if (l.guide == providerGuide(p.url)) "from your provider" else "included") +
+            if (links.size > 1) " (${links.size} guides, ${needed.size} used)" else ""
         out += "TV guide" to when {
-            l.guide.isEmpty() -> "none: add your own in Live TV"
-            Guide.get(l.guide) == null -> (if (l.guide == providerGuide(p.url)) "from your provider" else "included") + ", not read yet (open a group)"
-            else -> (if (l.guide == providerGuide(p.url)) "from your provider" else "included") + ": $matched of ${all.size} channels listed"
+            links.isEmpty() -> "none: add your own in Live TV"
+            needed.none { Guide.get(it) != null } -> "$kind, not read yet (open a group)"
+            else -> "$kind: $matched of ${all.size} channels listed"
         }
         out += "Size" to if (l.bytes >= 1_000_000) "%.1f MB".format(l.bytes / 1_000_000.0) else "${(l.bytes + 999) / 1000} KB"
         out += "Read" to day(l.at)
