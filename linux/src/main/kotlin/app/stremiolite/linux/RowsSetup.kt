@@ -28,23 +28,11 @@ object RowsSetup {
         return Screen("Your rows", rows)
     }
 
-    private fun counts(r: RowSetup.Region): Map<String, Int> {
-        val all = RowSetup.forRegion(r)
-        val m = HashMap<String, Int>()
-        for (i in 0 until all.length()) {
-            val o = all.getJSONObject(i)
-            if (o.optString("mergedInto").isNotBlank()) continue
-            val c = RowSetup.group(o.optString("name")).first
-            m[c] = (m[c] ?: 0) + 1
-        }
-        return m
-    }
 
     private fun checklist(p: RowSetup.Picks, edit: AioRows.Loaded?, password: String?): Screen {
         lateinit var s: Screen
         fun tick(on: Boolean) = if (on) "✓ " else "   "
         fun build(): List<Row> {
-            val n = counts(p.region)
             val rows = mutableListOf<Row>()
             if (edit == null) rows += Row("Region", "◄ ${p.region.label} ►", action = {
                 p.region = if (p.region == RowSetup.Region.UK) RowSetup.Region.US else RowSetup.Region.UK
@@ -52,21 +40,26 @@ object RowsSetup {
                 s.rows = build(); App.refresh()
             })
             else rows += Row("Region", p.region.label + " (set when created)")
+            rows += Row("Size", "◄ ${p.size.label} ►   about ${RowSetup.count(p)} rows", action = {
+                val sizes = RowSetup.Size.values()
+                RowSetup.resize(p, sizes[(p.size.ordinal + 1) % sizes.size])
+                s.rows = build(); App.refresh()
+            })
             rows += Row("──── Streaming services (Top 10 and Streaming) ────")
             RowSetup.services(p.region).forEach { svc ->
                 lateinit var r: Row
                 r = Row(tick(svc in p.services) + svc, "", action = {
                     if (svc in p.services) p.services -= svc else p.services += svc
-                    r.label = tick(svc in p.services) + svc; App.refresh()
+                    s.rows = build(); App.refresh()
                 })
                 rows += r
             }
             rows += Row("──── Categories ────")
             RowSetup.categories.forEach { c ->
                 lateinit var r: Row
-                r = Row(tick(c in p.categories) + c, "${n[c] ?: 0} rows", action = {
+                r = Row(tick(c in p.categories) + c, "${RowSetup.countIn(p, c)} rows", action = {
                     if (c in p.categories) p.categories -= c else p.categories += c
-                    r.label = tick(c in p.categories) + c; App.refresh()
+                    s.rows = build(); App.refresh()
                 })
                 rows += r
             }

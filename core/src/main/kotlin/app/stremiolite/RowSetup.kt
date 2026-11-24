@@ -40,7 +40,17 @@ object RowSetup {
     )
     val defaultCategories = setOf("Top 10", "Streaming", "Genres", "Kids & Family", "Charts", "Decades", "Documentaries", "Collections")
 
-    class Picks(var region: Region, val services: MutableSet<String>, val categories: MutableSet<String>) {
+    /** How many rows to start from: Minimal trims Genres to the core ones; Standard is the full layout. */
+    enum class Size(val label: String, val categories: Set<String>) {
+        MINIMAL("Minimal", setOf("Top 10", "Streaming", "Genres", "Kids & Family")),
+        STANDARD("Standard", setOf("Top 10", "Streaming", "Genres", "Kids & Family", "Charts", "Decades", "Documentaries", "Collections",
+            "Themes", "Sitcoms", "Studios", "Directors")),
+    }
+
+    /** The genres Minimal keeps (for Movies and Shows). */
+    val coreGenres = setOf("Action", "Comedy", "Drama", "Horror", "Thriller", "Sci-Fi", "Crime", "Romance", "Animation", "Mystery")
+
+    class Picks(var region: Region, val services: MutableSet<String>, val categories: MutableSet<String>, var size: Size = Size.STANDARD) {
         /** Optional keys: your own TMDB key, and an MDBList key (which switches on the MDBList rows). */
         var tmdbKey: String = ""
         var mdblistKey: String = ""
@@ -50,7 +60,36 @@ object RowSetup {
     const val TMDB_KEY_PAGE = "https://www.themoviedb.org/settings/api"
     const val MDBLIST_KEY_PAGE = "https://mdblist.com/preferences/"
 
-    fun defaults(r: Region = Region.UK) = Picks(r, defaultServices(r).toMutableSet(), defaultCategories.toMutableSet())
+    fun defaults(r: Region = Region.UK) = Picks(r, defaultServices(r).toMutableSet(), Size.STANDARD.categories.toMutableSet(), Size.STANDARD)
+
+    /** Switches to [size]: its categories are ticked, the rest unticked. */
+    fun resize(p: Picks, size: Size) {
+        p.size = size
+        p.categories.clear(); p.categories += size.categories
+    }
+
+    /** Rows that would be on with these picks (front page included, merged parts not counted). */
+    fun count(p: Picks): Int = lite(p.region).count {
+        !it.part && (it.id !in needsMdblist || p.mdblistKey.isNotBlank()) && wanted(it.name, p)
+    }
+
+    /** id, name and whether it's part of a merged row, for each row of a region (cached: counting runs on every tick). */
+    private class Lite(val id: String, val name: String, val part: Boolean)
+    private val liteCache = HashMap<Region, List<Lite>>()
+    private fun lite(r: Region): List<Lite> = synchronized(liteCache) {
+        liteCache.getOrPut(r) {
+            val all = forRegion(r)
+            (0 until all.length()).map { all.getJSONObject(it) }.map { Lite(it.optString("id"), it.optString("name"), it.optString("mergedInto").isNotBlank()) }
+        }
+    }
+
+    /** Rows a category adds with these picks (as if it were ticked). */
+    fun countIn(p: Picks, category: String): Int {
+        val q = Picks(p.region, p.services, (p.categories + category).toMutableSet(), p.size).also { it.mdblistKey = p.mdblistKey }
+        return lite(p.region).count {
+            !it.part && group(it.name).first == category && (it.id !in needsMdblist || p.mdblistKey.isNotBlank()) && wanted(it.name, q)
+        }
+    }
 
     private val prefix = Regex("""^([^:>]{1,24}?)\s*(?:>|:)""")
 
@@ -73,6 +112,7 @@ object RowSetup {
         val (cat, service) = group(name)
         if (cat.isEmpty()) return true
         if (cat !in p.categories) return false
+        if (cat == "Genres" && p.size == Size.MINIMAL) return name.substringAfterLast(':').trim() in coreGenres
         if (service == null) return true
         return service in p.services && service in services(p.region)
     }
@@ -89,11 +129,7 @@ object RowSetup {
     }
 
     /** How many rows an MDBList key adds for these picks. */
-    fun mdblistCount(p: Picks): Int {
-        val all = forRegion(p.region)
-        return (0 until all.length()).map { all.getJSONObject(it) }
-            .count { it.optString("mergedInto").isBlank() && it.optString("id") in needsMdblist && wanted(it.optString("name"), p, ignoreKey = true) }
-    }
+    fun mdblistCount(p: Picks): Int = lite(p.region).count { !it.part && it.id in needsMdblist && wanted(it.name, p, ignoreKey = true) }
 
     /** The catalogue for a region: Top 10 rows use its country, streaming rows its watch region. */
     fun forRegion(r: Region): JSONArray {
@@ -156,7 +192,15 @@ object RowSetup {
             if (cat in categories) cats += cat
             svc?.let { svcs += it }
         }
-        return Picks(if (us) Region.US else Region.UK, svcs, cats)
+        // Genres on, but only core ones: it was made Minimal.
+        var extraGenre = false
+        for (i in 0 until catalogs.length()) {
+            val o = catalogs.optJSONObject(i) ?: continue
+            val n = o.optString("name")
+            if (o.optBoolean("enabled") && group(n).first == "Genres" && n.substringAfterLast(':').trim() !in coreGenres) extraGenre = true
+        }
+        val size = if ("Genres" in cats && !extraGenre) Size.MINIMAL else Size.STANDARD
+        return Picks(if (us) Region.US else Region.UK, svcs, cats, size)
     }
 
     /** A full AIOMetadata configuration with AIOMetadata's usual defaults and these rows. */
