@@ -123,8 +123,18 @@ object LiveTv {
         JSONArray(list.map { p -> JSONObject().put("name", p.name).put("url", p.url).also { if (p.added > 0) it.put("added", p.added) } }).toString()
 
     /** A short name for a playlist link: its site, e.g. "example.com". */
-    fun nameFor(url: String): String =
-        runCatching { URL(url).host.removePrefix("www.") }.getOrNull()?.ifBlank { null } ?: "Playlist"
+    fun nameFor(url: String): String {
+        val u = runCatching { URL(url) }.getOrNull() ?: return "Playlist"
+        val host = u.host.removePrefix("www.")
+        // A playlist kept on GitHub: "Free-TV playlist_uk" says more than "raw.githubusercontent.com".
+        if (host.endsWith("githubusercontent.com") || host == "github.com" || host.endsWith("github.io")) {
+            val parts = u.path.split('/').filter { it.isNotEmpty() }
+            val file = parts.lastOrNull()?.substringBeforeLast('.')?.ifBlank { null }
+            val owner = if (host.endsWith("github.io")) host.substringBefore('.') else parts.firstOrNull()
+            return listOfNotNull(owner, file).joinToString(" ").ifBlank { host }
+        }
+        return host.ifBlank { "Playlist" }
+    }
 
     /** A link people paste: trimmed, with https:// added when it's missing. Null if it isn't a link. */
     fun cleanLink(text: String): String? {

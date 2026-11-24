@@ -105,7 +105,8 @@ object Guide {
                 c.setRequestProperty("User-Agent", Http.userAgent)
                 if (c.responseCode >= 400) throw Http.HttpError(c.responseCode)
                 val d = parse(c.inputStream, System.currentTimeMillis(), wanted)
-                if (d.progs.isEmpty()) throw IllegalStateException("No programmes in that guide")
+                // Read for some channels only, an empty result just means none of them are in this guide.
+                if (d.progs.isEmpty() && wanted == null) throw IllegalStateException("No programmes in that guide")
                 cache[url] = d
                 failed.remove(url)
                 return d
@@ -168,7 +169,8 @@ object Guide {
             if (n < 0) break
         }
         progs.values.forEach { it.sortBy { p -> p.start } }
-        progs.keys.forEach { id -> names.putIfAbsent(simple(id), id) }
+        // (No putIfAbsent: it's missing on Android 5, the 2016 stick.)
+        progs.keys.forEach { id -> val k = simple(id); if (!names.containsKey(k)) names[k] = id }
         return Data(System.currentTimeMillis(), progs, names, wanted)
     }
 
@@ -204,7 +206,7 @@ object Guide {
             if (!hit) return
             keep += id
         }
-        found.forEach { names.putIfAbsent(it, id) }
+        found.forEach { if (!names.containsKey(it)) names[it] = id }
     }
 
     private fun programme(el: String, now: Long, until: Long): Pair<String, Prog>? {
