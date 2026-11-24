@@ -104,6 +104,7 @@ object Search {
         var started = false
         val summary = Row("")
         lateinit var screen: Screen
+        var channels: List<LiveTv.Channel> = emptyList()
 
         fun rebuild() {
             summary.label = when {
@@ -113,6 +114,11 @@ object Search {
             }
             val rows = mutableListOf(summary, Row("New search", action = { start(app) }))
             errors.forEach { rows += Row(it) }
+            if (channels.isNotEmpty()) {
+                rows += Row("──── Live TV ────")
+                channels.take(5).forEach { rows += Live.searchRow(app, it) }
+                if (channels.size > 5) rows += Row("All matching channels", "${channels.size}  ►", opens = { Screen("Channels: $query", channels.map { Live.searchRow(app, it) }) })
+            }
             val seen = HashSet<String>()
             val all = mutableListOf<Pair<Addon, Meta>>()
             sources.forEachIndexed { i, (a, c) ->
@@ -136,7 +142,7 @@ object Search {
             group("Films", g.films)
             group("Shows", g.shows)
             group("Other", g.other)
-            if (answered >= sources.size && all.isEmpty() && sources.isNotEmpty()) {
+            if (answered >= sources.size && all.isEmpty() && channels.isEmpty() && sources.isNotEmpty()) {
                 rows += Row("Nothing found.")
             }
             screen.rows = rows
@@ -149,6 +155,7 @@ object Search {
             if (!started) {
                 started = true
                 rebuild()
+                Live.search(app, query) { channels = it; rebuild() }
                 sources.forEachIndexed { i, (a, c) ->
                     val url = a.base + "/catalog/" + enc(c.type) + "/" + enc(c.id) + "/search=" + enc(query) + ".json"
                     Net.async({ Catalogs.parse(Net.get(url, timeoutMs = 12_000)) }) { r ->

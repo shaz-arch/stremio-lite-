@@ -80,6 +80,7 @@ object Settings {
         mine.keys().forEach { k -> o.put(k, mine.get(k)) }
         // Your playlists follow the account, but never go out with "Share my setup".
         p.getString("playlists", null)?.let { o.put("playlists", it) }
+        p.getString("liveFavs", null)?.let { o.put("liveFavs", it) }
         o.put("updated", now)
         p.edit().putLong("syncedAt", now).apply()
         item.put("name", o.toString()).put("removed", true).put("temp", false).put("_mtime", Sync.iso(now))
@@ -107,6 +108,7 @@ object Settings {
         BOOL_KEYS.forEach { k -> if (o.has(k)) e.putBoolean(k, o.optBoolean(k)) }
         if (o.has("layout")) e.putString("layout", o.optString("layout"))
         if (o.has("playlists")) e.putString("playlists", o.optString("playlists"))
+        if (o.has("liveFavs")) e.putString("liveFavs", o.optString("liveFavs"))
         e.putStringSet("hiddenRows", hidden)
         e.putLong("syncedAt", updated).apply()
         if (hidden != remoteHidden) syncOut(c)
@@ -126,6 +128,14 @@ object Settings {
 
     /** Your M3U playlists for Live TV, shared with your other devices through the account. */
     fun playlists(c: Context): List<LiveTv.Playlist> = LiveTv.playlists(prefs(c).getString("playlists", null))
+
+    /** Your favourite Live TV channels, from any list; shared with your other devices, never with "Share". */
+    fun favourites(c: Context): List<LiveTv.Channel> = LiveTv.favourites(prefs(c).getString("liveFavs", null))
+
+    fun setFavourites(c: Context, list: List<LiveTv.Channel>) {
+        prefs(c).edit().putString("liveFavs", LiveTv.favouritesJson(list)).apply()
+        syncOut(c)
+    }
 
     fun setPlaylists(c: Context, list: List<LiveTv.Playlist>) {
         prefs(c).edit().putString("playlists", LiveTv.playlistsJson(list)).apply()

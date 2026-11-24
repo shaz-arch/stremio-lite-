@@ -526,6 +526,7 @@ object Search {
         val found = LinkedHashMap<String, Pair<Addon, Meta>>()
         val collections = HashSet<String>()
         var answered = 0
+        var channels: List<app.stremiolite.LiveTv.Channel> = emptyList()
         fun row(p: Pair<Addon, Meta>): Row {
             val (a, m) = p
             return if (m.id in collections) Row(m.name, listOf(m.year, "Collection").filter { it.isNotBlank() }.joinToString("  ") + "  ►", opens = { Details.screen(a, m) })
@@ -534,6 +535,11 @@ object Search {
         fun build() {
             val rows = mutableListOf<Row>()
             rows += Row(if (answered < sources.size) "Searching… ${answered} of ${sources.size}" else "${found.size} results for \"$q\"")
+            if (channels.isNotEmpty()) {
+                rows += Row("──── Live TV ────")
+                channels.take(5).forEach { rows += Live.searchRow(it) }
+                if (channels.size > 5) rows += Row("All matching channels", "${channels.size}  ►", opens = { Screen("Channels: $q", channels.map { Live.searchRow(it) }) })
+            }
             val g = SearchRank.group(found.values.toList(), q, { it.second }) { it.second.id in collections }
             if (g.best.isNotEmpty()) {
                 rows += Row("──── Best matches ────")
@@ -547,12 +553,13 @@ object Search {
             group("Films", g.films)
             group("Shows", g.shows)
             group("Other", g.other)
-            if (answered >= sources.size && found.isEmpty() && sources.isNotEmpty()) rows += Row("Nothing found.")
+            if (answered >= sources.size && found.isEmpty() && channels.isEmpty() && sources.isNotEmpty()) rows += Row("Nothing found.")
             s.rows = rows
             App.refresh()
         }
         s = Screen("Search: $q", listOf(Row("Searching…")))
         if (sources.isEmpty()) s.rows = listOf(Row("None of your add-ons can search."))
+        Live.search(q) { channels = it; build() }
         sources.forEach { (a, c) ->
             val url = a.base + "/catalog/" + Net.enc(c.type) + "/" + Net.enc(c.id) + "/search=" + Net.enc(q) + ".json"
             App.async({ MetaParse.parse(Http.get(url)) }) { r ->

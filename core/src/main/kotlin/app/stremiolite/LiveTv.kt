@@ -49,7 +49,7 @@ object LiveTv {
         return (fresh ?: parseList(bundled())).also { cached = it }
     }
 
-    fun forget() { cached = null; working.clear() }
+    fun forget() { cached = null; working.clear(); loaded.clear() }
 
     // ---- is it on air? -----------------------------------------------------------------
 
@@ -152,11 +152,68 @@ object LiveTv {
     private fun attr(line: String, key: String): String =
         Regex("""$key="([^"]*)"""", RegexOption.IGNORE_CASE).find(line)?.groupValues?.get(1)?.trim() ?: ""
 
+    /** Playlists read lately (link → read at, groups), so search doesn't fetch them every time. */
+    private val loaded = ConcurrentHashMap<String, Pair<Long, List<Group>>>()
+
     /** Fetches and reads a playlist. Blocking. Big playlists take a while on the stick, so allow time. */
-    fun loadPlaylist(p: Playlist): List<Group> {
+    fun loadPlaylist(p: Playlist, fresh: Boolean = true): List<Group> {
+        if (!fresh) loaded[p.url]?.takeIf { System.currentTimeMillis() - it.first < KEEP_MS }?.let { return it.second }
         val text = Http.getBytes(p.url, 30_000).toString(Charsets.UTF_8)
         if (!text.contains("#EXTINF", ignoreCase = true)) throw IllegalStateException("That link isn't an M3U playlist")
-        return parseM3u(text)
+        return parseM3u(text).also { loaded[p.url] = System.currentTimeMillis() to it }
+    }
+
+    // ---- favourites --------------------------------------------------------------------------
+
+    /** Your favourite channels, from any list: [Channel.group] holds where it came from. */
+    fun favourites(json: String?): List<Channel> {
+        if (json.isNullOrBlank()) return emptyList()
+        val a = runCatching { JSONArray(json) }.getOrNull() ?: return emptyList()
+        return (0 until a.length()).mapNotNull { i ->
+            val o = a.optJSONObject(i) ?: return@mapNotNull null
+            val urls = o.optJSONArray("urls")?.let { u -> (0 until u.length()).map { u.optString(it) }.filter { it.isNotBlank() } } ?: emptyList()
+            if (urls.isEmpty()) null else Channel(o.optString("name"), o.optString("from"), urls, o.optString("note"))
+        }
+    }
+
+    fun favouritesJson(list: List<Channel>): String = JSONArray(list.map { c ->
+        JSONObject().put("name", c.name).put("from", c.group).put("urls", JSONArray(c.urls)).also { if (c.note.isNotEmpty()) it.put("note", c.note) }
+    }).toString()
+
+    /** The same channel (same name and first link), wherever it's listed. */
+    fun same(a: Channel, b: Channel) = a.name == b.name && a.urls.firstOrNull() == b.urls.firstOrNull()
+
+    fun isFavourite(favs: List<Channel>, c: Channel) = favs.any { same(it, c) }
+
+    /** [favs] with [c] added (at the end) or taken off. [from] names the list it came from. */
+    fun toggle(favs: List<Channel>, c: Channel, from: String): List<Channel> =
+        if (isFavourite(favs, c)) favs.filterNot { same(it, c) } else favs + Channel(c.name, from, c.urls, c.note)
+
+    // ---- search --------------------------------------------------------------------------------
+
+    private fun simple(s: String) = s.lowercase().filter { it.isLetterOrDigit() }
+
+    /** Channels whose name matches [query]: names starting with it first. */
+    fun matching(channels: List<Channel>, query: String): List<Channel> {
+        val q = simple(query)
+        if (q.isEmpty()) return emptyList()
+        val hits = channels.filter { simple(it.name).contains(q) }
+        val seen = HashSet<String>()
+        return hits.sortedBy { if (simple(it.name).startsWith(q)) 0 else 1 }.filter { seen.add(it.name + "|" + it.urls.first()) }
+    }
+
+    /**
+     * Every channel Live TV knows: your favourites, the broadcasters' list and your playlists
+     * (each channel's group says where it's from). Blocking; a playlist that fails is skipped.
+     */
+    fun everything(favs: List<Channel>, playlists: List<Playlist>): List<Channel> {
+        val out = ArrayList<Channel>(favs)
+        runCatching { load() }.getOrNull()?.forEach { g -> g.channels.forEach { out += Channel(it.name, "Live TV · " + g.name, it.urls, it.note) } }
+        for (p in playlists) {
+            val groups = runCatching { loadPlaylist(p, fresh = false) }.getOrNull() ?: continue
+            groups.forEach { g -> g.channels.forEach { out += Channel(it.name, p.name + " · " + g.name, it.urls) } }
+        }
+        return out
     }
 
     /** "Checked 40 of 120 · 35 live" while a list is being checked, or "" once it's done. */

@@ -19,6 +19,12 @@ object Live {
                 list == null && error != null -> rows += Row("Couldn't load the channel list: $error")
                 list == null -> rows += Row("Loading channels…")
             }
+            val favs = Settings.favourites(app)
+            if (favs.isNotEmpty()) {
+                rows += Row("──── Favourites ────")
+                favs.forEach { c -> rows += channelRow(app, c, c.group, favs) }
+                if (favs.size > 1) rows += Row("Arrange favourites", "►", opens = { arrange(app) })
+            }
             val off = mutableListOf<LiveTv.Channel>()
             list?.forEach { g ->
                 val shown = g.channels.filter { LiveTv.known(it) != "" }
@@ -26,8 +32,9 @@ object Live {
                 if (shown.isEmpty()) return@forEach
                 rows += Row("──── ${g.name} ────")
                 shown.forEach { c ->
-                    val state = when (LiveTv.known(c)) { null -> "checking…"; else -> listOf(c.note, "live").filter { it.isNotEmpty() }.joinToString(" · ") }
-                    rows += Row(c.name, state, action = { play(app, c) }, play = { play(app, c) })
+                    val star = if (LiveTv.isFavourite(favs, c)) "★ " else ""
+                    val state = star + when (LiveTv.known(c)) { null -> "checking…"; else -> listOf(c.note, "live").filter { it.isNotEmpty() }.joinToString(" · ") }
+                    rows += Row(c.name, state, opens = { channelMenu(app, c, "Live TV · " + g.name) }, play = { play(app, c) })
                 }
             }
             if (off.isNotEmpty()) {
@@ -44,7 +51,7 @@ object Live {
 
         fun checkAll() {
             val list = groups ?: return
-            for (c in list.flatMap { it.channels }) {
+            for (c in Settings.favourites(app) + list.flatMap { it.channels }) {
                 if (LiveTv.known(c) != null) continue
                 Net.async({ LiveTv.check(c) }) { if (app.inStack(screen)) build() }
             }
@@ -63,7 +70,7 @@ object Live {
     }
 
     /** Plays the channel's working link (checking it first if it hasn't been). */
-    private fun play(app: MainActivity, c: LiveTv.Channel) {
+    fun play(app: MainActivity, c: LiveTv.Channel) {
         val known = LiveTv.known(c)
         if (!known.isNullOrEmpty()) { Player.play(app, known, c.name); return }
         app.toast("Tuning in to ${c.name}…")
@@ -76,7 +83,7 @@ object Live {
     private fun offAir(app: MainActivity, off: List<LiveTv.Channel>) = Screen(
         "Off air right now",
         listOf(Row("These didn't answer just now. Press OK to try one anyway."), Row("")) +
-            off.map { c -> Row(c.name, c.group, action = { Player.play(app, c.urls.first(), c.name) }) },
+            off.map { c -> Row(c.name, c.group, opens = { channelMenu(app, c, "Live TV · " + c.group) }, play = { Player.play(app, c.urls.first(), c.name) }) },
     )
 
     private fun about() = Screen(
@@ -152,14 +159,14 @@ object Live {
                 }
             }),
         )
-        screen = channelScreen(app, p.name, channels, tail) {
+        screen = channelScreen(app, p.name, channels, tail, from = p.name) {
             val g = groups
             when {
                 g == null && error != null -> listOf(Row("Couldn't load it: $error"))
                 g == null -> listOf(Row("Loading the playlist…"))
                 g.isEmpty() -> listOf(Row("No channels in this playlist."))
                 g.size == 1 -> null
-                else -> g.map { grp -> Row(grp.name, "${grp.channels.size}  ►", opens = { channelScreen(app, grp.name, { grp.channels }) { null } }) }
+                else -> g.map { grp -> Row(grp.name, "${grp.channels.size}  ►", opens = { channelScreen(app, grp.name, { grp.channels }, from = p.name + " · " + grp.name) { null } }) }
             }?.plus(tail)
         }
         screen.key = "playlist:" + p.url
@@ -178,6 +185,7 @@ object Live {
         title: String,
         channels: () -> List<LiveTv.Channel>?,
         extra: List<Row> = emptyList(),
+        from: String = title,
         other: () -> List<Row>?,
     ): Screen {
         lateinit var screen: Screen
@@ -192,13 +200,14 @@ object Live {
             val rows = other()
             if (list == null || rows != null) { screen.rows = rows ?: emptyList(); app.refresh(screen); return }
             val progress = LiveTv.progress(list)
+            val favs = Settings.favourites(app)
             val out = mutableListOf<Row>()
             if (progress.isNotEmpty()) out += Row(progress)
             val off = if (progress.isEmpty()) list.filter { LiveTv.known(it) == "" } else emptyList()
-            (list - off.toSet()).forEach { out += channelRow(app, it) }
+            (list - off.toSet()).forEach { out += channelRow(app, it, from, favs) }
             if (off.isNotEmpty()) {
                 out += Row("──── Off air right now ────")
-                off.forEach { out += channelRow(app, it) }
+                off.forEach { out += channelRow(app, it, from, favs) }
             }
             if (list.isEmpty()) out += Row("No channels.")
             screen.rows = out + extra
@@ -227,11 +236,59 @@ object Live {
         return screen
     }
 
-    private fun channelRow(app: MainActivity, c: LiveTv.Channel): Row {
-        val status = when (LiveTv.known(c)) { null -> "checking…"; "" -> "off air"; else -> "live" }
-        val go = { Player.play(app, LiveTv.known(c)?.ifEmpty { null } ?: c.urls.first(), c.name) }
-        return Row(c.name, status, action = go, play = go)
+    private fun status(c: LiveTv.Channel) = when (LiveTv.known(c)) { null -> "checking…"; "" -> "off air"; else -> "live" }
+
+    /** OK opens the channel (watch, favourite); Play/Pause plays it straight away. */
+    private fun channelRow(app: MainActivity, c: LiveTv.Channel, from: String, favs: List<LiveTv.Channel> = Settings.favourites(app)): Row {
+        val fav = if (LiveTv.isFavourite(favs, c)) "★ " else ""
+        return Row(c.name, fav + status(c), opens = { channelMenu(app, c, from) }, play = { play(app, c) })
     }
+
+    /** One channel: watch it, or add it to (or take it off) your favourites. */
+    fun channelMenu(app: MainActivity, c: LiveTv.Channel, from: String): Screen {
+        lateinit var s: Screen
+        fun build() {
+            val fav = LiveTv.isFavourite(Settings.favourites(app), c)
+            s.rows = listOfNotNull(
+                Row("Watch now", status(c).let { if (it == "checking…") "►" else "$it  ►" }, action = { play(app, c) }),
+                Row(if (fav) "Remove from favourites" else "Add to favourites", if (fav) "★" else "☆", action = {
+                    Settings.setFavourites(app, LiveTv.toggle(Settings.favourites(app), c, from))
+                    app.toast(if (fav) "Removed from favourites" else "Added to favourites")
+                    build()
+                }),
+                Row(""),
+                Row(info("From", from)),
+                c.note.takeIf { it.isNotEmpty() }?.let { Row(info("Note", it)) },
+            )
+            app.refresh(s)
+        }
+        s = Screen(c.name, emptyList())
+        s.onShow = { build() }
+        return s
+    }
+
+    /** Your favourites in your own order: pick one up and drop it where it goes. */
+    private fun arrange(app: MainActivity): Screen = Reorder(
+        app,
+        head = { emptyList() },
+        items = Settings.favourites(app).toMutableList(),
+        label = { it.name },
+        detail = { it.group },
+        open = { null },
+        commit = { Settings.setFavourites(app, it) },
+    ).build("Arrange favourites")
+
+    /** Channels matching a search, for the Search screen: favourites, the broadcasters' list and your playlists. */
+    fun search(app: MainActivity, query: String, done: (List<LiveTv.Channel>) -> Unit) {
+        if (!Settings.liveTv(app)) return
+        val favs = Settings.favourites(app)
+        val lists = Settings.playlists(app)
+        Net.async({ LiveTv.matching(LiveTv.everything(favs, lists), query) }) { r -> r.getOrNull()?.let(done) }
+    }
+
+    /** A search result: OK opens it, Play/Pause plays it. */
+    fun searchRow(app: MainActivity, c: LiveTv.Channel): Row =
+        Row(c.name, c.group, opens = { channelMenu(app, c, c.group) }, play = { play(app, c) })
 
     /** A new name for a playlist; Live TV shows it straight away (and so do your other devices). */
     private fun rename(app: MainActivity, p: LiveTv.Playlist) {
