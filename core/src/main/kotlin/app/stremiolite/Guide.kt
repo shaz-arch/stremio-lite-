@@ -225,10 +225,11 @@ object Guide {
         if (links.size <= 1) return links
         val cc = c.tvgId.substringAfterLast('.', "").uppercase().takeIf { it.length == 2 } ?: return emptyList()
         val codes = if (cc == "UK" || cc == "GB") listOf("UK", "GB") else listOf(cc)
-        return links.filter { u ->
-            val file = u.substringAfterLast('/').substringBefore('?').uppercase()
-            codes.any { code -> Regex("""(^|[_\-.])$code(\d*|_[A-Z]+\d*)?\.""").containsMatchIn(file) }
-        }.take(2)
+        fun file(u: String) = u.substringAfterLast('/').substringBefore('?').uppercase()
+        // The country's own guide ("…_UK1.xml.gz") first; then one that merely mentions it ("…_RAKUTEN_FR1").
+        val exact = links.filter { u -> codes.any { code -> Regex("""(^|[_\-.])$code\d*\.""").containsMatchIn(file(u)) } }
+        val loose = links.filter { u -> codes.any { code -> Regex("""(^|[_\-.])$code(\d*|_[A-Z]+\d*)?\.""").containsMatchIn(file(u)) } }
+        return (exact.ifEmpty { loose }).take(1)
     }
 
     /** "13:00" in the device's time. */
