@@ -117,10 +117,20 @@ object Live {
     }
 
     private fun playlist(p: LiveTv.Playlist): Screen {
+        var groups: List<LiveTv.Group>? = null
+        var error: String? = null
         lateinit var screen: Screen
+        // One group: its channels are listed (and checked) right here.
+        val channels: () -> List<LiveTv.Channel>? = { groups?.singleOrNull()?.channels }
+        fun reload(done: () -> Unit) {
+            App.async({ LiveTv.loadPlaylist(p) }) { r ->
+                r.onSuccess { groups = it; error = null }.onFailure { error = Net.describe(it) }
+                done()
+            }
+        }
         val tail = listOf(
             Row("────────────────────"),
-            Row("Reload this playlist", action = { load(p) { screen.rows = it; App.refresh() } }),
+            Row("Reload this playlist", action = { LiveTv.forget(); reload { screen.onShow?.invoke() } }),
             Row("Remove this playlist", "►", opens = {
                 confirmScreen("Remove ${p.name}?", "Takes it off Live TV on all your devices.", "Yes, remove it") {
                     Prefs.playlists = Prefs.playlists.filter { it.url != p.url }
@@ -130,24 +140,83 @@ object Live {
                 }
             }),
         )
-        screen = Screen(p.name, listOf(Row("Loading the playlist…")) + tail)
+        screen = channelScreen(p.name, channels, tail) {
+            val g = groups
+            when {
+                g == null && error != null -> listOf(Row("Couldn't load it: $error"))
+                g == null -> listOf(Row("Loading the playlist…"))
+                g.isEmpty() -> listOf(Row("No channels in this playlist."))
+                g.size == 1 -> null
+                else -> g.map { grp -> Row(grp.name, "${grp.channels.size}  ►", opens = { channelScreen(grp.name, { grp.channels }) { null } }) }
+            }?.plus(tail)
+        }
         screen.key = "playlist:" + p.url
-        load(p) { rows -> screen.rows = rows + tail; App.refresh() }
+        val show = screen.onShow
+        screen.onShow = { if (groups == null && error == null) reload { if (App.inStack(screen)) show?.invoke() } else show?.invoke() }
         return screen
     }
 
-    private fun load(p: LiveTv.Playlist, done: (List<Row>) -> Unit) {
-        App.async({ LiveTv.loadPlaylist(p) }) { r ->
-            done(r.fold({ groups ->
-                when {
-                    groups.isEmpty() -> listOf(Row("No channels in this playlist."))
-                    groups.size == 1 -> channelRows(groups[0])
-                    else -> groups.map { g -> Row(g.name, "${g.channels.size}  ►", opens = { Screen(g.name, channelRows(g)) }) }
-                }
-            }, { e -> listOf(Row("Couldn't load it: ${Net.describe(e)}")) }))
+    /**
+     * A list of channels with their status, checked a few at a time while the list is open.
+     * Off-air ones say so while checking, then move to the end. [other] gives the screen's rows
+     * instead when it isn't a channel list (still loading, or a list of groups).
+     */
+    private fun channelScreen(
+        title: String,
+        channels: () -> List<LiveTv.Channel>?,
+        extra: List<Row> = emptyList(),
+        other: () -> List<Row>?,
+    ): Screen {
+        lateinit var screen: Screen
+        var pending = false
+        var active = 0
+        val queue = ArrayDeque<LiveTv.Channel>()
+        val busy = HashSet<LiveTv.Channel>()
+
+        fun build() {
+            pending = false
+            val list = channels()
+            val rows = other()
+            if (list == null || rows != null) { screen.rows = rows ?: emptyList(); App.refresh(); return }
+            val progress = LiveTv.progress(list)
+            val out = mutableListOf<Row>()
+            if (progress.isNotEmpty()) out += Row(progress)
+            val off = if (progress.isEmpty()) list.filter { LiveTv.known(it) == "" } else emptyList()
+            (list - off.toSet()).forEach { out += channelRow(it) }
+            if (off.isNotEmpty()) {
+                out += Row("──── Off air right now ────")
+                off.forEach { out += channelRow(it) }
+            }
+            if (list.isEmpty()) out += Row("No channels.")
+            screen.rows = out + extra
+            App.refresh()
         }
+
+        fun soon() { if (!pending) { pending = true; App.later(500) { build() } } }
+
+        fun next() {
+            if (!App.inStack(screen)) return
+            val c = queue.removeFirstOrNull() ?: return
+            if (LiveTv.known(c) != null) { next(); return }
+            active++; busy += c
+            App.async({ LiveTv.check(c, 5_000) }) { active--; busy -= c; soon(); next() }
+        }
+
+        screen = Screen(title, listOf(Row("Loading…")))
+        screen.onShow = {
+            build()
+            channels()?.let { list ->
+                queue.clear()
+                queue.addAll(list.filter { LiveTv.known(it) == null && it !in busy })
+                while (active < 4 && queue.isNotEmpty()) next()
+            }
+        }
+        return screen
     }
 
-    private fun channelRows(g: LiveTv.Group) =
-        g.channels.map { c -> Row(c.name, "", action = { Player.play(c.urls.first(), c.name, null, 0) { } }, play = { Player.play(c.urls.first(), c.name, null, 0) { } }) }
+    private fun channelRow(c: LiveTv.Channel): Row {
+        val status = when (LiveTv.known(c)) { null -> "checking…"; "" -> "off air"; else -> "live" }
+        val go = { Player.play(LiveTv.known(c)?.ifEmpty { null } ?: c.urls.first(), c.name, null, 0) { } }
+        return Row(c.name, status, action = go, play = go)
+    }
 }

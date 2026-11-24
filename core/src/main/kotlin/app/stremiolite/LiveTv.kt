@@ -57,14 +57,16 @@ object LiveTv {
     private val working = ConcurrentHashMap<String, Pair<Long, String>>()
     private const val KEEP_MS = 10 * 60_000L
 
+    private fun key(c: Channel) = c.name + "|" + c.urls.joinToString("|")
+
     /** The saved result for [c]: the working link, "" for off air, or null if not checked lately. */
-    fun known(c: Channel): String? = working[c.group + "/" + c.name]?.takeIf { System.currentTimeMillis() - it.first < KEEP_MS }?.second
+    fun known(c: Channel): String? = working[key(c)]?.takeIf { System.currentTimeMillis() - it.first < KEEP_MS }?.second
 
     /** Tries each link in turn and returns the first that answers with a playlist, or null. Blocking. */
-    fun check(c: Channel): String? {
+    fun check(c: Channel, timeoutMs: Int = 6_000): String? {
         known(c)?.let { return it.ifEmpty { null } }
-        val ok = c.urls.firstOrNull { alive(it) }
-        working[c.group + "/" + c.name] = System.currentTimeMillis() to (ok ?: "")
+        val ok = c.urls.firstOrNull { alive(it, timeoutMs) }
+        working[key(c)] = System.currentTimeMillis() to (ok ?: "")
         return ok
     }
 
@@ -155,5 +157,12 @@ object LiveTv {
         val text = Http.getBytes(p.url, 30_000).toString(Charsets.UTF_8)
         if (!text.contains("#EXTINF", ignoreCase = true)) throw IllegalStateException("That link isn't an M3U playlist")
         return parseM3u(text)
+    }
+
+    /** "Checked 40 of 120 · 35 live" while a list is being checked, or "" once it's done. */
+    fun progress(channels: List<Channel>): String {
+        val done = channels.mapNotNull { known(it) }
+        if (done.size >= channels.size) return ""
+        return "Checking ${done.size} of ${channels.size} · ${done.count { it.isNotEmpty() }} live"
     }
 }
