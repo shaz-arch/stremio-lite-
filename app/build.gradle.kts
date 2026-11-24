@@ -53,7 +53,10 @@ android {
     }
     lint {
         checkReleaseBuilds = false
-        abortOnError = false
+        // Only one check, but it fails the build: code that needs a newer Android than 5.1
+        // (minSdk) without a version check. Run ./gradlew :app:lintDebug
+        checkOnly += "NewApi"
+        abortOnError = true
     }
 }
 

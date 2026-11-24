@@ -1,0 +1,22 @@
+name: Android 5 check
+
+# On any branch other than main (main's build runs the same checks): fails if code uses
+# Java or Android that the 2016 Fire Stick (Android 5.1) doesn't have.
+on:
+  push:
+    branches-ignore: [main]
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - run: |
+          chmod +x gradlew
+          ./gradlew :core:animalsnifferMain :app:lintDebug --no-daemon
