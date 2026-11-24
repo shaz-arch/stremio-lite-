@@ -16,7 +16,18 @@ import java.util.concurrent.ConcurrentHashMap
 object LiveTv {
     const val LIST_URL = "https://raw.githubusercontent.com/shaz-arch/stremio-lite-/main/live/channels.json"
 
-    class Channel(val name: String, val group: String, val urls: List<String>, val note: String = "")
+    /** [tvgId] is the playlist's tvg-id (matches the guide); [guide] is the playlist's own TV guide link. */
+    class Channel(
+        val name: String,
+        val group: String,
+        val urls: List<String>,
+        val note: String = "",
+        val tvgId: String = "",
+        val guide: String = "",
+    ) {
+        /** The same channel listed under [from] (a favourite, a search result). */
+        fun from(from: String) = Channel(name, from, urls, note, tvgId, guide)
+    }
 
     class Group(val name: String, val channels: List<Channel>)
 
@@ -131,25 +142,35 @@ object LiveTv {
         val order = LinkedHashMap<String, MutableList<Channel>>()
         var name: String? = null
         var group: String? = null
+        var tvg = ""
+        val guide = guideLink(text)
         for (raw in text.lineSequence()) {
             val line = raw.trim()
             when {
                 line.startsWith("#EXTINF", ignoreCase = true) -> {
                     name = line.substringAfterLast(',', "").trim().ifEmpty { attr(line, "tvg-name") }
                     group = attr(line, "group-title")
+                    tvg = attr(line, "tvg-id")
                 }
                 line.startsWith("#EXTGRP:", ignoreCase = true) -> group = line.substringAfter(':').trim()
                 line.isEmpty() || line.startsWith("#") -> Unit
                 else -> {
                     val g = group?.ifBlank { null } ?: fallbackGroup
                     val n = name?.ifBlank { null } ?: line.substringAfterLast('/').take(40)
-                    order.getOrPut(g) { mutableListOf() } += Channel(n, g, listOf(line))
+                    order.getOrPut(g) { mutableListOf() } += Channel(n, g, listOf(line), "", tvg, guide)
                     name = null
                     group = null
+                    tvg = ""
                 }
             }
         }
         return order.map { (g, list) -> Group(g, list) }
+    }
+
+    /** The TV guide link in a playlist's #EXTM3U line (url-tvg or x-tvg-url; the first if several). */
+    fun guideLink(text: String): String {
+        val head = text.lineSequence().take(5).firstOrNull { it.trim().startsWith("#EXTM3U", ignoreCase = true) } ?: return ""
+        return attr(head, "url-tvg").ifEmpty { attr(head, "x-tvg-url") }.split(',').first().trim()
     }
 
     private fun attr(line: String, key: String): String =
@@ -170,8 +191,7 @@ object LiveTv {
         val bytes = Http.getBytes(p.url, 30_000)
         val text = bytes.toString(Charsets.UTF_8)
         if (!text.contains("#EXTINF", ignoreCase = true)) throw IllegalStateException("That link isn't an M3U playlist")
-        val head = text.lineSequence().firstOrNull { it.trim().startsWith("#EXTM3U", ignoreCase = true) } ?: ""
-        val guide = attr(head, "url-tvg").ifEmpty { attr(head, "x-tvg-url") }
+        val guide = guideLink(text)
         return Loaded(System.currentTimeMillis(), parseM3u(text), bytes.size, guide).also { loaded[p.url] = it }
     }
 
@@ -223,12 +243,16 @@ object LiveTv {
         return (0 until a.length()).mapNotNull { i ->
             val o = a.optJSONObject(i) ?: return@mapNotNull null
             val urls = o.optJSONArray("urls")?.let { u -> (0 until u.length()).map { u.optString(it) }.filter { it.isNotBlank() } } ?: emptyList()
-            if (urls.isEmpty()) null else Channel(o.optString("name"), o.optString("from"), urls, o.optString("note"))
+            if (urls.isEmpty()) null else Channel(o.optString("name"), o.optString("from"), urls, o.optString("note"), o.optString("tvg"), o.optString("guide"))
         }
     }
 
     fun favouritesJson(list: List<Channel>): String = JSONArray(list.map { c ->
-        JSONObject().put("name", c.name).put("from", c.group).put("urls", JSONArray(c.urls)).also { if (c.note.isNotEmpty()) it.put("note", c.note) }
+        JSONObject().put("name", c.name).put("from", c.group).put("urls", JSONArray(c.urls)).also {
+            if (c.note.isNotEmpty()) it.put("note", c.note)
+            if (c.tvgId.isNotEmpty()) it.put("tvg", c.tvgId)
+            if (c.guide.isNotEmpty()) it.put("guide", c.guide)
+        }
     }).toString()
 
     /** The same channel (same name and first link), wherever it's listed. */
@@ -238,7 +262,7 @@ object LiveTv {
 
     /** [favs] with [c] added (at the end) or taken off. [from] names the list it came from. */
     fun toggle(favs: List<Channel>, c: Channel, from: String): List<Channel> =
-        if (isFavourite(favs, c)) favs.filterNot { same(it, c) } else favs + Channel(c.name, from, c.urls, c.note)
+        if (isFavourite(favs, c)) favs.filterNot { same(it, c) } else favs + c.from(from)
 
     // ---- search --------------------------------------------------------------------------------
 
@@ -259,10 +283,10 @@ object LiveTv {
      */
     fun everything(favs: List<Channel>, playlists: List<Playlist>): List<Channel> {
         val out = ArrayList<Channel>(favs)
-        runCatching { load() }.getOrNull()?.forEach { g -> g.channels.forEach { out += Channel(it.name, "Live TV · " + g.name, it.urls, it.note) } }
+        runCatching { load() }.getOrNull()?.forEach { g -> g.channels.forEach { out += it.from("Live TV · " + g.name) } }
         for (p in playlists) {
             val groups = runCatching { loadPlaylist(p, fresh = false) }.getOrNull() ?: continue
-            groups.forEach { g -> g.channels.forEach { out += Channel(it.name, p.name + " · " + g.name, it.urls) } }
+            groups.forEach { g -> g.channels.forEach { out += it.from(p.name + " · " + g.name) } }
         }
         return out
     }

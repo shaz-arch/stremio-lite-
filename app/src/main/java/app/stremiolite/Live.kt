@@ -11,6 +11,7 @@ object Live {
         lateinit var screen: Screen
         var groups: List<LiveTv.Group>? = null
         var error: String? = null
+        var guides: () -> Unit = {}
 
         fun build() {
             val rows = mutableListOf<Row>()
@@ -31,11 +32,7 @@ object Live {
                 off += g.channels.filter { LiveTv.known(it) == "" }
                 if (shown.isEmpty()) return@forEach
                 rows += Row("──── ${g.name} ────")
-                shown.forEach { c ->
-                    val star = if (LiveTv.isFavourite(favs, c)) "★ " else ""
-                    val state = star + when (LiveTv.known(c)) { null -> "checking…"; else -> listOf(c.note, "live").filter { it.isNotEmpty() }.joinToString(" · ") }
-                    rows += Row(c.name, state, opens = { channelMenu(app, c, "Live TV · " + g.name) }, play = { play(app, c) })
-                }
+                shown.forEach { c -> rows += channelRow(app, c, "Live TV · " + g.name, favs) }
             }
             if (off.isNotEmpty()) {
                 rows += Row("Off air right now", "${off.size}  ►", opens = { offAir(app, off) })
@@ -43,6 +40,9 @@ object Live {
             rows += Row("──── Your playlists ────")
             Settings.playlists(app).forEach { p -> rows += Row(p.name, "►", opens = { playlist(app, p) }) }
             rows += Row("Add a playlist (M3U link)", "►", action = { addPlaylist(app) { build() } })
+            rows += Row("──── TV guide ────")
+            val yours = Settings.liveGuide(app)
+            rows += Row("Your TV guide link (XMLTV)", if (yours.isEmpty()) "none  ►" else guideState(yours) + "  ►", action = { setGuide(app) { build(); guides() } })
             rows += Row("──── About ────")
             rows += Row("About these channels", "►", opens = { about() })
             screen.rows = rows
@@ -57,9 +57,15 @@ object Live {
             }
         }
 
+        guides = {
+            val urls = listOf(Settings.liveGuide(app)) + Settings.favourites(app).map { it.guide }
+            loadGuides(app, urls) { if (app.inStack(screen)) build() }
+        }
+
         screen = Screen("Live TV", listOf(Row("Loading channels…")))
         screen.key = "live"
         screen.onShow = {
+            guides()
             if (groups == null) {
                 Net.async({ LiveTv.load() }) { r ->
                     r.onSuccess { groups = it; build(); checkAll() }.onFailure { error = Net.describe(it); build() }
@@ -228,6 +234,7 @@ object Live {
         screen = Screen(title, listOf(Row("Loading…")))
         screen.onShow = {
             build()
+            channels()?.let { list -> loadGuides(app, list.map { it.guide }.distinct() + Settings.liveGuide(app)) { if (app.inStack(screen)) soon() } }
             channels()?.let { list ->
                 queue.clear()
                 queue.addAll(list.filter { LiveTv.known(it) == null && it !in busy })
@@ -242,7 +249,74 @@ object Live {
     /** OK opens the channel (watch, favourite); Play/Pause plays it straight away. */
     private fun channelRow(app: MainActivity, c: LiveTv.Channel, from: String, favs: List<LiveTv.Channel> = Settings.favourites(app)): Row {
         val fav = if (LiveTv.isFavourite(favs, c)) "★ " else ""
-        return Row(c.name, fav + status(c), opens = { channelMenu(app, c, from) }, play = { play(app, c) })
+        val on = Guide.nowTitle(c, guidesFor(app, c)).let { if (it.length > 26) it.take(25).trimEnd() + "…" else it }
+        return Row(c.name, fav + listOf(on, status(c)).filter { it.isNotEmpty() }.joinToString(" · "), opens = { channelMenu(app, c, from) }, play = { play(app, c) })
+    }
+
+    // ---- TV guide ------------------------------------------------------------------------------
+
+    private fun guidesFor(app: MainActivity, c: LiveTv.Channel) = Guide.guidesFor(c, Settings.liveGuide(app))
+
+    /** Reads any of [urls] that are due, then calls [done] (once per guide read). */
+    private fun loadGuides(app: MainActivity, urls: List<String>, done: () -> Unit) {
+        Guide.due(urls).forEach { u -> Net.async({ Guide.load(u) }) { done() } }
+    }
+
+    private fun guideState(url: String): String = when {
+        Guide.isLoading(url) -> "loading…"
+        Guide.get(url) != null -> "${Guide.get(url)!!.progs.size} channels"
+        Guide.error(url) != null -> "couldn't read it"
+        else -> LiveTv.nameFor(url)
+    }
+
+    /** Why a channel shows no programmes. */
+    private fun noGuide(app: MainActivity, c: LiveTv.Channel): String {
+        val urls = guidesFor(app, c)
+        return when {
+            urls.isEmpty() -> "No guide yet: add a TV guide link in Live TV"
+            urls.any { Guide.isLoading(it) } -> "Loading the guide…"
+            urls.all { Guide.error(it) != null } -> "Couldn't read the guide: ${Guide.error(urls.first())}"
+            else -> "Not in the guide"
+        }
+    }
+
+    private fun wrap(text: String, width: Int, lines: Int): List<String> {
+        val out = mutableListOf<String>()
+        var line = ""
+        for (w in text.split(' ')) {
+            if (line.isEmpty()) line = w
+            else if (line.length + 1 + w.length <= width) line += " $w"
+            else { out += line; line = w; if (out.size == lines) break }
+        }
+        if (out.size < lines && line.isNotEmpty()) out += line
+        if (out.size == lines && out.joinToString(" ").length < text.length) out[lines - 1] = out[lines - 1].take(width - 1) + "…"
+        return out
+    }
+
+    /** Now, next and later today for a channel, as rows. */
+    private fun guideRows(app: MainActivity, c: LiveTv.Channel): List<Row> {
+        val progs = Guide.lookup(c, guidesFor(app, c))
+        if (progs.isEmpty()) return listOf(Row(noGuide(app, c)))
+        val now = System.currentTimeMillis()
+        val width = if (narrow) 34 else 50
+        val rows = mutableListOf<Row>()
+        val cur = progs.first().takeIf { it.start <= now }
+        val rest = if (cur != null) progs.drop(1) else progs
+        if (cur != null) {
+            val left = ((cur.stop - now) / 60_000).coerceAtLeast(1)
+            rows += Row("Now   " + cur.title, "${Guide.clock(cur.start)}–${Guide.clock(cur.stop)}  ($left min left)")
+            wrap(cur.desc, width, 3).forEach { rows += Row("      $it") }
+        }
+        rest.firstOrNull()?.let { n ->
+            rows += Row("Next  " + n.title, Guide.clock(n.start))
+            wrap(n.desc, width, 2).forEach { rows += Row("      $it") }
+        }
+        val later = rest.drop(1).take(10)
+        if (later.isNotEmpty()) {
+            rows += Row("──── Later ────")
+            later.forEach { rows += Row(it.title, Guide.clock(it.start)) }
+        }
+        return rows
     }
 
     /** One channel: watch it, or add it to (or take it off) your favourites. */
@@ -258,13 +332,15 @@ object Live {
                     build()
                 }),
                 Row(""),
+            ) + guideRows(app, c) + listOfNotNull(
+                Row(""),
                 Row(info("From", from)),
                 c.note.takeIf { it.isNotEmpty() }?.let { Row(info("Note", it)) },
             )
             app.refresh(s)
         }
         s = Screen(c.name, emptyList())
-        s.onShow = { build() }
+        s.onShow = { build(); loadGuides(app, guidesFor(app, c)) { if (app.inStack(s)) build() } }
         return s
     }
 
@@ -329,5 +405,29 @@ object Live {
             }
         }
         return s
+    }
+
+    /** Your TV guide link: used for the broadcasters' channels and any playlist without its own guide. */
+    private fun setGuide(app: MainActivity, done: () -> Unit) {
+        val input = android.widget.EditText(app).apply {
+            hint = "https://…/guide.xml.gz"
+            setText(Settings.liveGuide(app))
+            setSingleLine()
+        }
+        android.app.AlertDialog.Builder(app)
+            .setTitle("TV guide link (XMLTV)")
+            .setMessage("Paste an XMLTV guide link (.xml or .xml.gz) you're entitled to use. Playlists with their own guide use theirs first. Leave it empty to remove it.")
+            .setView(input)
+            .setPositiveButton("Save") { _, _ ->
+                val text = input.text.toString().trim()
+                val link = if (text.isEmpty()) "" else LiveTv.cleanLink(text)
+                if (link == null) { app.toast("That isn't a link"); return@setPositiveButton }
+                Guide.forget(Settings.liveGuide(app))
+                Settings.setLiveGuide(app, link)
+                app.toast(if (link.isEmpty()) "TV guide link removed" else "Reading the guide…")
+                done()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 }

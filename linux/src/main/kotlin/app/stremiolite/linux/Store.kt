@@ -121,6 +121,11 @@ object Prefs {
         get() = app.stremiolite.LiveTv.favourites(data().optString("liveFavs", ""))
         set(v) { data().put("liveFavs", app.stremiolite.LiveTv.favouritesJson(v)); save() }
 
+    /** Your TV guide link (XMLTV) for Live TV, or "" (synced, never shared). */
+    var liveGuide: String
+        get() = data().optString("liveGuide", "")
+        set(v) { data().put("liveGuide", v); save() }
+
     var hiddenRows: Set<String>
         get() = data().optJSONArray("hiddenRows")?.let { a -> (0 until a.length()).map { a.optString(it) }.toSet() } ?: emptySet()
         set(v) { data().put("hiddenRows", JSONArray(v.toList())); save() }
@@ -153,9 +158,9 @@ object Prefs {
     private const val SYNC_ID = "stremiolite:settings"
 
     /** Shared settings this build knows; one this computer has never had is always taken from the account. */
-    private val SHARED = listOf("theme", "subLang", "autoNext", "clock", "hideWatched", "layout", "autoFollow", "liveTv", "playlists", "liveFavs")
+    private val SHARED = listOf("theme", "subLang", "autoNext", "clock", "hideWatched", "layout", "autoFollow", "liveTv", "playlists", "liveFavs", "liveGuide")
     /** Synced with your own devices, but never sent to someone else with "Share my setup". */
-    private val NOT_SHARED = setOf("playlists", "liveFavs")
+    private val NOT_SHARED = setOf("playlists", "liveFavs", "liveGuide")
     /** The look: shared by default, or kept to this computer ("lookLocal", which itself never syncs). */
     private val LOOK = setOf("theme", "clock")
 

@@ -81,6 +81,7 @@ object Settings {
         // Your playlists follow the account, but never go out with "Share my setup".
         p.getString("playlists", null)?.let { o.put("playlists", it) }
         p.getString("liveFavs", null)?.let { o.put("liveFavs", it) }
+        p.getString("liveGuide", null)?.let { o.put("liveGuide", it) }
         o.put("updated", now)
         p.edit().putLong("syncedAt", now).apply()
         item.put("name", o.toString()).put("removed", true).put("temp", false).put("_mtime", Sync.iso(now))
@@ -109,6 +110,7 @@ object Settings {
         if (o.has("layout")) e.putString("layout", o.optString("layout"))
         if (o.has("playlists")) e.putString("playlists", o.optString("playlists"))
         if (o.has("liveFavs")) e.putString("liveFavs", o.optString("liveFavs"))
+        if (o.has("liveGuide")) e.putString("liveGuide", o.optString("liveGuide"))
         e.putStringSet("hiddenRows", hidden)
         e.putLong("syncedAt", updated).apply()
         if (hidden != remoteHidden) syncOut(c)
@@ -134,6 +136,14 @@ object Settings {
 
     fun setFavourites(c: Context, list: List<LiveTv.Channel>) {
         prefs(c).edit().putString("liveFavs", LiveTv.favouritesJson(list)).apply()
+        syncOut(c)
+    }
+
+    /** Your TV guide link (XMLTV) for Live TV, or "". */
+    fun liveGuide(c: Context): String = prefs(c).getString("liveGuide", "") ?: ""
+
+    fun setLiveGuide(c: Context, url: String) {
+        prefs(c).edit().putString("liveGuide", url).apply()
         syncOut(c)
     }
 
