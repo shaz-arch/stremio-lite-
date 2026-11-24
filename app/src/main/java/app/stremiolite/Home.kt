@@ -7,8 +7,6 @@ package app.stremiolite
 object Home {
     private var addons: List<Addon>? = null
 
-    /** The add-ons as last loaded (empty until Home has loaded them). */
-    fun loadedAddons(): List<Addon> = addons ?: emptyList()
     private var loading = false
     private var loadError: String? = null
 
@@ -172,7 +170,7 @@ object Home {
      */
     private fun homeRows(app: MainActivity, list: List<Addon>): List<Row> {
         val entries = Index.entries(app, list)
-        val front = entries.filter { it.folder == null }
+        val front = Index.front(app, entries)
         // The add-on with the most rows (AIOMetadata) gets no name tag; others are labelled.
         val main = entries.groupingBy { it.addon }.eachCount().maxByOrNull { it.value }?.key
         val rows = front.mapTo(mutableListOf()) { e ->

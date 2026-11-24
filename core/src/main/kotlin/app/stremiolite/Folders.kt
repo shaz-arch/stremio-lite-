@@ -47,7 +47,10 @@ object Folders {
     fun rowKey(a: Addon, c: Addon.Catalog) = "${a.name}|${c.type}|${c.id}"
 
     /** Every openable, not hidden row, with its folder. */
-    fun entries(list: List<Addon>, hidden: Set<String>): List<Entry> {
+    fun entries(list: List<Addon>, hidden: Set<String>, layout: Layout.Data? = null): List<Entry> =
+        auto(list, hidden).let { if (layout == null) it else Layout.apply(it, layout) }
+
+    private fun auto(list: List<Addon>, hidden: Set<String>): List<Entry> {
         val pairs = rowAddons(list).filter { !it.isLocal }.flatMap { a ->
             a.catalogs.filter { openable(it) && rowKey(a, it) !in hidden }.map { a to it }
         }

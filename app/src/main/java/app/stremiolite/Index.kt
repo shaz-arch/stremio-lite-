@@ -6,34 +6,30 @@ package app.stremiolite
  * A row named "Folder: Name" goes into that folder. Any other row that is not on the
  * add-on's home (discover-only) is sorted by keywords in its name, or into "More".
  * Rows on the home with no folder prefix stay on the Home front page.
+ * Your own arrangement (Settings › Arrange your Index) is applied on top.
  */
 object Index {
     fun openable(c: Addon.Catalog) = Folders.openable(c)
 
     /** Every openable, not hidden catalogue, with its folder (null = front page). Rules shared with Linux. */
-    fun entries(app: MainActivity, list: List<Addon>): List<Folders.Entry> = Folders.entries(list, Settings.hiddenRows(app))
+    fun entries(app: MainActivity, list: List<Addon>): List<Folders.Entry> =
+        Folders.entries(list, Settings.hiddenRows(app), Settings.layout(app))
 
-    /** One row per top-level folder ("Streaming > Movies" belongs to "Streaming"), in first-seen order. */
-    fun folderRows(app: MainActivity, entries: List<Folders.Entry>): List<Row> = groupRows(app, entries.filter { it.folder != null }, 0)
+    /** The front page rows, in your order. */
+    fun front(app: MainActivity, entries: List<Folders.Entry>) = Layout.front(entries, Settings.layout(app))
 
-    private fun parts(e: Folders.Entry) = e.folder!!.split(" > ").map { it.trim() }.filter { it.isNotEmpty() }
+    /** One row per top-level folder, in your order. */
+    fun folderRows(app: MainActivity, entries: List<Folders.Entry>): List<Row> =
+        Layout.tree(entries, Settings.layout(app)).folders.map { n -> Row(n.name, "${n.count}  ►", opens = { folder(app, n) }) }
 
-    /** Rows for the folders at [depth], with "More" last. */
-    private fun groupRows(app: MainActivity, list: List<Folders.Entry>, depth: Int): List<Row> {
-        val groups = LinkedHashMap<String, MutableList<Folders.Entry>>()
-        list.forEach { e -> parts(e).getOrNull(depth)?.let { groups.getOrPut(it) { mutableListOf() } += e } }
-        groups.remove("More")?.let { groups["More"] = it }
-        return groups.map { (name, l) -> Row(name, "${l.size}  ►", opens = { folder(app, name, l, depth + 1) }) }
-    }
-
-    private fun folder(app: MainActivity, name: String, list: List<Folders.Entry>, depth: Int): Screen {
-        val main = list.groupingBy { it.addon }.eachCount().maxByOrNull { it.value }?.key
-        val subs = groupRows(app, list, depth)
-        val direct = list.filter { parts(it).size <= depth }.map { e ->
+    private fun folder(app: MainActivity, n: Layout.Node): Screen {
+        val main = n.rows.groupingBy { it.addon }.eachCount().maxByOrNull { it.value }?.key
+        val subs = n.folders.map { f -> Row(f.name, "${f.count}  ►", opens = { folder(app, f) }) }
+        val direct = n.rows.map { e ->
             val tag = if (e.addon === main) "" else e.addon.name.substringBefore('|').trim().take(18) + " · "
             Row(e.name, tag + Catalogs.typeLabel(e.catalog.type) + "  ►", opens = { Catalogs.screen(app, e.addon, e.catalog, e.name) })
         }
-        val title = if (depth > 1) list.first().let { parts(it).take(depth).joinToString(" · ") } else name
+        val title = Layout.parts(n.path).joinToString(" · ")
         return Screen(title, subs + direct, tag = "Index").also { it.key = "index:$title" }
     }
 }

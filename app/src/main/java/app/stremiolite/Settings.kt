@@ -52,6 +52,7 @@ object Settings {
         INT_KEYS.forEach { k -> if (p.contains(k) && shares(c, k)) o.put(k, p.getInt(k, 0)) }
         BOOL_KEYS.forEach { k -> if (p.contains(k)) o.put(k, p.getBoolean(k, false)) }
         o.put("hiddenRows", JSONArray(hiddenRows(c).toList()))
+        p.getString("layout", null)?.let { o.put("layout", it) }
         return o
     }
 
@@ -62,6 +63,7 @@ object Settings {
         BOOL_KEYS.forEach { k -> if (o.has(k)) e.putBoolean(k, o.optBoolean(k)) }
         val theirs = o.optJSONArray("hiddenRows")?.let { a -> (0 until a.length()).map { a.optString(it) }.toSet() } ?: emptySet()
         e.putStringSet("hiddenRows", hiddenRows(c) + theirs + alsoHide)
+        if (o.has("layout")) e.putString("layout", o.optString("layout"))
         e.apply()
         syncOut(c)
     }
@@ -101,6 +103,7 @@ object Settings {
         val e = p.edit()
         INT_KEYS.forEach { k -> if (o.has(k) && shares(c, k)) e.putInt(k, o.optInt(k)) }
         BOOL_KEYS.forEach { k -> if (o.has(k)) e.putBoolean(k, o.optBoolean(k)) }
+        if (o.has("layout")) e.putString("layout", o.optString("layout"))
         e.putStringSet("hiddenRows", hidden)
         e.putLong("syncedAt", updated).apply()
         if (hidden != remoteHidden) syncOut(c)
@@ -112,9 +115,17 @@ object Settings {
 
     fun rowKey(a: Addon, c: Addon.Catalog) = Folders.rowKey(a, c)
 
+    /** Your arrangement of the Index (see Layout), shared with the other devices. */
+    fun layout(c: Context): Layout.Data = Layout.parse(prefs(c).getString("layout", null))
+
+    fun saveLayout(c: Context, d: Layout.Data) {
+        prefs(c).edit().putString("layout", Layout.json(d)).apply()
+        syncOut(c)
+    }
+
     fun hiddenRows(c: Context): Set<String> = prefs(c).getStringSet("hiddenRows", emptySet()) ?: emptySet()
 
-    private fun setHidden(c: Context, key: String, hide: Boolean) {
+    fun setHidden(c: Context, key: String, hide: Boolean) {
         val now = hiddenRows(c).toMutableSet()
         if (hide) now += key else now -= key
         prefs(c).edit().putStringSet("hiddenRows", now).apply()
@@ -217,6 +228,7 @@ object Settings {
                 Row("──── Playback ────"), playerRow, langRow, nextRow,
                 Row("──── Look ────"),
                 lookRow, themeRow, sizeRow, clockRow, watchedRow,
+                Row("Arrange your Index", "►", opens = { Arrange.screen(app) }),
                 Row("Hide rows", "►", opens = { rowsScreen(app) }),
                 Row("──── Setup ────"),
                 Row("Your add-ons", (Home.addonCount()?.let { "$it  " } ?: "") + "►", opens = { Home.addonsScreen(app) }),

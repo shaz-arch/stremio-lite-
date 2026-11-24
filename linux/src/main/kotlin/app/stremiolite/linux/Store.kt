@@ -98,6 +98,11 @@ object Prefs {
     var syncedAt: Long
         get() = data().optLong("syncedAt", 0)
         set(v) { data().put("syncedAt", v); save() }
+    /** Your arrangement of the Index (see Layout), shared with the other devices. */
+    var layout: String
+        get() = data().optString("layout", "")
+        set(v) { data().put("layout", v); save() }
+
     var hiddenRows: Set<String>
         get() = data().optJSONArray("hiddenRows")?.let { a -> (0 until a.length()).map { a.optString(it) }.toSet() } ?: emptySet()
         set(v) { data().put("hiddenRows", JSONArray(v.toList())); save() }
@@ -130,7 +135,7 @@ object Prefs {
     private const val SYNC_ID = "stremiolite:settings"
 
     /** Shared settings this build knows; one this computer has never had is always taken from the account. */
-    private val SHARED = listOf("theme", "subLang", "autoNext", "clock", "hideWatched")
+    private val SHARED = listOf("theme", "subLang", "autoNext", "clock", "hideWatched", "layout")
     /** The look: shared by default, or kept to this computer ("lookLocal", which itself never syncs). */
     private val LOOK = setOf("theme", "clock")
 

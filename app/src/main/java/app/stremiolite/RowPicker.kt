@@ -13,7 +13,7 @@ object RowPicker {
     private fun prefs(app: MainActivity) = Profiles.prefsFor(app, "aio")
 
     fun entry(app: MainActivity): Screen {
-        val list = Home.loadedAddons().filter { AioRows.isAio(it) }
+        val list = Home.allAddons().filter { AioRows.isAio(it) }
         if (list.isEmpty()) return Screen("Choose your rows", listOf(
             Row("No AIOMetadata add-on found on this account."),
             Row("If Home is still loading, go back and try again."),

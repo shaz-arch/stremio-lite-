@@ -2,6 +2,7 @@ package app.stremiolite.linux
 
 import app.stremiolite.Addon
 import app.stremiolite.Folders
+import app.stremiolite.Layout
 import app.stremiolite.DetailExtras
 import app.stremiolite.RowSource
 import app.stremiolite.Full
@@ -195,9 +196,9 @@ object Home {
             rows += Row("Waiting for streams", Waiting.summary(), opens = { Waiting.screen() })
             if (list != null) {
                 rows += Row("──── Browse ────")
-                val entries = Folders.entries(list, Prefs.hiddenRows)
+                val entries = Index.entries(list)
                 val main = entries.groupingBy { it.addon }.eachCount().maxByOrNull { it.value }?.key
-                entries.filter { it.folder == null }.forEach { e ->
+                Index.front(entries).forEach { e ->
                     val tag = if (e.addon === main) "" else e.addon.name.substringBefore('|').trim().take(18) + " · "
                     rows += Row(e.name, tag + MetaParse.typeLabel(e.catalog.type) + "  ►", opens = { Catalogs.screen(e.addon, e.catalog) },
                         play = null)
@@ -381,25 +382,21 @@ object Home {
 }
 
 object Index {
-    private fun parts(e: Folders.Entry) = e.folder!!.split(" > ").map { it.trim() }.filter { it.isNotEmpty() }
+    fun entries(list: List<Addon>): List<Folders.Entry> = Folders.entries(list, Prefs.hiddenRows, Layout.parse(Prefs.layout))
 
-    fun folderRows(entries: List<Folders.Entry>): List<Row> = groupRows(entries.filter { it.folder != null }, 0)
+    fun front(entries: List<Folders.Entry>) = Layout.front(entries, Layout.parse(Prefs.layout))
 
-    private fun groupRows(list: List<Folders.Entry>, depth: Int): List<Row> {
-        val groups = LinkedHashMap<String, MutableList<Folders.Entry>>()
-        list.forEach { e -> parts(e).getOrNull(depth)?.let { groups.getOrPut(it) { mutableListOf() } += e } }
-        groups.remove("More")?.let { groups["More"] = it }
-        return groups.map { (name, l) -> Row(name, "${l.size}  ►", opens = { folder(name, l, depth + 1) }) }
-    }
+    fun folderRows(entries: List<Folders.Entry>): List<Row> =
+        Layout.tree(entries, Layout.parse(Prefs.layout)).folders.map { n -> Row(n.name, "${n.count}  ►", opens = { folder(n) }) }
 
-    private fun folder(name: String, list: List<Folders.Entry>, depth: Int): Screen {
-        val main = list.groupingBy { it.addon }.eachCount().maxByOrNull { it.value }?.key
-        val subs = groupRows(list, depth)
-        val direct = list.filter { parts(it).size <= depth }.map { e ->
+    private fun folder(n: Layout.Node): Screen {
+        val main = n.rows.groupingBy { it.addon }.eachCount().maxByOrNull { it.value }?.key
+        val subs = n.folders.map { f -> Row(f.name, "${f.count}  ►", opens = { folder(f) }) }
+        val direct = n.rows.map { e ->
             val tag = if (e.addon === main) "" else e.addon.name.substringBefore('|').trim().take(18) + " · "
             Row(e.name, tag + MetaParse.typeLabel(e.catalog.type) + "  ►", opens = { Catalogs.screen(e.addon, e.catalog, e.name) })
         }
-        val title = if (depth > 1) parts(list.first()).take(depth).joinToString(" · ") else name
+        val title = Layout.parts(n.path).joinToString(" · ")
         return Screen(title, subs + direct, tag = "Index").also { it.key = "index:$title" }
     }
 }
@@ -862,6 +859,7 @@ object Settings {
                 Row("Watched films in lists", "◄ ${if (Prefs.hideWatched) "Hide them" else "Show with ✓"} ►", action = {
                     Prefs.hideWatched = !Prefs.hideWatched; Prefs.syncOut(); build()
                 }),
+                Row("Arrange your Index", "►", opens = { Arrange.screen() }),
                 Row("Hide rows", "►", opens = { rowsScreen() }),
                 Row("──── Setup ────"),
                 Row("Your add-ons", (Home.all().size.takeIf { it > 0 }?.let { "$it  " } ?: "") + "►", opens = { Addons.screen() }),
