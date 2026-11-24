@@ -138,6 +138,8 @@ object News {
         }
         t = t.replace("&nbsp;", " ").replace("&quot;", "\"").replace("&apos;", "'").replace("&rsquo;", "’").replace("&lsquo;", "‘")
             .replace("&ldquo;", "“").replace("&rdquo;", "”").replace("&hellip;", "…").replace("&ndash;", "–").replace("&mdash;", "—")
+            .replace("&pound;", "£").replace("&euro;", "€").replace("&copy;", "©").replace("&reg;", "®").replace("&trade;", "™")
+            .replace("&eacute;", "é").replace("&egrave;", "è").replace("&aacute;", "á").replace("&ntilde;", "ñ").replace("&ouml;", "ö").replace("&uuml;", "ü")
             .replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
         return t
     }
