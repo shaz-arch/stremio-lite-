@@ -29,7 +29,7 @@ object StreamsSetup {
                 else askPassword(app) { pw -> create(app, torbox, pw, replace) }
             }),
         )
-        s = Screen("Your streams", emptyList())
+        s = Screen("Your streams (AIOStreams)", emptyList())
         s.rows = build()
         s.onShow = { s.rows = build(); app.refresh(s) }
         return s

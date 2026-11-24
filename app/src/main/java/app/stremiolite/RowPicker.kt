@@ -141,36 +141,18 @@ object RowPicker {
         return screen
     }
 
-    /** The rows that are on, in order; choose one to move it. */
+    /** The rows that are on, in order: pick one up and drop it where it goes. */
     private fun order(app: MainActivity, l: AioRows.Loaded): Screen {
-        lateinit var s: Screen
-        fun build() = AioRows.items(l).filter { it.state != AioRows.State.OFF }.mapIndexed { i, item ->
-            Row("${(i + 1).toString().padStart(3)}  ${mark(item.state)}${item.name}", item.typeLabel, opens = { mover(app, l, item) })
-        }
-        s = Screen("Row order", build(), tag = "⌂ = home screen")
-        s.onShow = { s.rows = build(); app.refresh(s) }
-        return s
-    }
-
-    private fun mover(app: MainActivity, l: AioRows.Loaded, item: AioRows.Item): Screen {
-        lateinit var s: Screen
-        val where = Row("")
-        fun place() {
-            val on = AioRows.items(l).filter { it.state != AioRows.State.OFF }
-            where.label = "Position ${on.indexOfFirst { it.obj === item.obj } + 1} of ${on.size}"
-            app.refresh(s)
-        }
-        s = Screen(item.name, listOf(
-            where,
-            Row("Move up", action = { if (!AioRows.move(l, item, -1)) app.toast("Already at the top"); place() }),
-            Row("Move down", action = { if (!AioRows.move(l, item, +1)) app.toast("Already at the bottom"); place() }),
-            Row("Move to the top", action = { AioRows.moveToEnd(l, item, top = true); place() }),
-            Row("Move to the bottom", action = { AioRows.moveToEnd(l, item, top = false); place() }),
-            Row("Done", action = { app.back() }),
-        ))
-        s.position = 1
-        s.onShow = { place() }
-        return s
+        fun on() = AioRows.items(l).filter { it.state != AioRows.State.OFF }.toMutableList()
+        val r = Reorder(app,
+            head = { listOf(Row("⌂ = on Stremio's home screen. Save on the last screen.")) },
+            items = on(),
+            label = { mark(it.state) + it.name },
+            detail = { it.typeLabel },
+            open = { null },
+            commit = { list -> AioRows.setOrder(l, list) },
+        )
+        return r.build("Row order")
     }
 
     private fun order(l: AioRows.Loaded) = AioRows.items(l).filter { it.state != AioRows.State.OFF }.joinToString(",") { it.id }

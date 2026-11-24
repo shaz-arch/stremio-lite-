@@ -859,18 +859,20 @@ object Settings {
                 Row("Watched films in lists", "◄ ${if (Prefs.hideWatched) "Hide them" else "Show with ✓"} ►", action = {
                     Prefs.hideWatched = !Prefs.hideWatched; Prefs.syncOut(); build()
                 }),
+                Row("──── Index ────"),
                 Row("Arrange your Index", "►", opens = { Arrange.screen() }),
                 Row("Hide rows", "►", opens = { rowsScreen() }),
-                Row("──── Setup ────"),
+                Row("──── Rows & streams ────"),
+                Row("Your rows (AIOMetadata)", "►", opens = { RowsSetup.screen() }),
+                Row("Your streams (AIOStreams)", "►", opens = { StreamsSetup.screen() }),
                 Row("Your add-ons", (Home.all().size.takeIf { it > 0 }?.let { "$it  " } ?: "") + "►", opens = { Addons.screen() }),
-                Row("Your rows: categories and setup", "►", opens = { RowsSetup.screen() }),
-                Row("Your streams: set up AIOStreams", "►", opens = { StreamsSetup.screen() }),
+                Row("──── Share ────"),
                 Row("Export my setup to another account", "►", opens = { Share.screen() }),
                 Row("Import a setup from another account", "►", opens = { Share.importScreen() }),
-                Row("Device check", "►", opens = { DeviceCheck.screen() }),
                 Row("──── About ────"),
                 Row(info("App version", "build ${Updates.current}")),
                 Row("Check for updates", action = { Updates.checkNow() }),
+                Row("Device check", "►", opens = { DeviceCheck.screen() }),
                 Row("About Stremonino", "►", opens = { Home.about() }),
             )
             App.refresh()

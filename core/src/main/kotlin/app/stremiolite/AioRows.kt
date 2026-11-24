@@ -108,6 +108,15 @@ object AioRows {
         return true
     }
 
+    /** Puts the rows that are on in [order]; rows that are off, and merged parts, keep their places. */
+    fun setOrder(l: Loaded, order: List<Item>) {
+        val arr = l.catalogs
+        val list = (0 until arr.length()).map { arr.getJSONObject(it) }
+        val queue = ArrayDeque(order.map { it.obj })
+        val inOrder = order.map { it.obj }.toSet()
+        replace(l, list.map { o -> if (o in inOrder) queue.removeFirst() else o })
+    }
+
     /** Puts a row first (or last) among the rows. */
     fun moveToEnd(l: Loaded, item: Item, top: Boolean) {
         val arr = l.catalogs

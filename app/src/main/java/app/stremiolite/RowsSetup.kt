@@ -18,13 +18,12 @@ object RowsSetup {
             })
             rows += Row("Switch single rows on or off", "►", opens = { RowPicker.entry(app) })
         }
-        rows += Row("Arrange your Index (folders, names, order)", "►", opens = { Arrange.screen(app) })
         rows += Row("────────────────────")
         rows += Row(if (aio.isEmpty()) "Create your rows" else "Start again from the full catalogue", "►",
             opens = { checklist(app, RowSetup.defaults(), edit = null, password = null) })
         if (aio.isNotEmpty()) rows += Row("(makes a new AIOMetadata and replaces yours)")
         if (stick) rows += Row("You have a stick rows install: Stremonino shows its rows.")
-        return Screen("Your rows", rows)
+        return Screen("Your rows (AIOMetadata)", rows)
     }
 
 

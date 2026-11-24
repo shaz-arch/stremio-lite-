@@ -33,7 +33,7 @@ object StreamsSetup {
                 }
             }),
         )
-        s = Screen("Your streams", emptyList())
+        s = Screen("Your streams (AIOStreams)", emptyList())
         s.rows = build()
         s.onShow = { s.rows = build(); App.refresh() }
         return s
