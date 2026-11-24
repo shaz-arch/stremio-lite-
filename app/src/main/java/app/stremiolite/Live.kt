@@ -121,7 +121,7 @@ object Live {
                 val link = LiveTv.cleanLink(input.text.toString())
                 if (link == null) { app.toast("That isn't a link"); return@setPositiveButton }
                 app.toast("Checking the playlist…")
-                val p = LiveTv.Playlist(LiveTv.nameFor(link), link)
+                val p = LiveTv.Playlist(LiveTv.nameFor(link), link, System.currentTimeMillis())
                 Net.async({ LiveTv.loadPlaylist(p) }) { r ->
                     r.onSuccess { groups ->
                         Settings.setPlaylists(app, Settings.playlists(app).filter { it.url != link } + p)
@@ -150,6 +150,7 @@ object Live {
         tail = listOf(
             Row("────────────────────"),
             Row("Reload this playlist", action = { LiveTv.forget(); reload { screen.onShow?.invoke() } }),
+            Row("About this playlist", "►", opens = { aboutPlaylist(app, p) }),
             Row("Rename this playlist", "►", action = { rename(app, p) }),
             Row("Remove this playlist", "►", opens = {
                 confirmScreen(app, "Remove ${p.name}?", "Takes it off Live TV on all your devices.", "Yes, remove it") {
@@ -303,11 +304,30 @@ object Live {
             .setPositiveButton("Rename") { _, _ ->
                 val name = input.text.toString().trim()
                 if (name.isEmpty() || name == p.name) return@setPositiveButton
-                Settings.setPlaylists(app, Settings.playlists(app).map { if (it.url == p.url) LiveTv.Playlist(name, it.url) else it })
+                Settings.setPlaylists(app, Settings.playlists(app).map { if (it.url == p.url) it.renamed(name) else it })
                 app.toast("Renamed to $name")
                 app.back()
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    /** Details of a playlist: channels, groups, how many are on air, its link and so on. */
+    private fun aboutPlaylist(app: MainActivity, p: LiveTv.Playlist): Screen {
+        val day = java.text.SimpleDateFormat("d MMM yyyy, HH:mm", java.util.Locale.UK)
+        val link = listOf(Row(""), Row("Link:")) + p.url.chunked(if (narrow) 34 else 52).map { Row(it) } +
+            if (app.isPhone) Row("Copy the link", action = { LinkOut.copy(app, p.url, "Playlist link", " Keep it private.") })
+            else Row("Show the link as a QR code", "QR  ►", opens = { LinkOut.qr(p.name, p.url) })
+        val s = Screen("About ${p.name}", listOf(Row("Reading the playlist…")) + link)
+        s.onShow = {
+            Net.async({ LiveTv.read(p, fresh = false) }) { r ->
+                s.rows = r.fold(
+                    { l -> LiveTv.about(p, l, Settings.favourites(app)) { day.format(java.util.Date(it)) }.map { (k, v) -> Row(info(k, v)) } },
+                    { e -> listOf(Row("Couldn't read it: ${Net.describe(e)}")) },
+                ) + link
+                app.refresh(s)
+            }
+        }
+        return s
     }
 }

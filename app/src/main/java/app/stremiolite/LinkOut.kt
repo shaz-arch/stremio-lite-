@@ -24,7 +24,7 @@ object LinkOut {
         app.toast("$what copied.$note")
     }
 
-    private fun qr(title: String, url: String): Screen {
+    fun qr(title: String, url: String): Screen {
         val s = Screen(title, listOf(Row("Scan the code with your phone's camera."), Row(""), Row(url.removePrefix("https://").take(60))))
         s.image = Qr.make(url)
         return s

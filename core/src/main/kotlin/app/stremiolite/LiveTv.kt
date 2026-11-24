@@ -93,7 +93,10 @@ object LiveTv {
 
     // ---- your playlists (M3U links) --------------------------------------------------------
 
-    class Playlist(val name: String, val url: String)
+    /** [added] is when it was added (0 if not known: added before this was kept). */
+    class Playlist(val name: String, val url: String, val added: Long = 0) {
+        fun renamed(to: String) = Playlist(to, url, added)
+    }
 
     fun playlists(json: String?): List<Playlist> {
         if (json.isNullOrBlank()) return emptyList()
@@ -101,12 +104,12 @@ object LiveTv {
         return (0 until a.length()).mapNotNull { i ->
             val o = a.optJSONObject(i) ?: return@mapNotNull null
             val url = o.optString("url")
-            if (url.isBlank()) null else Playlist(o.optString("name").ifBlank { nameFor(url) }, url)
+            if (url.isBlank()) null else Playlist(o.optString("name").ifBlank { nameFor(url) }, url, o.optLong("added"))
         }
     }
 
     fun playlistsJson(list: List<Playlist>): String =
-        JSONArray(list.map { JSONObject().put("name", it.name).put("url", it.url) }).toString()
+        JSONArray(list.map { p -> JSONObject().put("name", p.name).put("url", p.url).also { if (p.added > 0) it.put("added", p.added) } }).toString()
 
     /** A short name for a playlist link: its site, e.g. "example.com". */
     fun nameFor(url: String): String =
@@ -152,16 +155,64 @@ object LiveTv {
     private fun attr(line: String, key: String): String =
         Regex("""$key="([^"]*)"""", RegexOption.IGNORE_CASE).find(line)?.groupValues?.get(1)?.trim() ?: ""
 
-    /** Playlists read lately (link → read at, groups), so search doesn't fetch them every time. */
-    private val loaded = ConcurrentHashMap<String, Pair<Long, List<Group>>>()
+    /** A playlist as last read: its groups, plus what "About this playlist" shows. */
+    class Loaded(val at: Long, val groups: List<Group>, val bytes: Int, val guide: String)
+
+    /** Playlists read lately (by link), so search and About don't fetch them every time. */
+    private val loaded = ConcurrentHashMap<String, Loaded>()
 
     /** Fetches and reads a playlist. Blocking. Big playlists take a while on the stick, so allow time. */
-    fun loadPlaylist(p: Playlist, fresh: Boolean = true): List<Group> {
-        if (!fresh) loaded[p.url]?.takeIf { System.currentTimeMillis() - it.first < KEEP_MS }?.let { return it.second }
-        val text = Http.getBytes(p.url, 30_000).toString(Charsets.UTF_8)
+    fun loadPlaylist(p: Playlist, fresh: Boolean = true): List<Group> = read(p, fresh).groups
+
+    /** Like [loadPlaylist], with the details too. */
+    fun read(p: Playlist, fresh: Boolean = true): Loaded {
+        if (!fresh) loaded[p.url]?.takeIf { System.currentTimeMillis() - it.at < KEEP_MS }?.let { return it }
+        val bytes = Http.getBytes(p.url, 30_000)
+        val text = bytes.toString(Charsets.UTF_8)
         if (!text.contains("#EXTINF", ignoreCase = true)) throw IllegalStateException("That link isn't an M3U playlist")
-        return parseM3u(text).also { loaded[p.url] = System.currentTimeMillis() to it }
+        val head = text.lineSequence().firstOrNull { it.trim().startsWith("#EXTM3U", ignoreCase = true) } ?: ""
+        val guide = attr(head, "url-tvg").ifEmpty { attr(head, "x-tvg-url") }
+        return Loaded(System.currentTimeMillis(), parseM3u(text), bytes.size, guide).also { loaded[p.url] = it }
     }
+
+    /**
+     * What "About this playlist" shows, as label/value lines: channels and groups, how many are
+     * on air, favourites from it, quality, guide, size, and what kind of link it is.
+     */
+    fun about(p: Playlist, l: Loaded, favs: List<Channel>, day: (Long) -> String): List<Pair<String, String>> {
+        val all = l.groups.flatMap { it.channels }
+        val out = mutableListOf<Pair<String, String>>()
+        out += "Name" to p.name
+        if (p.added > 0) out += "Added" to day(p.added)
+        out += "Channels" to "${all.size} in ${l.groups.size} group${if (l.groups.size == 1) "" else "s"}"
+        if (l.groups.size > 1) out += "Biggest groups" to l.groups.sortedByDescending { it.channels.size }.take(3).joinToString(", ") { "${it.name} ${it.channels.size}" }
+        val checked = all.mapNotNull { known(it) }
+        out += "On air" to if (checked.isEmpty()) "not checked yet (open a group)" else
+            "${checked.count { it.isNotEmpty() }} live, ${checked.count { it.isEmpty() }} off air (of ${checked.size} checked)"
+        val mine = favs.count { f -> all.any { same(it, f) } }
+        out += "In favourites" to "$mine"
+        val names = all.map { it.name.uppercase() }
+        val uhdRe = Regex("""\b(4K|UHD)\b""")
+        val hdRe = Regex("""\b(F?HD|1080P?|720P?)\b""")
+        val uhd = names.count { uhdRe.containsMatchIn(it) }
+        val hd = names.count { hdRe.containsMatchIn(it) }
+        if (hd + uhd > 0) out += "Quality in names" to listOfNotNull(if (hd > 0) "$hd HD" else null, if (uhd > 0) "$uhd 4K" else null).joinToString(", ")
+        val seen = HashSet<String>()
+        val repeats = all.count { !seen.add(it.urls.first()) }
+        if (repeats > 0) out += "Listed twice" to "$repeats (same link)"
+        out += "TV guide" to if (l.guide.isEmpty()) "none in the playlist" else "included"
+        out += "Size" to if (l.bytes >= 1_000_000) "%.1f MB".format(l.bytes / 1_000_000.0) else "${(l.bytes + 999) / 1000} KB"
+        out += "Read" to day(l.at)
+        val u = runCatching { URL(p.url) }.getOrNull()
+        out += "Server" to (u?.host ?: "?")
+        out += "Connection" to if (p.url.startsWith("https://")) "encrypted (https)" else "not encrypted (http)"
+        if (hasLogin(p.url)) out += "Login in link" to "yes: keep this link private"
+        return out
+    }
+
+    /** True if the link carries a username, password or token (an IPTV login). */
+    fun hasLogin(url: String) = Regex("""[?&](username|password|user|pass|token|key)=""", RegexOption.IGNORE_CASE).containsMatchIn(url) ||
+        Regex("""//[^/@]+:[^/@]+@""").containsMatchIn(url)
 
     // ---- favourites --------------------------------------------------------------------------
 

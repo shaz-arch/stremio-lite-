@@ -111,7 +111,7 @@ object Live {
             val link = LiveTv.cleanLink(v)
             if (link == null) { App.toast("That isn't a link"); return@ask }
             App.toast("Checking the playlist…")
-            val p = LiveTv.Playlist(LiveTv.nameFor(link), link)
+            val p = LiveTv.Playlist(LiveTv.nameFor(link), link, System.currentTimeMillis())
             App.async({ LiveTv.loadPlaylist(p) }) { r ->
                 r.onSuccess { groups ->
                     Prefs.playlists = Prefs.playlists.filter { it.url != link } + p
@@ -138,11 +138,12 @@ object Live {
         val tail = listOf(
             Row("────────────────────"),
             Row("Reload this playlist", action = { LiveTv.forget(); reload { screen.onShow?.invoke() } }),
+            Row("About this playlist", "►", opens = { aboutPlaylist(p) }),
             Row("Rename this playlist", "►", action = {
                 App.ask("New name", p.name) { v ->
                     val name = v?.trim().orEmpty()
                     if (name.isEmpty() || name == p.name) return@ask
-                    Prefs.playlists = Prefs.playlists.map { if (it.url == p.url) LiveTv.Playlist(name, it.url) else it }
+                    Prefs.playlists = Prefs.playlists.map { if (it.url == p.url) it.renamed(name) else it }
                     Prefs.syncOut()
                     App.toast("Renamed to $name")
                     App.back()
@@ -285,4 +286,22 @@ object Live {
 
     /** A search result: Enter opens it, p plays it. */
     fun searchRow(c: LiveTv.Channel): Row = Row(c.name, c.group, opens = { channelMenu(c, c.group) }, play = { play(c) })
+
+    /** Details of a playlist: channels, groups, how many are on air, its link and so on. */
+    private fun aboutPlaylist(p: LiveTv.Playlist): Screen {
+        val day = java.text.SimpleDateFormat("d MMM yyyy, HH:mm", java.util.Locale.UK)
+        val link = listOf(Row(""), Row("Link:")) + p.url.chunked(App.columns()).map { Row(it) } +
+            Row("Copy the link", action = { Clipboard.copyOrShow(p.url, "Playlist link") })
+        val s = Screen("About ${p.name}", listOf(Row("Reading the playlist…")) + link)
+        s.onShow = {
+            App.async({ LiveTv.read(p, fresh = false) }) { r ->
+                s.rows = r.fold(
+                    { l -> LiveTv.about(p, l, Prefs.favourites) { day.format(java.util.Date(it)) }.map { (k, v) -> Row(info(k, v)) } },
+                    { e -> listOf(Row("Couldn't read it: ${Net.describe(e)}")) },
+                ) + link
+                App.refresh()
+            }
+        }
+        return s
+    }
 }
