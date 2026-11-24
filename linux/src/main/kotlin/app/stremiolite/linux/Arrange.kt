@@ -21,12 +21,12 @@ object Arrange {
             val e = entries()
             if (e.isEmpty()) return listOf(Row("Your rows are still loading. Go back and try again in a moment."))
             val d = layout()
-            val root = Layout.tree(e, d)
+            val root = Layout.tree(e, d, withHidden = true)
             return listOf(
                 Row("Choose a folder, then a row to move or rename it."),
                 Row("Front page", "${Layout.front(e, d).size}  ►", opens = { folder(Layout.FRONT) }),
                 Row("──── Index ────"),
-            ) + root.folders.map { n -> Row(n.name, "${n.count}  ►", opens = { folder(n.path) }) } + listOf(
+            ) + root.folders.map { n -> Row(n.name, (if (n.path in d.hidden) "hidden · " else "") + "${n.count}  ►", opens = { folder(n.path) }) } + listOf(
                 Row("────────────────────"),
                 Row("Back to the automatic Index", "►", opens = {
                     confirmScreen("Reset the Index?", "Your folders, names and order go back to how the app files them. Hidden rows stay hidden.",
@@ -55,13 +55,13 @@ object Arrange {
                 if (rows.isEmpty()) rows += Row("No rows here. Move one here from a folder.")
                 return rows
             }
-            val n = Layout.find(Layout.tree(e, d), path) ?: return listOf(Row("This folder is empty now."))
+            val n = Layout.find(Layout.tree(e, d, withHidden = true), path) ?: return listOf(Row("This folder is empty now."))
             rows += Row("Folder: move, rename or empty it", "►", opens = { folderOptions(path) })
             rows += Row("New folder inside this one", "►", action = {
                 ask("New folder", "") { name -> App.toast("Now move a row into \"$name\" to create it"); pendingFolder = Layout.join(Layout.parts(path) + name) }
             })
             rows += Row("────────────────────")
-            n.folders.forEach { f -> rows += Row("▸ " + f.name, "${f.count}  ►", opens = { folder(f.path) }) }
+            n.folders.forEach { f -> rows += Row("▸ " + f.name, (if (f.path in d.hidden) "hidden · " else "") + "${f.count}  ►", opens = { folder(f.path) }) }
             n.rows.forEach { r -> rows += Row(r.name, MetaParse.typeLabel(r.catalog.type) + "  ►", opens = { row(keyOf(r), path) }) }
             return rows
         }
@@ -77,7 +77,7 @@ object Arrange {
     private fun items(path: String): List<String> {
         val e = entries(); val d = layout()
         return if (path == Layout.FRONT) Layout.front(e, d).map { Layout.rowItem(keyOf(it)) }
-        else Layout.find(Layout.tree(e, d), path)?.items ?: emptyList()
+        else Layout.find(Layout.tree(e, d, withHidden = true), path)?.items ?: emptyList()
     }
 
     private fun mover(path: String, item: String, where: Row, title: String): List<Row> {
@@ -137,7 +137,7 @@ object Arrange {
         })
         rows += to("", "Front page")
         rows += Row("────────────────────")
-        Layout.allPaths(Layout.tree(e, d)).forEach { p ->
+        Layout.allPaths(Layout.tree(e, d, withHidden = true)).forEach { p ->
             val depth = Layout.parts(p).size - 1
             rows += to(p, "  ".repeat(depth) + "▸ " + Layout.parts(p).last())
         }
@@ -156,6 +156,10 @@ object Arrange {
                     val d = layout(); Layout.renameFolder(d, entries(), path, n); save(d)
                     App.toast("Renamed"); App.back(); App.back()
                 }
+            }),
+            Row(if (layout().hidden.contains(path)) "Show this folder again" else "Hide this whole folder", action = {
+                val d = layout(); val hide = path !in d.hidden; Layout.hideFolder(d, path, hide); save(d)
+                App.toast(if (hide) "Folder hidden. It stays here so you can show it again." else "Folder shown again"); App.back()
             }),
             Row("Move all its rows to the front page", action = {
                 val d = layout(); Layout.emptyFolder(d, entries(), path, ""); save(d)

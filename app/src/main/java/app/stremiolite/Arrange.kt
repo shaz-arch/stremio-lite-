@@ -18,12 +18,12 @@ object Arrange {
             val e = entries(app)
             if (e.isEmpty()) return listOf(Row("Your rows are still loading. Go back and try again in a moment."))
             val d = Settings.layout(app)
-            val root = Layout.tree(e, d)
+            val root = Layout.tree(e, d, withHidden = true)
             return listOf(
                 Row("Choose a folder, then a row to move or rename it."),
                 Row("Front page", "${Layout.front(e, d).size}  ►", opens = { folder(app, Layout.FRONT) }),
                 Row("──── Index ────"),
-            ) + root.folders.map { n -> Row(n.name, "${n.count}  ►", opens = { folder(app, n.path) }) } + listOf(
+            ) + root.folders.map { n -> Row(n.name, (if (n.path in d.hidden) "hidden · " else "") + "${n.count}  ►", opens = { folder(app, n.path) }) } + listOf(
                 Row("────────────────────"),
                 Row("Back to the automatic Index", "►", opens = {
                     confirmScreen(app, "Reset the Index?", "Your folders, names and order go back to how the app files them. Hidden rows stay hidden.",
@@ -52,13 +52,13 @@ object Arrange {
                 if (rows.isEmpty()) rows += Row("No rows here. Move one here from a folder.")
                 return rows
             }
-            val n = Layout.find(Layout.tree(e, d), path) ?: return listOf(Row("This folder is empty now."))
+            val n = Layout.find(Layout.tree(e, d, withHidden = true), path) ?: return listOf(Row("This folder is empty now."))
             rows += Row("Folder: move, rename or empty it", "►", opens = { folderOptions(app, path) })
             rows += Row("New folder inside this one", "►", action = {
                 ask(app, "New folder", "") { name -> app.toast("Now move a row into \"$name\" to create it"); pendingFolder = Layout.join(Layout.parts(path) + name) }
             })
             rows += Row("────────────────────")
-            n.folders.forEach { f -> rows += Row("▸ " + f.name, "${f.count}  ►", opens = { folder(app, f.path) }) }
+            n.folders.forEach { f -> rows += Row("▸ " + f.name, (if (f.path in d.hidden) "hidden · " else "") + "${f.count}  ►", opens = { folder(app, f.path) }) }
             n.rows.forEach { r -> rows += Row(r.name, Catalogs.typeLabel(r.catalog.type) + "  ►", opens = { row(app, keyOf(r), path) }) }
             return rows
         }
@@ -74,7 +74,7 @@ object Arrange {
     private fun items(app: MainActivity, path: String): List<String> {
         val e = entries(app); val d = Settings.layout(app)
         return if (path == Layout.FRONT) Layout.front(e, d).map { Layout.rowItem(keyOf(it)) }
-        else Layout.find(Layout.tree(e, d), path)?.items ?: emptyList()
+        else Layout.find(Layout.tree(e, d, withHidden = true), path)?.items ?: emptyList()
     }
 
     private fun mover(app: MainActivity, path: String, item: String, where: Row, title: String): List<Row> {
@@ -134,7 +134,7 @@ object Arrange {
         })
         rows += to("", "Front page")
         rows += Row("────────────────────")
-        Layout.allPaths(Layout.tree(e, d)).forEach { p ->
+        Layout.allPaths(Layout.tree(e, d, withHidden = true)).forEach { p ->
             val depth = Layout.parts(p).size - 1
             rows += to(p, "  ".repeat(depth) + "▸ " + Layout.parts(p).last())
         }
@@ -153,6 +153,10 @@ object Arrange {
                     val d = Settings.layout(app); Layout.renameFolder(d, entries(app), path, n); save(app, d)
                     app.toast("Renamed"); app.back(); app.back()
                 }
+            }),
+            Row(if (Settings.layout(app).hidden.contains(path)) "Show this folder again" else "Hide this whole folder", action = {
+                val d = Settings.layout(app); val hide = path !in d.hidden; Layout.hideFolder(d, path, hide); save(app, d)
+                app.toast(if (hide) "Folder hidden. It stays here so you can show it again." else "Folder shown again"); app.back()
             }),
             Row("Move all its rows to the front page", action = {
                 val d = Settings.layout(app); Layout.emptyFolder(d, entries(app), path, ""); save(app, d)

@@ -20,8 +20,10 @@ object Layout {
         val name: MutableMap<String, String> = LinkedHashMap(),
         /** Folder path ("" = the top of the Index, [FRONT] = the front page) → items in order ("f:Name" or "r:rowKey"). */
         val order: MutableMap<String, MutableList<String>> = LinkedHashMap(),
+        /** Folder paths you've hidden (with everything inside them). */
+        val hidden: MutableSet<String> = LinkedHashSet(),
     ) {
-        val isEmpty get() = folder.isEmpty() && name.isEmpty() && order.isEmpty()
+        val isEmpty get() = folder.isEmpty() && name.isEmpty() && order.isEmpty() && hidden.isEmpty()
     }
 
     fun parse(s: String?): Data {
@@ -32,6 +34,7 @@ object Layout {
         o.optJSONObject("order")?.let { f ->
             f.keys().forEach { k -> f.optJSONArray(k)?.let { a -> d.order[k] = (0 until a.length()).map { a.optString(it) }.toMutableList() } }
         }
+        o.optJSONArray("hidden")?.let { a -> (0 until a.length()).forEach { d.hidden += a.optString(it) } }
         return d
     }
 
@@ -42,6 +45,7 @@ object Layout {
         val ord = JSONObject()
         d.order.forEach { (k, v) -> ord.put(k, JSONArray(v)) }
         o.put("order", ord)
+        o.put("hidden", JSONArray(d.hidden.toList()))
         return o.toString()
     }
 
@@ -82,9 +86,12 @@ object Layout {
         sorted(d, FRONT, entries.filter { it.folder == null }) { rowItem(Folders.rowKey(it.addon, it.catalog)) }
 
     /** The top of the Index: every folder with its sub-folders and rows, in order. */
-    fun tree(entries: List<Folders.Entry>, d: Data): Node = node("", "", entries.filter { it.folder != null }, 0, d)
+    fun tree(entries: List<Folders.Entry>, d: Data, withHidden: Boolean = false): Node =
+        node("", "", entries.filter { it.folder != null }, 0, d, withHidden)
 
-    private fun node(name: String, path: String, list: List<Folders.Entry>, depth: Int, d: Data): Node {
+    fun isHidden(d: Data, path: String) = d.hidden.any { path == it || path.startsWith("$it > ") }
+
+    private fun node(name: String, path: String, list: List<Folders.Entry>, depth: Int, d: Data, withHidden: Boolean): Node {
         val groups = LinkedHashMap<String, MutableList<Folders.Entry>>()
         val direct = mutableListOf<Folders.Entry>()
         list.forEach { e ->
@@ -93,7 +100,8 @@ object Layout {
         }
         // "More" sits last unless you've placed it.
         groups.remove("More")?.let { groups["More"] = it }
-        val subs = groups.map { (n, l) -> node(n, join(parts(path) + n), l, depth + 1, d) }
+        val subs = groups.map { (n, l) -> node(n, join(parts(path) + n), l, depth + 1, d, withHidden) }
+            .filter { withHidden || it.path !in d.hidden }
         val items: List<Any> = subs + direct
         val ordered = sorted(d, path, items) { if (it is Node) folderItem(it.name) else rowItem(Folders.rowKey((it as Folders.Entry).addon, it.catalog)) }
         return Node(name, path, ordered.filterIsInstance<Node>(), ordered.filterIsInstance<Folders.Entry>())
@@ -116,7 +124,7 @@ object Layout {
      * before the move: the folders' current order is kept, so moving a row never reshuffles them.
      */
     fun moveRow(d: Data, entries: List<Folders.Entry>, key: String, path: String) {
-        val before = tree(entries, d)
+        val before = tree(entries, d, withHidden = true)
         fun freeze(n: Node) {
             if (d.order[n.path] == null) d.order[n.path] = n.folders.map { folderItem(it.name) }.toMutableList()
             n.folders.forEach { freeze(it) }
@@ -171,6 +179,7 @@ object Layout {
         }
         // Keep its place among its neighbours, and the order inside it and its sub-folders.
         d.order[parent]?.let { l -> val i = l.indexOf(folderItem(old.last())); if (i >= 0) l[i] = folderItem(newName.trim()) }
+        d.hidden.filter { it == path || it.startsWith("$path > ") }.forEach { h -> d.hidden -= h; d.hidden += newPath + h.removePrefix(path) }
         d.order.keys.filter { it == path || it.startsWith("$path > ") }.forEach { k ->
             d.order.remove(k)?.let { d.order[newPath + k.removePrefix(path)] = it }
         }
@@ -186,6 +195,8 @@ object Layout {
         }
     }
 
+    fun hideFolder(d: Data, path: String, hide: Boolean) { if (hide) d.hidden += path else d.hidden -= path }
+
     /** Back to the automatic Index. */
-    fun reset(d: Data) { d.folder.clear(); d.name.clear(); d.order.clear() }
+    fun reset(d: Data) { d.folder.clear(); d.name.clear(); d.order.clear(); d.hidden.clear() }
 }
