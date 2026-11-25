@@ -1437,12 +1437,7 @@ fun keysScreen(): Screen {
         Row("────────────────────"),
         Row("TMDB key", set(Prefs.tmdbKey) + "  ►", opens = { Details.whereToWatchSettings() }),
         Row("   Where to watch, age ratings, Coming soon. Synced, never shared."),
-        Row("TorBox key", set(Prefs.torboxKey) + "  ►", opens = {
-            RowsSetup.keyScreen("TorBox key", app.stremiolite.StreamSetup.TORBOX_KEY_PAGE, listOf(
-                "Your debrid account, used when making your streams.",
-                "Your streams keep the key they were made with: after changing it, use 'Make my streams with this key' below.",
-            ), { Prefs.torboxKey }, { Prefs.torboxKey = it }, after = { listOf(Row("Make my streams with this key", "►", opens = { StreamsSetup.screen() })) })
-        }),
+        Row("Debrid keys", Prefs.debridKeys.let { if (it.isEmpty()) "not set" else app.stremiolite.StreamSetup.names(it).joinToString(", ") } + "  ►", opens = { StreamsSetup.screen() }),
         Row("   Kept on this computer only."),
         Row("MDBList key", set(Prefs.mdblistKey) + "  ►", opens = {
             RowsSetup.keyScreen("MDBList key", app.stremiolite.RowSetup.MDBLIST_KEY_PAGE, listOf(

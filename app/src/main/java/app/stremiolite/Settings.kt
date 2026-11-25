@@ -216,13 +216,7 @@ object Settings {
             Row("────────────────────"),
             Row("TMDB key", set(tmdbKey(app)) + "  ►", opens = { whereToWatch(app) }),
             Row("   Where to watch, age ratings, Coming soon. Synced, never shared."),
-            Row("TorBox key", set(torboxKey(app)) + "  ►", opens = {
-                RowsSetup.keyScreen(app, "TorBox key", StreamSetup.TORBOX_KEY_PAGE, listOf(
-                    "Your debrid account, used when making your streams.",
-                    "Your streams keep the key they were made with: after changing it,",
-                    "use 'Make my streams with this key' below.",
-                ), { torboxKey(app) }, { setTorboxKey(app, it) }, after = { listOf(Row("Make my streams with this key", "►", opens = { StreamsSetup.screen(app) })) })
-            }),
+            Row("Debrid keys", debridKeys(app).let { if (it.isEmpty()) "not set" else StreamSetup.names(it).joinToString(", ") } + "  ►", opens = { StreamsSetup.screen(app) }),
             Row("   Kept on this device only."),
             Row("MDBList key", set(mdblistKey(app)) + "  ►", opens = {
                 RowsSetup.keyScreen(app, "MDBList key", RowSetup.MDBLIST_KEY_PAGE, listOf(
@@ -277,27 +271,38 @@ object Settings {
 
     // ---- keys -------------------------------------------------------------------------------
 
-    /** TorBox and MDBList keys, remembered on this device for the next setup (never synced or shared). */
-    fun torboxKey(c: Context): String = prefs(c).getString("torboxKey", "") ?: ""
-    fun setTorboxKey(c: Context, k: String) { prefs(c).edit().putString("torboxKey", k).apply() }
+    /** Debrid keys (in your order) and the MDBList key, remembered on this device for setup (never synced or shared). */
+    fun debridKeys(c: Context): List<Pair<String, String>> = debridOf(prefs(c))
+    fun setDebridKeys(c: Context, keys: List<Pair<String, String>>) {
+        prefs(c).edit().putString("debridKeys", StreamSetup.writeKeys(keys)).remove("torboxKey").apply()
+    }
+
+    /** A profile's debrid keys; a TorBox key saved by an earlier build counts too. */
+    private fun debridOf(p: android.content.SharedPreferences): List<Pair<String, String>> {
+        val raw = p.getString("debridKeys", null)
+        if (raw == null) p.getString("torboxKey", "")?.takeIf { it.isNotBlank() }?.let { return listOf("torbox" to it) }
+        return StreamSetup.parseKeys(raw)
+    }
+    fun torboxKey(c: Context): String = debridKeys(c).firstOrNull { it.first == "torbox" }?.second ?: ""
+    fun setTorboxKey(c: Context, k: String) = setDebridKeys(c, StreamSetup.withKey(debridKeys(c), "torbox", k))
     fun mdblistKey(c: Context): String = prefs(c).getString("mdblistKey", "") ?: ""
     fun setMdblistKey(c: Context, k: String) { prefs(c).edit().putString("mdblistKey", k).apply() }
 
-    class Keys(val tmdb: String, val region: String, val torbox: String, val mdblist: String) {
-        val names get() = listOfNotNull(if (tmdb.isNotBlank()) "TMDB" else null, if (torbox.isNotBlank()) "TorBox" else null, if (mdblist.isNotBlank()) "MDBList" else null)
+    class Keys(val tmdb: String, val region: String, val debrid: List<Pair<String, String>>, val mdblist: String) {
+        val names get() = listOfNotNull(if (tmdb.isNotBlank()) "TMDB" else null) + StreamSetup.names(debrid) + listOfNotNull(if (mdblist.isNotBlank()) "MDBList" else null)
         val isEmpty get() = names.isEmpty()
     }
 
     fun keysOf(p: android.content.SharedPreferences) = Keys(
         p.getString("tmdbKey", "") ?: "", p.getString("watchRegion", "GB") ?: "GB",
-        p.getString("torboxKey", "") ?: "", p.getString("mdblistKey", "") ?: "",
+        debridOf(p), p.getString("mdblistKey", "") ?: "",
     )
 
     /** Copies the keys [k] has into a profile's settings (blank ones leave its own); [send] syncs the TMDB key now. */
     fun putKeys(p: android.content.SharedPreferences, k: Keys, c: Context?, send: Boolean) {
         val e = p.edit()
         if (k.tmdb.isNotBlank()) e.putString("tmdbKey", k.tmdb).putString("watchRegion", k.region).putBoolean("pendingSync", !send)
-        if (k.torbox.isNotBlank()) e.putString("torboxKey", k.torbox)
+        if (k.debrid.isNotEmpty()) e.putString("debridKeys", StreamSetup.writeKeys(k.debrid)).remove("torboxKey")
         if (k.mdblist.isNotBlank()) e.putString("mdblistKey", k.mdblist)
         e.apply()
         if (send && c != null && k.tmdb.isNotBlank()) { WhereToWatch.forget(); syncOut(c) }

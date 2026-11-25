@@ -154,9 +154,17 @@ object Prefs {
 
     /** Your TMDB key, for Where to watch (synced, never shared). */
     /** TorBox and MDBList keys, remembered on this computer for the next setup (not in SHARED: never synced). */
+    /** Debrid keys in your order (a TorBox key from an earlier build counts too). */
+    var debridKeys: List<Pair<String, String>>
+        get() {
+            val d = data()
+            if (!d.has("debridKeys")) d.optString("torboxKey").takeIf { it.isNotBlank() }?.let { return listOf("torbox" to it) }
+            return app.stremiolite.StreamSetup.parseKeys(d.optString("debridKeys"))
+        }
+        set(v) { data().put("debridKeys", app.stremiolite.StreamSetup.writeKeys(v)).remove("torboxKey"); save() }
     var torboxKey: String
-        get() = data().optString("torboxKey", "")
-        set(v) { data().put("torboxKey", v); save() }
+        get() = debridKeys.firstOrNull { it.first == "torbox" }?.second ?: ""
+        set(v) { debridKeys = app.stremiolite.StreamSetup.withKey(debridKeys, "torbox", v) }
     var mdblistKey: String
         get() = data().optString("mdblistKey", "")
         set(v) { data().put("mdblistKey", v); save() }

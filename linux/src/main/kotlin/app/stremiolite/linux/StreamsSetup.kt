@@ -3,48 +3,72 @@ package app.stremiolite.linux
 import app.stremiolite.AioRows
 import app.stremiolite.StreamSetup
 
-/** Settings › Your streams: create an AIOStreams install tuned for Stremonino, with your TorBox key. */
+/** Settings › Your streams: create an AIOStreams install tuned for Stremonino, with your debrid services. */
 object StreamsSetup {
     fun screen(): Screen {
-        var torbox = Prefs.torboxKey
         val existing = Home.all().filter { StreamSetup.isAioStreams(it) }
         var replace = existing.isNotEmpty()
         lateinit var s: Screen
-        fun build(): List<Row> = listOfNotNull(
-            Row("Makes an AIOStreams install with the stick-tuned settings,"),
-            Row("on ElfHosted's free server, using your TorBox account,"),
-            Row("and adds it to your Stremio account."),
-            Row("──── You need ────"),
-            Row("TorBox key", (if (torbox.isBlank()) "not set" else "set ✓") + "  ►", opens = {
-                RowsSetup.keyScreen("TorBox key", StreamSetup.TORBOX_KEY_PAGE, listOf(
-                    "On torbox.app: Settings, then copy your API key.",
-                ), { torbox }, { torbox = it; Prefs.torboxKey = it })
-            }),
-            if (existing.isNotEmpty()) Row((if (replace) "✓ " else "   ") + "Replace my current AIOStreams", existing.size.toString(), action = {
+        fun build(): List<Row> {
+            val k = Prefs.debridKeys
+            val rows = mutableListOf(
+                Row("Makes an AIOStreams install with the stick-tuned settings, on ElfHosted's free server,"),
+                Row("with your debrid services, and adds it to your Stremio account."),
+                Row("──── Your debrid services ────"),
+            )
+            val order = k.mapNotNull { StreamSetup.service(it.first) } + StreamSetup.SERVICES.filter { svc -> k.none { it.first == svc.id } }
+            order.forEach { svc ->
+                val at = k.indexOfFirst { it.first == svc.id }
+                val detail = when {
+                    at < 0 -> "not set"
+                    k.size == 1 -> "…" + k[at].second.takeLast(4)
+                    at == 0 -> "…" + k[at].second.takeLast(4) + " · first"
+                    else -> "…" + k[at].second.takeLast(4) + " · backup $at"
+                }
+                rows += Row(svc.name, "$detail  ►", opens = {
+                    RowsSetup.keyScreen("${svc.name} key", svc.keyPage, listOf(svc.hint),
+                        { Prefs.debridKeys.firstOrNull { it.first == svc.id }?.second.orEmpty() },
+                        { v -> Prefs.debridKeys = StreamSetup.withKey(Prefs.debridKeys, svc.id, v) })
+                })
+            }
+            if (k.size > 1) {
+                rows += Row("Change the order", "►", opens = {
+                    Reorder(head = { listOf(Row("The first is used first; the others are backups.")) },
+                        items = Prefs.debridKeys.toMutableList(),
+                        label = { StreamSetup.service(it.first)?.name ?: it.first },
+                        detail = { "…" + it.second.takeLast(4) },
+                        open = { null },
+                        commit = { Prefs.debridKeys = it },
+                    ).build("Order of your services")
+                })
+                rows += Row("   Every service is checked for ready-to-play copies; if a stream fails, the next one is tried, from any of them.")
+            } else rows += Row("   Add a second service as a backup if you have one.")
+            if (existing.isNotEmpty()) rows += Row((if (replace) "✓ " else "   ") + "Replace my current AIOStreams", existing.size.toString(), action = {
                 replace = !replace; s.rows = build(); App.refresh()
-            }) else null,
-            Row("────────────────────"),
-            Row("Create my streams", "►", action = {
-                if (torbox.isBlank()) { App.toast("Add your TorBox key first") }
+            })
+            rows += Row("────────────────────")
+            rows += Row("Create my streams", "►", action = {
+                if (Prefs.debridKeys.isEmpty()) { App.toast("Add a debrid key first") }
                 else App.ask("Choose an AIOStreams password (6+ characters)", hidden = true) { v ->
                     val pw = v.orEmpty()
                     if (pw.isEmpty()) return@ask
-                    if (pw.length < 6) App.toast("Use at least 6 characters") else create(torbox, pw, replace)
+                    if (pw.length < 6) App.toast("Use at least 6 characters") else create(Prefs.debridKeys, pw, replace)
                 }
-            }),
-        )
+            })
+            return rows
+        }
         s = Screen("Your streams (AIOStreams)", emptyList())
         s.rows = build()
         s.onShow = { s.rows = build(); App.refresh() }
         return s
     }
 
-    private fun create(torbox: String, password: String, replace: Boolean) {
+    private fun create(keys: List<Pair<String, String>>, password: String, replace: Boolean) {
         val key = Account.authKey ?: return
         val status = Screen("Creating your streams", listOf(Row("Creating your AIOStreams… (this can take a minute)")))
         App.push(status)
         App.async({
-            val url = StreamSetup.create(torbox, password)
+            val url = StreamSetup.create(keys, password)
             url to StreamSetup.install(key, url, replace)
         }) { r ->
             r.onSuccess { (_, removed) ->
@@ -58,7 +82,7 @@ object StreamsSetup {
             }.onFailure { e ->
                 status.rows = listOf(
                     Row("Couldn't create the streams: " + (if (e is AioRows.Failed) e.message else Net.describe(e))),
-                    Row("Try again", action = { App.back(); create(torbox, password, replace) }),
+                    Row("Try again", action = { App.back(); create(keys, password, replace) }),
                 )
             }
             App.refresh()
