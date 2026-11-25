@@ -162,6 +162,11 @@ object Prefs {
         get() = data().optString("games").ifEmpty { null }
         set(v) { data().put("games", v); save() }
 
+    /** When you last looked at films that became ready (this computer only, never synced). */
+    var readySeen: Long
+        get() = data().optLong("readySeen", 0)
+        set(v) { data().put("readySeen", v); save() }
+
     /** Channels played lately (this computer only: not in SHARED, so never synced). */
     var recent: List<app.stremiolite.LiveTv.Channel>
         get() = app.stremiolite.LiveTv.favourites(data().optString("liveRecent", ""))

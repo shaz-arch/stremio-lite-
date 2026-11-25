@@ -119,6 +119,25 @@ object Waiting {
 
     fun lastCheck(c: Context) = prefs(c).getLong("waitingChecked", 0)
 
+    /** Films that became ready since you last looked (newest first), for the line on Home. */
+    fun unseen(c: Context): List<Entry> {
+        val seen = prefs(c).getLong("readySeen", 0)
+        return list(c).filter { it.ready > seen }.sortedByDescending { it.ready }
+    }
+
+    /** You've looked: the line on Home goes until something else becomes ready. */
+    fun markSeen(c: Context) { prefs(c).edit().putLong("readySeen", System.currentTimeMillis()).apply() }
+
+    /** The line for the top of Home, or null when there's nothing new. */
+    fun homeRow(app: MainActivity): Row? {
+        val new = unseen(app)
+        val label = ReadyNotice.label(new.map { it.name }) ?: return null
+        return Row(label, "►", action = {
+            markSeen(app)
+            app.push(if (new.size == 1) entry(app, new[0]) else screen(app))
+        })
+    }
+
     /**
      * The check itself (blocking): reads the list from the account, asks the stream add-ons about
      * each film still waiting, marks the ones now available, and returns those.
@@ -271,14 +290,14 @@ object Waiting {
             rows += Row("──── Films ────")
             if (keep.isEmpty()) rows += Row("None. On a film, choose 'Tell me when a stream is available'.")
             keep.filter { !it.better }.sortedWith(compareByDescending<Entry> { it.ready }.thenBy { it.name }).forEach { e ->
-                val label = (if (e.ready > 0) "● " else "") + e.name + if (e.year.isNotEmpty()) " (${e.year})" else ""
+                val label = (if (e.ready > 0) Marks.READY + " " else "") + e.name + if (e.year.isNotEmpty()) " (${e.year})" else ""
                 rows += Row(label, if (e.ready > 0) "ready  ►" else "waiting  ►", opens = { entry(app, e) })
             }
             val upgrades = keep.filter { it.better }
             if (upgrades.isNotEmpty()) {
                 rows += Row("──── Better versions ────")
                 upgrades.sortedWith(compareByDescending<Entry> { it.ready }.thenBy { it.name }).forEach { e ->
-                    val label = (if (e.ready > 0) "● " else "") + e.name + if (e.year.isNotEmpty()) " (${e.year})" else ""
+                    val label = (if (e.ready > 0) Marks.READY + " " else "") + e.name + if (e.year.isNotEmpty()) " (${e.year})" else ""
                     rows += Row(label, (if (e.ready > 0) "found: ${e.found}" else "have: ${e.have}") + "  ►", opens = { entry(app, e) })
                 }
             }
@@ -302,6 +321,7 @@ object Waiting {
         }
         screen = Screen("Waiting for streams", build())
         screen.onShow = {
+            markSeen(app)
             screen.rows = build(); app.refresh(screen)
             // Changes made on another device (follows, the waiting list) are fetched on the way in.
             History.pull(app, force = true) { if (app.isTop(screen)) { screen.rows = build(); app.refresh(screen) } }

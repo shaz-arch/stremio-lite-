@@ -89,10 +89,14 @@ object Home {
             // Search, then what you're watching and what you've saved, then the catalogue rows.
             val cw = History.continueWatching(app)
             val lib = History.library(app)
+            // One line at the top for each kind of news: a film ready to watch, then an update.
+            var top = 0
+            Waiting.homeRow(app)?.let { rows.add(0, it); top++ }
             Updates.available?.let { n ->
                 rows.add(0, Row("Update available: build $n. Press OK to install", "►", action = { Updates.install(app) }))
+                top++
             }
-            rows.addAll(if (Updates.available != null) 1 else 0, listOf(
+            rows.addAll(top, listOf(
                 Row("──── Watching ────"),
             ) + (if (KidsGuard.hides(app)) emptyList() else listOf(search)) + listOf(
                 Row("Continue watching", if (cw.isEmpty()) "nothing yet" else "${cw.size}  ►", opens = { continueScreen(app) }),
@@ -117,6 +121,8 @@ object Home {
             screen.tag = Profiles.current(app)?.name ?: ""
             who.label = whoText()
             sleepRow.detail = Sleep.summary() + "  ►"
+            // Straight away, so a "Ready to watch" line you've just opened goes.
+            if (addons != null) rebuild()
             History.pull(app) { rebuild() }
             Updates.check { rebuild() }
             Waiting.checkSoon(app) { rebuild() }

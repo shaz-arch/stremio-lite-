@@ -175,7 +175,9 @@ object Home {
         fun build() {
             val list = addons
             val rows = mutableListOf<Row>()
-            Updates.homeRow()?.let { rows += it; rows += Row("────────────────────") }
+            Waiting.homeRow()?.let { rows += it }
+            Updates.homeRow()?.let { rows += it }
+            if (rows.isNotEmpty()) rows += Row("────────────────────")
             status.label = when {
                 loading && list == null -> "Loading your rows…"
                 error != null && list == null -> "Couldn't load your rows: $error"
@@ -1079,21 +1081,32 @@ object Waiting {
         ).joinToString(" · ") + "  ►"
     }
 
+    /** The line for the top of Home when a film you're waiting on became ready, or null. */
+    fun homeRow(): Row? {
+        val new = list().filter { it.ready > Prefs.readySeen }.sortedByDescending { it.ready }
+        val label = app.stremiolite.ReadyNotice.label(new.map { it.name }) ?: return null
+        return Row(label, "►", action = {
+            Prefs.readySeen = System.currentTimeMillis()
+            App.push(if (new.size == 1) Details.screenFor(new[0].id, new[0].type, new[0].name) else screen())
+        })
+    }
+
     fun screen(): Screen {
+        Prefs.readySeen = System.currentTimeMillis()
         val rows = mutableListOf(Row("──── Films ────"))
         // Films you've started (or finished) leave the list.
         val films = list().filter { !it.better && Lib.info(it.id)?.let { i -> i.continuing || i.filmWatched } != true }
             .sortedWith(compareByDescending<Entry> { it.ready }.thenBy { it.name })
         if (films.isEmpty()) rows += Row("None. On a film, choose 'Tell me when a stream is available'.")
         films.forEach { e ->
-            rows += Row((if (e.ready > 0) "● " else "") + e.name + if (e.year.isNotEmpty()) " (${e.year})" else "",
+            rows += Row((if (e.ready > 0) Marks.READY + " " else "") + e.name + if (e.year.isNotEmpty()) " (${e.year})" else "",
                 if (e.ready > 0) "ready  ►" else "waiting  ►", opens = { Details.screenFor(e.id, e.type, e.name) })
         }
         val upgrades = list().filter { it.better }
         if (upgrades.isNotEmpty()) {
             rows += Row("──── Better versions ────")
             upgrades.sortedWith(compareByDescending<Entry> { it.ready }.thenBy { it.name }).forEach { e ->
-                rows += Row((if (e.ready > 0) "● " else "") + e.name + if (e.year.isNotEmpty()) " (${e.year})" else "",
+                rows += Row((if (e.ready > 0) Marks.READY + " " else "") + e.name + if (e.year.isNotEmpty()) " (${e.year})" else "",
                     (if (e.ready > 0) "found: ${e.found}" else "have: ${e.have}") + "  ►",
                     opens = { Details.screenFor(e.id, e.type, e.name) })
             }
