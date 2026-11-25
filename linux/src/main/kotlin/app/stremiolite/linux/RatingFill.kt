@@ -10,18 +10,23 @@ object RatingFill {
     private var workers = 0
     private var changed: (() -> Unit)? = null
     private var since = 0
+    private var owner: Screen? = null
 
-    fun fill(metas: List<Meta>, onChange: () -> Unit) {
+    fun fill(screen: Screen, metas: List<Meta>, onChange: () -> Unit) {
         val key = Prefs.tmdbKey
         if (key.isBlank()) return
         val todo = AgeRatings.missing(metas)
         if (todo.isEmpty()) return
         queue.clear(); queue.addAll(todo)
         changed = onChange
+        owner = screen
         while (workers < 3) { workers++; next(key, Prefs.watchRegion) }
     }
 
     private fun next(key: String, region: String) {
+        // The list was closed: stop. Something's playing: wait and try again.
+        if (owner?.let { App.inStack(it) } != true) queue.clear()
+        else if (Player.playing) { App.later(10_000) { next(key, region) }; return }
         val m = queue.removeFirstOrNull()
         if (m == null) {
             if (--workers == 0) { changed?.invoke(); App.async({ AgeRatings.save() }) {} }

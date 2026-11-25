@@ -434,7 +434,7 @@ object Catalogs {
     fun detail(m: Meta): String {
         val kind = when (m.type) { "movie" -> "Movie"; "series" -> "Series"; else -> m.type }
         val rating = if (m.rating.isNotBlank()) "★ ${m.rating}" else ""
-        return "${m.year.take(9).padEnd(9)} ${rating.padEnd(6)} ${app.stremiolite.AgeRatings.label(m.id).padEnd(5)} ${kind.padEnd(6)}"
+        return "${m.year.take(9).padEnd(9)} ${rating.padEnd(6)} ${app.stremiolite.AgeRatings.label(m.id).padEnd(8)} ${kind.padEnd(6)}"
     }
 
     fun mark(m: Meta): String? = mark(m.id, m.type)
@@ -508,7 +508,7 @@ object Catalogs {
                         if (page.isEmpty() || added == 0) ended = true
                     }.onFailure { e -> error = Net.describe(e) }
                     rebuild()
-                    RatingFill.fill(items) { if (App.inStack(s)) rebuild() }
+                    RatingFill.fill(s, items) { if (App.inStack(s)) rebuild() }
                 }
             }
         }
@@ -582,7 +582,7 @@ object Search {
             group("Shows", g.shows)
             group("Other", g.other)
             if (answered >= sources.size && found.isEmpty() && channels.isEmpty() && sources.isNotEmpty()) rows += Row("Nothing found.")
-            if (answered >= sources.size && !rated) { rated = true; RatingFill.fill(found.values.map { it.second }) { if (App.inStack(s)) build() } }
+            if (answered >= sources.size && !rated) { rated = true; RatingFill.fill(s, found.values.map { it.second }) { if (App.inStack(s)) build() } }
             s.rows = rows
             App.refresh()
         }

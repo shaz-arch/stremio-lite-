@@ -141,7 +141,7 @@ object Search {
             group("Films", g.films)
             group("Shows", g.shows)
             group("Other", g.other)
-            if (answered >= sources.size && !rated) { rated = true; RatingFill.fill(app, all.map { it.second }) { if (app.inStack(screen)) rebuild() } }
+            if (answered >= sources.size && !rated) { rated = true; RatingFill.fill(app, screen, all.map { it.second }) { if (app.inStack(screen)) rebuild() } }
             if (answered >= sources.size && all.isEmpty() && channels.isEmpty() && sources.isNotEmpty()) {
                 rows += Row("Nothing found.")
             }

@@ -290,6 +290,9 @@ object Player {
 
     @Volatile private var current: Process? = null
 
+    /** A player is open (background look-ups wait). */
+    val playing get() = current?.isAlive == true
+
     /** Closes the player if one is open (the sleep timer); true if there was one. */
     fun stop(): Boolean {
         val p = current?.takeIf { it.isAlive } ?: return false

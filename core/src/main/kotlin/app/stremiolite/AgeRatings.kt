@@ -19,7 +19,7 @@ object AgeRatings {
     @Volatile private var read = false
     @Volatile private var dirty = false
 
-    private fun file() = dir?.let { java.io.File(it, "age-ratings.json") }
+    private fun file() = dir?.let { java.io.File(it, "age-ratings2.json") }
 
     private fun load() {
         if (read) return
@@ -76,9 +76,10 @@ object AgeRatings {
             // The cinema rating first, then any other release's.
             return (list.firstOrNull { it.optInt("type") == 3 } ?: list.firstOrNull())?.optString("certification")?.trim()
         }
-        return cert(byCountry[region]) ?: cert(byCountry["US"]) ?: ""
+        // A US rating standing in for yours is marked, so "R" isn't mistaken for a UK rating.
+        return cert(byCountry[region]) ?: cert(byCountry["US"])?.let { if (region == "US") it else "US $it" } ?: ""
     }
 
-    /** For the list column: "15", "PG-13", or blank. */
-    fun label(id: String): String = of(id).orEmpty().take(5)
+    /** For the list column: "15", "US PG-13", or blank. */
+    fun label(id: String): String = of(id).orEmpty().take(8)
 }

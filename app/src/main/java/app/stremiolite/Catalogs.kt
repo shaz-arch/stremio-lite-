@@ -39,7 +39,7 @@ object Catalogs {
     fun detail(m: Meta): String {
         val kind = when (m.type) { "movie" -> "Movie"; "series" -> "Series"; else -> m.type }
         val rating = if (m.rating.isNotBlank()) "★ ${m.rating}" else ""
-        return "${m.year.take(9).padEnd(9)} ${rating.padEnd(6)} ${AgeRatings.label(m.id).padEnd(5)} ${kind.padEnd(6)}"
+        return "${m.year.take(9).padEnd(9)} ${rating.padEnd(6)} ${AgeRatings.label(m.id).padEnd(if (narrow) 5 else 8)} ${kind.padEnd(6)}"
     }
 
     fun screen(app: MainActivity, a: Addon, c: Addon.Catalog, title: String = c.name): Screen {
@@ -109,7 +109,7 @@ object Catalogs {
                         if (page.isEmpty() || added == 0) ended = true
                     }.onFailure { e -> error = Net.describe(e) }
                     rebuild()
-                    RatingFill.fill(app, items) { if (app.inStack(screen)) rebuild() }
+                    RatingFill.fill(app, screen, items) { if (app.inStack(screen)) rebuild() }
                 }
             }
         }

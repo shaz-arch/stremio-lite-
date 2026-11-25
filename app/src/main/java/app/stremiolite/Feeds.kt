@@ -197,6 +197,7 @@ object Feeds {
                     val todo = entries!!.filter { it.date < 0 || (key.isNotBlank() && it.where == null) }
                     fun next(i: Int) {
                         if (i >= todo.size || !app.inStack(s)) return
+                        if (app.playerOpen) { Net.later(10_000) { next(i) }; return }   // playback first
                         Net.async({
                             ComingSoon.lookUp(addons, todo[i])
                             if (key.isNotBlank()) ComingSoon.lookWhere(key, region, todo[i])

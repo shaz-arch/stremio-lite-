@@ -187,6 +187,7 @@ object Feeds {
                     val todo = ArrayDeque(entries!!.filter { it.date < 0 || (key.isNotBlank() && it.where == null) })
                     fun next() {
                         if (!App.inStack(s)) return
+                        if (Player.playing) { App.later(10_000) { next() }; return }   // playback first
                         val e = todo.removeFirstOrNull() ?: return
                         App.async({
                             ComingSoon.lookUp(addons, e)
