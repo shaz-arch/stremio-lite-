@@ -144,6 +144,9 @@ object Prefs {
     var comingFrom: String
         get() = data().optString("comingFrom", "")
         set(v) { data().put("comingFrom", v); save() }
+    var comingFromShows: String
+        get() = data().optString("comingFromShows", "")
+        set(v) { data().put("comingFromShows", v); save() }
 
     /** Game scores (this profile, this computer: not in SHARED, so never synced). */
     var games: String?

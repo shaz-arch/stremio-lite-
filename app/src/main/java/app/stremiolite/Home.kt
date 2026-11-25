@@ -43,7 +43,7 @@ object Home {
         var placed = false
         val news = listOf(
             Row("News", "film & TV headlines  ►", opens = { Feeds.news(app) }),
-            Row("Coming soon", "films out in the next weeks  ►", opens = { Feeds.comingSoon(app) }),
+            Row("Coming soon", "films & shows  ►", opens = { Feeds.comingSoon(app) }),
         )
         val appRows = listOf(
             // Setup items (add-ons, export/import, device check, about) live inside Settings.

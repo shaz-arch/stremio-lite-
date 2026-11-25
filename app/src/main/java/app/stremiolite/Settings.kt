@@ -179,9 +179,10 @@ object Settings {
     fun setNewsHidden(c: Context, h: Set<String>) { prefs(c).edit().putString("newsHide", org.json.JSONArray(h.toList()).toString()).apply(); syncOut(c) }
 
     /** The film list Coming soon reads ("" = automatic). */
-    fun comingFrom(c: Context): String = prefs(c).getString("comingFrom", "") ?: ""
+    fun comingFrom(c: Context, type: String = "movie"): String = prefs(c).getString(if (type == "movie") "comingFrom" else "comingFromShows", "") ?: ""
 
-    fun setComingFrom(c: Context, key: String) = prefs(c).edit().putString("comingFrom", key).apply()
+    fun setComingFrom(c: Context, type: String, key: String) =
+        prefs(c).edit().putString(if (type == "movie") "comingFrom" else "comingFromShows", key).apply()
 
     /** Game scores (this profile, this device). */
     fun gameStats(c: Context): String? = prefs(c).getString("games", null)

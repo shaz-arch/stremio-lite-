@@ -41,6 +41,8 @@ class Full(
     val certification: String = "",
     val imdbUrl: String = "",
     val trailerUrl: String = "",
+    /** The release (or first air) date as the add-on gives it, "2026-12-18" ("" if none). */
+    val releasedDay: String = "",
 ) {
     /** The next episode still to air, if the add-on lists one (dates are yyyy-mm-dd). */
     fun nextToAir(today: String): Video? =
@@ -222,6 +224,7 @@ object MetaParse {
                 .ifEmpty { text(m.optJSONObject("app_extras"), "certification") },
             imdbUrl = imdbUrl(m),
             trailerUrl = trailerUrl(m),
+            releasedDay = m.optString("released").takeUnless { it == "null" }?.take(10)?.takeIf { Regex("""\d{4}-\d{2}-\d{2}""").matches(it) } ?: "",
         )
     }
 

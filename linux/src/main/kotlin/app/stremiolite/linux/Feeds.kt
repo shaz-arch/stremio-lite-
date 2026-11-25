@@ -126,7 +126,14 @@ object Feeds {
         return s
     }
 
-    fun comingSoon(): Screen {
+    /** Coming soon: a menu of Films and Shows. */
+    fun comingSoon(): Screen = Screen("Coming soon", listOf(
+        Row("Films", "cinema releases, this week and later  ►", opens = { comingList("movie") }),
+        Row("Shows", "new series starting soon  ►", opens = { comingList("series") }),
+    )).also { it.key = "coming-soon" }
+
+    private fun comingList(type: String): Screen {
+        val films = type == "movie"
         lateinit var s: Screen
         var entries: List<ComingSoon.Entry>? = null
         var pending = false
@@ -135,13 +142,13 @@ object Feeds {
         fun build() {
             pending = false
             val list = entries
-            val used = ComingSoon.catalogs(Home.all(), Prefs.comingFrom)
+            val used = ComingSoon.catalogs(Home.all(), comingFrom(type), type)
             val rows = mutableListOf<Row>()
-            rows += Row("From", (if (used.isEmpty()) "none" else used.joinToString(" + ") { it.second.name }) + "  ►", opens = { chooseList() })
+            rows += Row("From", (if (used.isEmpty()) "none" else used.joinToString(" + ") { it.second.name }) + "  ►", opens = { chooseList(type) })
             when {
                 list == null -> rows += Row("Looking at what's coming…")
                 used.isEmpty() -> {
-                    rows += Row("None of your catalogues has an Upcoming or In Cinemas list.")
+                    rows += Row(if (films) "None of your catalogues has an Upcoming or In Cinemas list." else "None of your catalogues has a list of new or coming series.")
                     rows += Row("Pick any film list with From, or tick Releases in Your rows (AIOMetadata).")
                 }
                 list.isEmpty() -> rows += Row("Nothing in that list just now.")
@@ -162,17 +169,17 @@ object Feeds {
 
         fun soon() { if (!pending) { pending = true; App.later(500) { build() } } }
 
-        s = Screen("Coming soon", listOf(Row("Looking at what's coming…")))
-        s.key = "coming-soon"
+        s = Screen(if (films) "Coming soon: films" else "Coming soon: shows", listOf(Row("Looking at what's coming…")))
+        s.key = "coming-soon-$type"
         s.onShow = {
             val addons = Home.all()
-            val chosen = Prefs.comingFrom
+            val chosen = comingFrom(type)
             if (loadedFrom == chosen && entries != null) build()
             else {
                 loadedFrom = chosen
                 entries = null
                 build()
-                App.async({ ComingSoon.entries(addons, chosen) }) { r ->
+                App.async({ ComingSoon.entries(addons, chosen, type) }) { r ->
                     entries = r.getOrDefault(emptyList())
                     build()
                     val todo = ArrayDeque(entries!!.filter { it.date < 0 })
@@ -189,15 +196,18 @@ object Feeds {
         return s
     }
 
-    private fun chooseList(): Screen {
-        val chosen = Prefs.comingFrom
+    private fun comingFrom(type: String) = if (type == "movie") Prefs.comingFrom else Prefs.comingFromShows
+    private fun setComingFrom(type: String, k: String) { if (type == "movie") Prefs.comingFrom = k else Prefs.comingFromShows = k }
+
+    private fun chooseList(type: String): Screen {
+        val chosen = comingFrom(type)
         val rows = mutableListOf(
-            Row("Automatic: Releases (or Upcoming and In Cinemas)", if (chosen.isEmpty()) "✓" else "", action = { Prefs.comingFrom = ""; App.back() }),
-            Row("──── Or one of your film lists ────"),
+            Row("Automatic: Releases" + if (type == "movie") " (or Upcoming and In Cinemas)" else "", if (chosen.isEmpty()) "✓" else "", action = { setComingFrom(type, ""); App.back() }),
+            Row(if (type == "movie") "──── Or one of your film lists ────" else "──── Or one of your show lists ────"),
         )
-        ComingSoon.choices(Home.all()).forEach { (a, c) ->
+        ComingSoon.choices(Home.all(), type).forEach { (a, c) ->
             val k = app.stremiolite.Folders.rowKey(a, c)
-            rows += Row(c.name, if (k == chosen) "✓" else "", action = { Prefs.comingFrom = k; App.back() })
+            rows += Row(c.name, if (k == chosen) "✓" else "", action = { setComingFrom(type, k); App.back() })
         }
         return Screen("Coming soon from", rows)
     }

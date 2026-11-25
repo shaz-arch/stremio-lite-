@@ -214,7 +214,7 @@ object Home {
             // Same order and wording as the phone and stick.
             if (Prefs.newsOn) {
                 rows += Row("News", "film & TV headlines  ►", opens = { Feeds.news() })
-                rows += Row("Coming soon", "films out in the next weeks  ►", opens = { Feeds.comingSoon() })
+                rows += Row("Coming soon", "films & shows  ►", opens = { Feeds.comingSoon() })
             }
             // Setup items (add-ons, export/import, device check, about) live inside Settings.
             rows += Row("Settings", "►", opens = { Settings.screen() })

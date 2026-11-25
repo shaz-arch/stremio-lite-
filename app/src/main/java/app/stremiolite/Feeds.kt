@@ -135,7 +135,14 @@ object Feeds {
 
     // ---- Coming soon -------------------------------------------------------------------------
 
-    fun comingSoon(app: MainActivity): Screen {
+    /** Coming soon: a menu of Films and Shows. */
+    fun comingSoon(app: MainActivity): Screen = Screen("Coming soon", listOf(
+        Row("Films", "cinema releases, this week and later  ►", opens = { comingList(app, "movie") }),
+        Row("Shows", "new series starting soon  ►", opens = { comingList(app, "series") }),
+    )).also { it.key = "coming-soon" }
+
+    private fun comingList(app: MainActivity, type: String): Screen {
+        val films = type == "movie"
         lateinit var s: Screen
         var entries: List<ComingSoon.Entry>? = null
         var pending = false
@@ -145,14 +152,14 @@ object Feeds {
             pending = false
             val list = entries
             val addons = Home.allAddons()
-            val chosen = Settings.comingFrom(app)
-            val used = ComingSoon.catalogs(addons, chosen)
+            val chosen = Settings.comingFrom(app, type)
+            val used = ComingSoon.catalogs(addons, chosen, type)
             val rows = mutableListOf<Row>()
-            rows += Row("From", (if (used.isEmpty()) "none" else used.joinToString(" + ") { it.second.name }) + "  ►", opens = { chooseList(app) })
+            rows += Row("From", (if (used.isEmpty()) "none" else used.joinToString(" + ") { it.second.name }) + "  ►", opens = { chooseList(app, type) })
             when {
                 list == null -> rows += Row("Looking at what's coming…")
                 used.isEmpty() -> {
-                    rows += Row("None of your catalogues has an Upcoming or In Cinemas list.")
+                    rows += Row(if (films) "None of your catalogues has an Upcoming or In Cinemas list." else "None of your catalogues has a list of new or coming series.")
                     rows += Row("Pick any film list with From, or tick Releases in Your rows (AIOMetadata).")
                 }
                 list.isEmpty() -> rows += Row("Nothing in that list just now.")
@@ -173,17 +180,17 @@ object Feeds {
 
         fun soon() { if (!pending) { pending = true; Net.later(if (app.isPhone) 600L else 1200L) { build() } } }
 
-        s = Screen("Coming soon", listOf(Row("Looking at what's coming…")))
-        s.key = "coming-soon"
+        s = Screen(if (films) "Coming soon: films" else "Coming soon: shows", listOf(Row("Looking at what's coming…")))
+        s.key = "coming-soon-$type"
         s.onShow = {
             val addons = Home.allAddons()
-            val chosen = Settings.comingFrom(app)
+            val chosen = Settings.comingFrom(app, type)
             if (loadedFrom == chosen && entries != null) build()
             else {
                 loadedFrom = chosen
                 entries = null
                 build()
-                Net.async({ ComingSoon.entries(addons, chosen) }) { r ->
+                Net.async({ ComingSoon.entries(addons, chosen, type) }) { r ->
                     entries = r.getOrDefault(emptyList())
                     build()
                     // Dates one at a time, so the stick stays responsive.
@@ -200,15 +207,15 @@ object Feeds {
     }
 
     /** Which film list Coming soon reads: automatic (Upcoming and In Cinemas), or any one you pick. */
-    private fun chooseList(app: MainActivity): Screen {
-        val chosen = Settings.comingFrom(app)
+    private fun chooseList(app: MainActivity, type: String): Screen {
+        val chosen = Settings.comingFrom(app, type)
         val rows = mutableListOf(
-            Row("Automatic: Releases (or Upcoming and In Cinemas)", if (chosen.isEmpty()) "✓" else "", action = { Settings.setComingFrom(app, ""); app.back() }),
-            Row("──── Or one of your film lists ────"),
+            Row("Automatic: Releases" + if (type == "movie") " (or Upcoming and In Cinemas)" else "", if (chosen.isEmpty()) "✓" else "", action = { Settings.setComingFrom(app, type, ""); app.back() }),
+            Row(if (type == "movie") "──── Or one of your film lists ────" else "──── Or one of your show lists ────"),
         )
-        ComingSoon.choices(Home.allAddons()).forEach { (a, c) ->
+        ComingSoon.choices(Home.allAddons(), type).forEach { (a, c) ->
             val k = Folders.rowKey(a, c)
-            rows += Row(c.name, if (k == chosen) "✓" else "", action = { Settings.setComingFrom(app, k); app.back() })
+            rows += Row(c.name, if (k == chosen) "✓" else "", action = { Settings.setComingFrom(app, type, k); app.back() })
         }
         return Screen("Coming soon from", rows)
     }
