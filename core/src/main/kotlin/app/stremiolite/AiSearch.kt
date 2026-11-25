@@ -24,8 +24,9 @@ object AiSearch {
         var lastError: String? = null
         for (a in installs(addons)) {
             val type = a.catalogs.firstOrNull { isAiCatalog(it) }?.type ?: "other"
-            val text = runCatching { Http.get("${a.base}/catalog/$type/$CATALOG/search=$q.json", timeoutMs = 60_000, allowErrors = true) }
-                .getOrElse { lastError = it.message; continue }
+            val got = runCatching { Http.get("${a.base}/catalog/$type/$CATALOG/search=$q.json", timeoutMs = 60_000, allowErrors = true) }
+            val text = got.getOrNull()
+            if (text == null) { lastError = got.exceptionOrNull()?.message; continue }
             val o = runCatching { JSONObject(text) }.getOrNull() ?: continue
             o.optString("error").takeIf { it.isNotBlank() }?.let { lastError = it }
             val metas = MetaParse.parse(text)
