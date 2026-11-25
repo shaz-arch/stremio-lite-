@@ -13,7 +13,10 @@ object StreamsSetup {
         fun keys() = Settings.debridKeys(app)
         fun build(): List<Row> {
             val k = keys()
-            val rows = mutableListOf(
+            val rows = if (keysOnly) mutableListOf(
+                Row("Your debrid accounts, in the order your streams use them."),
+                Row("Each key is checked as soon as you enter it."),
+            ) else mutableListOf(
                 Row("Makes an AIOStreams install with the stick-tuned settings,"),
                 Row("on ElfHosted's free server, with your debrid services,"),
                 Row("and adds it to your Stremio account."),

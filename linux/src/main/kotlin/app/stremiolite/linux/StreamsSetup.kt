@@ -11,7 +11,9 @@ object StreamsSetup {
         lateinit var s: Screen
         fun build(): List<Row> {
             val k = Prefs.debridKeys
-            val rows = mutableListOf(
+            val rows = if (keysOnly) mutableListOf(
+                Row("Your debrid accounts, in the order your streams use them. Each key is checked as soon as you enter it."),
+            ) else mutableListOf(
                 Row("Makes an AIOStreams install with the stick-tuned settings, on ElfHosted's free server,"),
                 Row("with your debrid services, and adds it to your Stremio account."),
                 Row("──── Your debrid services ────"),
