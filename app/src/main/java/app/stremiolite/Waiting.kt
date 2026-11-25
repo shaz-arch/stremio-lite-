@@ -176,7 +176,12 @@ object Waiting {
         val now = System.currentTimeMillis()
         // Plain entries: any stream that plays. "Better version" entries: one clearly better than before.
         val got = HashMap<String, String>()
+        val tmdb = Settings.tmdbKey(c)
+        val today = ComingSoon.today(now)
         pending.forEach { e ->
+            // Only in cinemas, digital later: anything found now is a fake or a cam, not "ready".
+            if (tmdb.isNotBlank() && e.type == "movie" &&
+                runCatching { WhereToWatch.load(tmdb, "movie", e.id, "", Settings.watchRegion(c)).notOutYet(today) }.getOrDefault(false)) return@forEach
             if (e.better) runCatching { StreamParse.betterThan(addons, e.type, e.id, e.bar) }.getOrNull()?.let { got[e.id] = it.first.summary.replace(Regex("\\s+"), " ").trim() }
             else if (runCatching { StreamParse.availableNow(addons, e.type, e.id) }.getOrDefault(false)) got[e.id] = ""
         }

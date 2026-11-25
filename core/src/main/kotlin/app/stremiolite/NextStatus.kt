@@ -35,16 +35,20 @@ object NextStatus {
     }
 
     /** Works out [e]'s status (blocking) and remembers it. */
-    fun check(addons: List<Addon>, e: NextWatch.Entry, now: Long = System.currentTimeMillis()): Status {
+    fun check(addons: List<Addon>, e: NextWatch.Entry, now: Long = System.currentTimeMillis(), tmdbKey: String = "", region: String = "GB"): Status {
         val today = ComingSoon.today(now)
         val full = runCatching { MetaParse.fetch(metaFirst(addons), e.type, e.id) }.getOrNull()
-        val s = if (e.type == "series") show(addons, full, today) else film(addons, e, full, today)
+        val s = if (e.type == "series") show(addons, full, today) else film(addons, e, full, today, tmdbKey, region)
         known[e.id] = s to now
         return s
     }
 
-    private fun film(addons: List<Addon>, e: NextWatch.Entry, full: Full?, today: Long): Status {
+    private fun film(addons: List<Addon>, e: NextWatch.Entry, full: Full?, today: Long, tmdbKey: String, region: String): Status {
         val day = ComingSoon.day(full?.releasedDay.orEmpty())
+        // Not out to stream yet (only in cinemas, digital later): anything found now is a fake or a cam.
+        if (tmdbKey.isNotBlank()) runCatching { WhereToWatch.load(tmdbKey, "movie", e.id, "", region) }.getOrNull()?.let { w ->
+            if (w.notOutYet(today)) return Status(Group.SOON, w.notOutLabel(today), w.digitalFrom.takeIf { it > 0 } ?: Long.MAX_VALUE - 1)
+        }
         if (day > today) return Status(Group.SOON, "out " + ComingSoon.label(day), day)
         val n = playable(addons, "movie", e.id)
         if (n > 0) return Status(Group.READY, "ready")
@@ -66,11 +70,24 @@ object NextStatus {
         else Status(Group.WAITING, "$ep: no streams yet")
     }
 
+    /**
+     * What Waiting for streams says comes first: you asked to wait (no good copy yet, or for a
+     * better one) unless it has since found one. [waiting] gives (better?, ready time) for titles there.
+     */
+    fun effective(id: String, waiting: (String) -> Pair<Boolean, Long>?): Status? {
+        val s = of(id)
+        val w = waiting(id) ?: return s
+        val (better, ready) = w
+        if (ready > 0) return Status(Group.READY, if (better) "better version found" else "ready")
+        if (s?.group == Group.SOON) return s
+        return Status(Group.WAITING, if (better) "waiting for a better version" else "no streams yet")
+    }
+
     /** [list] grouped by status (unchecked ones last, as "checking…"), your order kept inside each group. */
-    fun grouped(list: List<NextWatch.Entry>): List<Pair<Group?, List<NextWatch.Entry>>> {
-        val by = list.groupBy { of(it.id)?.group }
+    fun grouped(list: List<NextWatch.Entry>, status: (String) -> Status? = { of(it) }): List<Pair<Group?, List<NextWatch.Entry>>> {
+        val by = list.groupBy { status(it.id)?.group }
         return Group.values().mapNotNull { g ->
-            by[g]?.let { items -> g to (if (g == Group.SOON) items.sortedBy { of(it.id)?.key ?: Long.MAX_VALUE } else items) }
+            by[g]?.let { items -> g to (if (g == Group.SOON) items.sortedBy { status(it.id)?.key ?: Long.MAX_VALUE } else items) }
         } + listOfNotNull(by[null]?.let { null to it })
     }
 }

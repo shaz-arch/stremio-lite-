@@ -52,7 +52,13 @@ object NextList {
         setByStatus(app, !byStatus(app)); app.replaceTop(screen(app))
     })
 
-    private fun detail(e: NextWatch.Entry): String = NextStatus.of(e.id)?.detail ?: "checking…"
+    /** A title's status, with what Waiting for streams says first (you asked to wait, or it found one). */
+    private fun statusOf(app: MainActivity): (String) -> NextStatus.Status? {
+        val w = Waiting.list(app).associate { it.id to (it.better to it.ready) }
+        return { id -> NextStatus.effective(id) { w[it] } }
+    }
+
+    private fun detail(st: NextStatus.Status?): String = st?.detail ?: "checking…"
 
     fun screen(app: MainActivity): Screen = if (byStatus(app)) statusScreen(app) else orderScreen(app)
 
@@ -63,11 +69,12 @@ object NextList {
             val list = all(app)
             val rows = mutableListOf(viewRow(app))
             if (list.isEmpty()) rows += Row("Nothing lined up. On a film or show, choose 'Add to Next watch'.")
-            NextStatus.grouped(list).forEach { (g, items) ->
+            val status = statusOf(app)
+            NextStatus.grouped(list, status).forEach { (g, items) ->
                 rows += Row("──── ${g?.heading ?: "Checking…"} ────")
                 items.forEach { e ->
-                    val st = NextStatus.of(e.id)
-                    rows += Row(Marks.title(st?.shape ?: Marks.NEXT, e.name), detail(e) + "  ►", action = { Details.screenFor(app, e.id, e.type, e.name, e.year)?.let { app.push(it) } })
+                    val st = status(e.id)
+                    rows += Row(Marks.title(st?.shape ?: Marks.NEXT, e.name), detail(st) + "  ►", action = { Details.screenFor(app, e.id, e.type, e.name, e.year)?.let { app.push(it) } })
                 }
             }
             if (list.isNotEmpty()) rows += Row("────────────────────")
@@ -90,8 +97,8 @@ object NextList {
                     else listOf(Row("In your order. Starting one moves it to Continue watching."))
             },
             items = all(app).toMutableList(),
-            label = { Marks.title(NextStatus.of(it.id)?.shape ?: Marks.NEXT, it.name) },
-            detail = { detail(it) },
+            label = { Marks.title(statusOf(app)(it.id)?.shape ?: Marks.NEXT, it.name) },
+            detail = { detail(statusOf(app)(it.id)) },
             open = { Details.screenFor(app, it.id, it.type, it.name, it.year) },
             commit = { save(app, it) },
         )
@@ -108,6 +115,8 @@ object NextList {
         val todo = NextStatus.missing(all(app))
         if (todo.isEmpty()) return
         val addons = Home.allAddons()
+        val key = Settings.tmdbKey(app)
+        val region = Settings.watchRegion(app)
         fun next(i: Int) {
             if (!app.inStack(s)) return
             if (app.playerOpen) { Net.later(10_000) { next(i) }; return }
@@ -115,7 +124,7 @@ object NextList {
                 Waiting.follow(app, all(app).filter { NextStatus.of(it.id)?.group?.let { g -> g != NextStatus.Group.READY } == true })
                 return
             }
-            Net.async({ NextStatus.check(addons, todo[i]) }) { _ -> if (app.inStack(s)) changed(); next(i + 1) }
+            Net.async({ NextStatus.check(addons, todo[i], System.currentTimeMillis(), key, region) }) { _ -> if (app.inStack(s)) changed(); next(i + 1) }
         }
         next(0)
     }

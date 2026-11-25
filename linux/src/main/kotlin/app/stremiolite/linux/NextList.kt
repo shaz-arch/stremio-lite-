@@ -51,7 +51,12 @@ object NextList {
         Prefs.nextView = if (byStatus()) "order" else "status"; App.replaceTop(screen())
     })
 
-    private fun detail(e: NextWatch.Entry): String = app.stremiolite.NextStatus.of(e.id)?.detail ?: "checking…"
+    private fun statusOf(): (String) -> app.stremiolite.NextStatus.Status? {
+        val w = Waiting.list().associate { it.id to (it.better to it.ready) }
+        return { id -> app.stremiolite.NextStatus.effective(id) { w[it] } }
+    }
+
+    private fun detail(st: app.stremiolite.NextStatus.Status?): String = st?.detail ?: "checking…"
 
     fun screen(): Screen = if (byStatus()) statusScreen() else orderScreen()
 
@@ -61,11 +66,12 @@ object NextList {
             val list = all()
             val rows = mutableListOf(viewRow())
             if (list.isEmpty()) rows += Row("Nothing lined up. On a film or show, choose 'Add to Next watch'.")
-            app.stremiolite.NextStatus.grouped(list).forEach { (g, items) ->
+            val status = statusOf()
+            app.stremiolite.NextStatus.grouped(list, status).forEach { (g, items) ->
                 rows += Row("──── ${g?.heading ?: "Checking…"} ────")
                 items.forEach { e ->
-                    val st = app.stremiolite.NextStatus.of(e.id)
-                    rows += Row(Marks.title(st?.shape ?: Marks.NEXT, e.name), detail(e) + "  ►", action = { Details.screenFor(e.id, e.type, e.name)?.let { App.push(it) } })
+                    val st = status(e.id)
+                    rows += Row(Marks.title(st?.shape ?: Marks.NEXT, e.name), detail(st) + "  ►", action = { Details.screenFor(e.id, e.type, e.name)?.let { App.push(it) } })
                 }
             }
             if (list.isNotEmpty()) rows += Row("────────────────────")
@@ -87,8 +93,8 @@ object NextList {
                     else listOf(Row("In your order. Starting one moves it to Continue watching."))
             },
             items = all().toMutableList(),
-            label = { Marks.title(app.stremiolite.NextStatus.of(it.id)?.shape ?: Marks.NEXT, it.name) },
-            detail = { detail(it) },
+            label = { Marks.title(statusOf()(it.id)?.shape ?: Marks.NEXT, it.name) },
+            detail = { detail(statusOf()(it.id)) },
             open = { Details.screenFor(it.id, it.type, it.name) },
             commit = { save(it) },
         )
@@ -108,7 +114,7 @@ object NextList {
                 Waiting.follow(all().filter { app.stremiolite.NextStatus.of(it.id)?.group?.let { g -> g != app.stremiolite.NextStatus.Group.READY } == true })
                 return
             }
-            App.async({ app.stremiolite.NextStatus.check(addons, todo[i]) }) { _ -> if (App.inStack(s)) changed(); next(i + 1) }
+            App.async({ app.stremiolite.NextStatus.check(addons, todo[i], System.currentTimeMillis(), Prefs.tmdbKey, Prefs.watchRegion) }) { _ -> if (App.inStack(s)) changed(); next(i + 1) }
         }
         next(0)
     }

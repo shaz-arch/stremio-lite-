@@ -26,7 +26,28 @@ object WhereToWatch {
         val link: String,
         /** One word or two for lists: "Netflix", "Disney+", "Cinemas", "Digital" ("" if unknown). */
         val where: String = "",
+        /** First cinema release (yours, else anywhere) and first digital or TV one (0 = none known). */
+        val cinemaFrom: Long = 0,
+        val digitalFrom: Long = 0,
     ) {
+        /**
+         * Not out to stream yet: its digital date is still ahead, or it opened in cinemas lately with
+         * none announced and isn't on a service. Copies found before then are fakes or cams.
+         */
+        fun notOutYet(today: Long): Boolean = when {
+            included.isNotEmpty() || rent.isNotEmpty() || buy.isNotEmpty() -> false
+            digitalFrom > today -> true
+            digitalFrom == 0L && cinemaFrom > 0 && today - cinemaFrom < 60 * 86_400_000L -> true
+            else -> false
+        }
+
+        /** "in cinemas · Netflix 23 Dec", "in cinemas" (for a film [notOutYet]). */
+        fun notOutLabel(today: Long): String {
+            val inCinemas = cinemaFrom in 1..today
+            val then = if (digitalFrom > today) (if (where.isNotBlank() && where != "Cinemas") where else "digital") + " " + ComingSoon.label(digitalFrom) else ""
+            return listOf(if (inCinemas) "in cinemas" else "", then).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { "not out to stream yet" }
+        }
+
         val nothing get() = released.isEmpty() && included.isEmpty() && free.isEmpty() && rent.isEmpty() && buy.isEmpty()
     }
 
@@ -103,6 +124,8 @@ object WhereToWatch {
                 names(o, region, "buy"),
                 o.optJSONObject("watch/providers")?.optJSONObject("results")?.optJSONObject(region)?.optString("link").orEmpty(),
                 if (tv) showWhere(o) else filmWhere(o, region, included),
+                if (tv) 0 else firstDate(o, region, setOf(2, 3)),
+                if (tv) 0 else firstDate(o, region, setOf(4, 6)),
             )
             cache[ck] = System.currentTimeMillis() to info
             failed.remove(ck)
@@ -111,6 +134,16 @@ object WhereToWatch {
             failed[ck] = if (e is KeyRefused) "TMDB didn't accept your key" else Guide.why(e)
             throw e
         }
+    }
+
+    /** The earliest release of [types] in [region], or anywhere if [region] has none (UTC day, 0 = none). */
+    private fun firstDate(o: JSONObject, region: String, types: Set<Int>): Long {
+        val all = o.optJSONObject("release_dates")?.optJSONArray("results") ?: return 0
+        val countries = (0 until all.length()).mapNotNull { all.optJSONObject(it) }
+        fun days(c: JSONObject) = c.optJSONArray("release_dates")?.let { a -> (0 until a.length()).mapNotNull { a.optJSONObject(it) } }.orEmpty()
+            .filter { it.optInt("type") in types }.map { ComingSoon.day(it.optString("release_date")) }.filter { it > 0 }
+        val mine = countries.firstOrNull { it.optString("iso_3166_1") == region }?.let { days(it) }.orEmpty()
+        return (mine.ifEmpty { countries.flatMap { days(it) } }).minOrNull() ?: 0
     }
 
     private fun names(o: JSONObject, region: String, kind: String): List<String> {
