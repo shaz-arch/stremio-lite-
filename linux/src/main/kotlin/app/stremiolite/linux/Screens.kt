@@ -562,7 +562,7 @@ object Search {
         fun show(list: List<Pair<Addon, Meta>>?, error: String?) {
             val rows = mutableListOf(Row("\"$query\""), Row("────────────────────"))
             when {
-                error != null -> rows += Row("Couldn't ask: $error")
+                error != null -> { rows += Row("Couldn't ask: $error"); rows += Row("Check my AI setup", "►", opens = { AiCheck.screen() }) }
                 list.isNullOrEmpty() -> rows += Row("AI found nothing for that. Try describing it differently.")
                 else -> list.forEach { (a, m) -> rows += Catalogs.row(a, m) }
             }
@@ -1481,7 +1481,7 @@ fun keysScreen(): Screen {
                 "For asking AI in Search: start a search with \"ai\" and describe what you want.",
                 "Free from Google AI Studio (aistudio.google.com): Get API key.",
                 "Your rows keep the key they were made with: after changing it, use 'Put this key in my rows' below.",
-            ), { Prefs.geminiKey }, { Prefs.geminiKey = it }, after = { listOf(Row("Put this key in my rows", "►", action = { App.push(RowsSetup.useAiKey(Prefs.geminiKey)) })) })
+            ), { Prefs.geminiKey }, { Prefs.geminiKey = it }, after = { listOf(Row("Put this key in my rows", "►", action = { App.push(RowsSetup.useAiKey(Prefs.geminiKey)) }), Row("Check my AI setup", "►", opens = { AiCheck.screen() })) })
         }),
         Row("   Kept on this computer only."),
     )

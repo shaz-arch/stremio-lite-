@@ -316,6 +316,12 @@ object RowSetup {
         val search = config.optJSONObject("search") ?: JSONObject().also { config.put("search", it) }
         search.put("ai_enabled", key.isNotBlank())
         search.put("ai_trigger_keyword", AiSearch.TRIGGER)   // Ask AI puts this word first, so the two must agree
+        if (key.isNotBlank()) {
+            search.put("ai_provider", "gemini")
+            // Older servers default to models Google has retired for new keys: name one that's current.
+            val m = search.optString("ai_model")
+            if (m.isBlank() || m in AiSearch.RETIRED) search.put("ai_model", AiSearch.MODEL)
+        }
     }
 
     /** Puts the picks' keys into a configuration (blank keys are left blank). */

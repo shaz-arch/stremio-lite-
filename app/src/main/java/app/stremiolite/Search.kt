@@ -74,7 +74,7 @@ object Search {
         fun build() {
             val rows = mutableListOf(Row("\"$query\""), Row("Ask again", action = { askAi(app) }), Row("────────────────────"))
             when {
-                error != null -> rows += Row("Couldn't ask: $error")
+                error != null -> { rows += Row("Couldn't ask: $error"); rows += Row("Check my AI setup", "►", opens = { AiCheck.screen(app) }) }
                 found == null -> rows += Row("Asking AI… (this can take a few seconds)")
                 found!!.isEmpty() -> rows += Row("AI found nothing for that. Try describing it differently.")
                 else -> found!!.forEach { rows += row(app, it) }

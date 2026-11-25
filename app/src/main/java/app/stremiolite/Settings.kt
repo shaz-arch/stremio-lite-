@@ -232,7 +232,10 @@ object Settings {
                     "Free from Google AI Studio (aistudio.google.com): Get API key.",
                     "Your rows keep the key they were made with: after changing it,",
                     "use 'Put this key in my rows' below. AI only runs when you Ask AI.",
-                ), { geminiKey(app) }, { setGeminiKey(app, it) }, after = { listOf(Row("Put this key in my rows", "►", action = { app.push(RowsSetup.useAiKey(app, geminiKey(app))) })) })
+                ), { geminiKey(app) }, { setGeminiKey(app, it) }, after = { listOf(
+                    Row("Put this key in my rows", "►", action = { app.push(RowsSetup.useAiKey(app, geminiKey(app))) }),
+                    Row("Check my AI setup", "►", opens = { AiCheck.screen(app) }),
+                ) })
             }),
             Row("   Kept on this device only."),
         )
