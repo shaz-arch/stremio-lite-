@@ -34,7 +34,7 @@ object Home {
     fun screen(app: MainActivity): Screen {
         // Just the profile's name (the email stays in Switch profile).
         fun whoText() = Profiles.current(app)?.name ?: "…"
-        val who = Row(whoText(), if (KidsGuard.locked(app)) "current · locked 🔒" else "current")
+        val who = Row(whoText(), if (KidsGuard.locked(app)) "current · locked" else "current")
         val addonsRow = Row("Your add-ons", "", opens = { addonList(app) })
         val status = Row("")
         lateinit var screen: Screen
@@ -70,7 +70,7 @@ object Home {
             val list = addons
             addonsRow.detail = if (list != null) "${list.size}  ►" else ""
             who.label = whoText()
-            who.detail = if (KidsGuard.locked(app)) "current · locked 🔒" else "current"
+            who.detail = if (KidsGuard.locked(app)) "current · locked" else "current"
             sleepRow.detail = Sleep.summary() + "  ►"
             screen.tag = Profiles.current(app)?.name ?: ""
             val rows = mutableListOf<Row>()

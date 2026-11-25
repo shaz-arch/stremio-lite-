@@ -117,7 +117,7 @@ object KidsGuard {
                     askNewPin(app) { pin -> save(app, s.withPin(pin).lock(p.id)); app.toast("${p.name} is locked"); screen.rows = build(); app.refresh(screen) }
                 })
             } else {
-                rows += if (s.isLocked(p.id)) Row(info(p.name, "locked 🔒"), "unlock", action = {
+                rows += if (s.isLocked(p.id)) Row(info(p.name, "locked"), "unlock", action = {
                     askPin(app, "Parent PIN to unlock ${p.name}") { save(app, state(app).unlock(p.id)); app.toast("${p.name} is unlocked"); screen.rows = build(); app.refresh(screen) }
                 }) else Row(info(p.name, "not locked"), "lock", action = {
                     save(app, s.lock(p.id)); app.toast("${p.name} is locked"); screen.rows = build(); app.refresh(screen)

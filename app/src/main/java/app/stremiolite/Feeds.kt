@@ -154,7 +154,6 @@ object Feeds {
             val used = ComingSoon.catalogs(addons, chosen, type)
             val rows = mutableListOf<Row>()
             rows += Row("From", (if (used.isEmpty()) "none" else used.joinToString(" + ") { it.second.name }) + "  ►", opens = { chooseList(app, type) })
-            if (films) rows += Row("⏰ = you'll be told when it can be streamed (open a film to set it)")
             when {
                 list == null -> rows += Row("Looking at what's coming…")
                 used.isEmpty() -> {
@@ -169,7 +168,7 @@ object Feeds {
                 ComingSoon.groups(list).forEach { (name, group) ->
                     rows += Row("──── $name ────")
                     group.forEach { e ->
-                        rows += Row(e.meta.name, (if (films && Waiting.has(app, e.meta.id)) "⏰ " else "") + (if (e.date > 0) ComingSoon.label(e.date) else e.meta.year), opens = { Details.screen(app, e.addon, e.meta) })
+                        rows += Row(e.meta.name, (if (films && Waiting.has(app, e.meta.id)) "◷ " else "") + (if (e.date > 0) ComingSoon.label(e.date) else e.meta.year), opens = { Details.screen(app, e.addon, e.meta) })
                     }
                 }
             }

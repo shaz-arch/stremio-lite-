@@ -24,7 +24,7 @@ class Stream(
     val seeders: Int = 0,
 ) {
     val summary: String
-        get() = listOf(quality.padEnd(5), tags, audio, size, provider, if (seeders > 0 && cached != true) "👤$seeders" else "")
+        get() = listOf(quality.padEnd(5), tags, audio, size, provider, if (seeders > 0 && cached != true) "$seeders seeds" else "")
             .filter { it.isNotBlank() }.joinToString("  ")
 
     /** The release group (e.g. "NTB" in "Show.S01E02.1080p.WEB-DL-NTB.mkv"), if one can be seen. */
