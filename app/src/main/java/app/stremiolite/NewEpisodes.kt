@@ -181,10 +181,42 @@ object NewEpisodes {
         play = { app.push(Details.playEpisode(app, f.show, f.ep)) },
     )
 
+    // ---- the "New episode" line at the top of Home ---------------------------------------------
+
+    private fun seenPrefs(c: Context) = Profiles.prefsFor(c, "settings")
+
+    /** Episodes out in the last few days, not watched and not yet seen here, newest first. */
+    private fun unseen(c: Context): List<Found> {
+        val seen = ReadyNotice.readSeen(seenPrefs(c).getString("epSeen", null))
+        return fulls.flatMap { sh -> Releases.recent(sh).map { Found(sh, it) } }
+            .filter { it.ep.id !in seen && History.progress(c, it.ep.id)?.done != true }
+            .sortedWith(compareByDescending<Found> { it.ep.released }.thenBy { it.show.name }.thenBy { it.ep.episode })
+    }
+
+    /** You've looked: the line goes until another episode comes out. */
+    fun markSeen(c: Context) {
+        val now = fulls.flatMap { sh -> Releases.recent(sh).map { it.id } }
+        if (now.isEmpty()) return
+        val p = seenPrefs(c)
+        p.edit().putString("epSeen", ReadyNotice.writeSeen(ReadyNotice.readSeen(p.getString("epSeen", null)), now)).apply()
+    }
+
+    fun homeRow(app: MainActivity): Row? {
+        val new = unseen(app)
+        val label = ReadyNotice.episodesLabel(new.map { it.show.name to epLabel(it.ep) }) ?: return null
+        return Row(label, "►", action = {
+            markSeen(app)
+            app.push(if (new.size == 1) Details.episodeScreen(app, new[0].show, new[0].ep) else screen(app))
+        })
+    }
+
+    private fun epLabel(v: Video) = Details.epLabel(v)
+
     fun screen(app: MainActivity): Screen {
         val status = Row("")
         lateinit var screen: Screen
         fun build() {
+            markSeen(app)   // looking at the list clears the line on Home
             val rows = mutableListOf(status)
             val list = fulls.flatMap { sh -> Releases.recent(sh).map { Found(sh, it) } }
                 .sortedWith(compareByDescending<Found> { it.ep.released }.thenBy { it.show.name }.thenBy { it.ep.episode })

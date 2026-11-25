@@ -15,4 +15,26 @@ object ReadyNotice {
         2 -> "Ready to watch: ${names[0]} and ${names[1]}"
         else -> "Ready to watch: ${names[0]} and ${names.size - 1} more"
     }
+
+    /**
+     * New episodes not yet seen, as (show name, "S03E04") newest first:
+     * "New episode: The Bear S03E04", "New episodes: The Bear (3)",
+     * "New episodes: The Bear and Slow Horses", "New episodes: The Bear and 2 more shows".
+     */
+    fun episodesLabel(eps: List<Pair<String, String>>): String? {
+        if (eps.isEmpty()) return null
+        if (eps.size == 1) return "New episode: ${eps[0].first} ${eps[0].second}"
+        val shows = eps.map { it.first }.distinct()
+        return when (shows.size) {
+            1 -> "New episodes: ${shows[0]} (${eps.size})"
+            2 -> "New episodes: ${shows[0]} and ${shows[1]}"
+            else -> "New episodes: ${shows[0]} and ${shows.size - 1} more shows"
+        }
+    }
+
+    /** The episode ids already seen, stored as one line (newest kept, so it never grows much). */
+    fun readSeen(raw: String?): Set<String> = raw.orEmpty().split('|').filter { it.isNotEmpty() }.toSet()
+
+    fun writeSeen(old: Set<String>, add: Collection<String>): String =
+        (add.toList() + old.filter { it !in add }).take(400).joinToString("|")
 }

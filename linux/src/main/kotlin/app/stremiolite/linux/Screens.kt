@@ -176,6 +176,7 @@ object Home {
             val list = addons
             val rows = mutableListOf<Row>()
             Waiting.homeRow()?.let { rows += it }
+            NewEpisodes.homeRow()?.let { rows += it }
             Updates.homeRow()?.let { rows += it }
             if (rows.isNotEmpty()) rows += Row("────────────────────")
             status.label = when {
@@ -1287,10 +1288,37 @@ object NewEpisodes {
         },
     )
 
+    /** Episodes out in the last few days, not watched and not yet seen here, newest first. */
+    private fun unseen(): List<Found> {
+        val seen = app.stremiolite.ReadyNotice.readSeen(Prefs.episodesSeen)
+        return fulls.flatMap { sh ->
+            val done = Lib.watchedEpisodes(sh.id, MetaParse.stremioOrder(sh))
+            app.stremiolite.Releases.recent(sh).filter { it.id !in seen && it.id !in done }.map { Found(sh, it) }
+        }.sortedWith(compareByDescending<Found> { it.ep.released }.thenBy { it.show.name }.thenBy { it.ep.episode })
+    }
+
+    fun markSeen() {
+        val now = fulls.flatMap { sh -> app.stremiolite.Releases.recent(sh).map { it.id } }
+        if (now.isEmpty()) return
+        Prefs.episodesSeen = app.stremiolite.ReadyNotice.writeSeen(app.stremiolite.ReadyNotice.readSeen(Prefs.episodesSeen), now)
+    }
+
+    /** The "New episode" line at the top of Home, or null. */
+    fun homeRow(): Row? {
+        if (!cacheRead) readCache()
+        val new = unseen()
+        val label = app.stremiolite.ReadyNotice.episodesLabel(new.map { it.show.name to MetaParse.epLabel(it.ep) }) ?: return null
+        return Row(label, "►", action = {
+            markSeen()
+            App.push(if (new.size == 1) Details.screenFor(new[0].show.id, "series", new[0].show.name) else screen())
+        })
+    }
+
     fun screen(): Screen {
         val status = Row("Finding the shows you follow…")
         lateinit var s: Screen
         fun build() {
+            markSeen()   // looking at the list clears the line on Home
             val R = app.stremiolite.Releases
             val list = fulls.flatMap { sh -> R.recent(sh).map { Found(sh, it) } }
                 .sortedWith(compareByDescending<Found> { it.ep.released }.thenBy { it.show.name }.thenBy { it.ep.episode })

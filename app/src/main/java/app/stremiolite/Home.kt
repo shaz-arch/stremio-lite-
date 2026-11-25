@@ -91,6 +91,7 @@ object Home {
             val lib = History.library(app)
             // One line at the top for each kind of news: a film ready to watch, then an update.
             var top = 0
+            NewEpisodes.homeRow(app)?.let { rows.add(0, it); top++ }
             Waiting.homeRow(app)?.let { rows.add(0, it); top++ }
             Updates.available?.let { n ->
                 rows.add(0, Row("Update available: build $n. Press OK to install", "►", action = { Updates.install(app) }))
