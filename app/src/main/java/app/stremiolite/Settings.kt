@@ -242,6 +242,34 @@ object Settings {
     fun liveOf(p: android.content.SharedPreferences) =
         LiveTv.Bundle(LiveTv.playlists(p.getString("playlists", null)), LiveTv.favourites(p.getString("liveFavs", null)), p.getString("liveGuide", "") ?: "")
 
+    // ---- keys -------------------------------------------------------------------------------
+
+    /** TorBox and MDBList keys, remembered on this device for the next setup (never synced or shared). */
+    fun torboxKey(c: Context): String = prefs(c).getString("torboxKey", "") ?: ""
+    fun setTorboxKey(c: Context, k: String) { prefs(c).edit().putString("torboxKey", k).apply() }
+    fun mdblistKey(c: Context): String = prefs(c).getString("mdblistKey", "") ?: ""
+    fun setMdblistKey(c: Context, k: String) { prefs(c).edit().putString("mdblistKey", k).apply() }
+
+    class Keys(val tmdb: String, val region: String, val torbox: String, val mdblist: String) {
+        val names get() = listOfNotNull(if (tmdb.isNotBlank()) "TMDB" else null, if (torbox.isNotBlank()) "TorBox" else null, if (mdblist.isNotBlank()) "MDBList" else null)
+        val isEmpty get() = names.isEmpty()
+    }
+
+    fun keysOf(p: android.content.SharedPreferences) = Keys(
+        p.getString("tmdbKey", "") ?: "", p.getString("watchRegion", "GB") ?: "GB",
+        p.getString("torboxKey", "") ?: "", p.getString("mdblistKey", "") ?: "",
+    )
+
+    /** Copies the keys [k] has into a profile's settings (blank ones leave its own); [send] syncs the TMDB key now. */
+    fun putKeys(p: android.content.SharedPreferences, k: Keys, c: Context?, send: Boolean) {
+        val e = p.edit()
+        if (k.tmdb.isNotBlank()) e.putString("tmdbKey", k.tmdb).putString("watchRegion", k.region).putBoolean("pendingSync", !send)
+        if (k.torbox.isNotBlank()) e.putString("torboxKey", k.torbox)
+        if (k.mdblist.isNotBlank()) e.putString("mdblistKey", k.mdblist)
+        e.apply()
+        if (send && c != null && k.tmdb.isNotBlank()) { WhereToWatch.forget(); syncOut(c) }
+    }
+
     /** Writes [b] into a profile's settings; [send] syncs it now (the current profile), otherwise on its next start. */
     fun putLive(p: android.content.SharedPreferences, b: LiveTv.Bundle, c: Context?, send: Boolean) {
         p.edit().putString("playlists", LiveTv.playlistsJson(b.playlists)).putString("liveFavs", LiveTv.favouritesJson(b.favourites))

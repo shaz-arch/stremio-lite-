@@ -153,6 +153,14 @@ object Prefs {
         set(v) { data().put("comingFromShows", v); save() }
 
     /** Your TMDB key, for Where to watch (synced, never shared). */
+    /** TorBox and MDBList keys, remembered on this computer for the next setup (not in SHARED: never synced). */
+    var torboxKey: String
+        get() = data().optString("torboxKey", "")
+        set(v) { data().put("torboxKey", v); save() }
+    var mdblistKey: String
+        get() = data().optString("mdblistKey", "")
+        set(v) { data().put("mdblistKey", v); save() }
+
     var tmdbKey: String
         get() = data().optString("tmdbKey", "")
         set(v) { data().put("tmdbKey", v); save(); app.stremiolite.WhereToWatch.forget() }

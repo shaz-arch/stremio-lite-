@@ -6,7 +6,7 @@ import android.widget.EditText
 /** Settings › Your streams: create an AIOStreams install tuned for Stremonino, with your TorBox key. */
 object StreamsSetup {
     fun screen(app: MainActivity): Screen {
-        var torbox = ""
+        var torbox = Settings.torboxKey(app)
         val existing = Home.allAddons().filter { StreamSetup.isAioStreams(it) }
         var replace = existing.isNotEmpty()
         lateinit var s: Screen
@@ -18,7 +18,7 @@ object StreamsSetup {
             Row("TorBox key", (if (torbox.isBlank()) "not set" else "set ✓") + "  ►", opens = {
                 RowsSetup.keyScreen(app, "TorBox key", StreamSetup.TORBOX_KEY_PAGE, listOf(
                     "On torbox.app: Settings, then copy your API key.",
-                ), { torbox }, { torbox = it })
+                ), { torbox }, { torbox = it; Settings.setTorboxKey(app, it) })
             }),
             if (existing.isNotEmpty()) Row((if (replace) "✓ " else "   ") + "Replace my current AIOStreams", existing.size.toString(), action = {
                 replace = !replace; s.rows = build(); app.refresh(s)

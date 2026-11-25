@@ -225,6 +225,34 @@ object Profiles {
                 })
             } + listOf(Row("────────────────────"), Row("Adds their playlists, favourites and guide link. ${p.name} keeps everything it already has.")))
         })
+        if (others.isNotEmpty()) rows += Row("Copy keys from another profile", "►", opens = {
+            Screen("Copy keys into ${p.name}", others.map { o ->
+                val theirs = runCatching { JSONObject(File(dirFor(o.id), "settings.json").readText()) }.getOrDefault(JSONObject())
+                val keys = listOf("tmdbKey" to "TMDB", "torboxKey" to "TorBox", "mdblistKey" to "MDBList").filter { theirs.optString(it.first).isNotBlank() }
+                Row("From ${o.name}", if (keys.isEmpty()) "no keys" else keys.joinToString(", ") { it.second } + "  ►", action = {
+                    if (keys.isEmpty()) { App.toast("${o.name} has no keys saved"); return@Row }
+                    if (current()?.id == p.id) {
+                        keys.forEach { (k, _) ->
+                            when (k) {
+                                "tmdbKey" -> { Prefs.tmdbKey = theirs.optString(k); Prefs.watchRegion = theirs.optString("watchRegion", "GB") }
+                                "torboxKey" -> Prefs.torboxKey = theirs.optString(k)
+                                "mdblistKey" -> Prefs.mdblistKey = theirs.optString(k)
+                            }
+                        }
+                        Prefs.syncOut()
+                    } else {
+                        // Not the profile in use: write its settings file; the TMDB key syncs next time it's used.
+                        val f = File(dirFor(p.id), "settings.json")
+                        val d = runCatching { JSONObject(f.readText()) }.getOrDefault(JSONObject())
+                        keys.forEach { (k, _) -> d.put(k, theirs.optString(k)) }
+                        if (keys.any { it.first == "tmdbKey" }) d.put("watchRegion", theirs.optString("watchRegion", "GB")).put("pendingSync", true)
+                        f.parentFile?.mkdirs(); f.writeText(d.toString(2))
+                    }
+                    App.toast("Copied ${keys.joinToString(", ") { it.second }} from ${o.name} to ${p.name}")
+                    App.back()
+                })
+            } + listOf(Row("────────────────────"), Row("TMDB (Where to watch, ages, Coming soon) with its region, and the TorBox and MDBList keys used in setup."), Row("Keys ${p.name} doesn't get from them stay as they are.")))
+        })
         rows += Row("Kids lock (parent PIN)", (if (KidsGuard.state().isLocked(p.id)) "locked" else "off") + "  ►", opens = { KidsGuard.screen(p) })
         rows += Row("────────────────────")
         rows += Row("Remove ${p.name} from this computer", action = {

@@ -6,7 +6,7 @@ import app.stremiolite.StreamSetup
 /** Settings › Your streams: create an AIOStreams install tuned for Stremonino, with your TorBox key. */
 object StreamsSetup {
     fun screen(): Screen {
-        var torbox = ""
+        var torbox = Prefs.torboxKey
         val existing = Home.all().filter { StreamSetup.isAioStreams(it) }
         var replace = existing.isNotEmpty()
         lateinit var s: Screen
@@ -18,7 +18,7 @@ object StreamsSetup {
             Row("TorBox key", (if (torbox.isBlank()) "not set" else "set ✓") + "  ►", opens = {
                 RowsSetup.keyScreen("TorBox key", StreamSetup.TORBOX_KEY_PAGE, listOf(
                     "On torbox.app: Settings, then copy your API key.",
-                ), { torbox }, { torbox = it })
+                ), { torbox }, { torbox = it; Prefs.torboxKey = it })
             }),
             if (existing.isNotEmpty()) Row((if (replace) "✓ " else "   ") + "Replace my current AIOStreams", existing.size.toString(), action = {
                 replace = !replace; s.rows = build(); App.refresh()

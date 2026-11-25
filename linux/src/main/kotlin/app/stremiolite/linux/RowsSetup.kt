@@ -35,6 +35,8 @@ object RowsSetup {
 
 
     private fun checklist(p: RowSetup.Picks, edit: AioRows.Loaded?, password: String?): Screen {
+        // A key remembered from an earlier setup on this computer is filled in.
+        if (p.mdblistKey.isBlank()) p.mdblistKey = Prefs.mdblistKey
         lateinit var s: Screen
         fun tick(on: Boolean) = if (on) "✓ " else "   "
         fun build(): List<Row> {
@@ -89,7 +91,7 @@ object RowsSetup {
                     "Free account at mdblist.com, then Preferences › API key.",
                     "Adds MDBList rows: Top 100 Today, IMDb Top 250, Certified Fresh,",
                     "Trending Kids, Bollywood releases and a few genre lists.",
-                ), { p.mdblistKey }, { p.mdblistKey = it })
+                ), { p.mdblistKey }, { p.mdblistKey = it; Prefs.mdblistKey = it })
             })
             rows += Row("Your own TMDB key", (if (p.tmdbKey.isNotBlank()) "set ✓" else "not needed") + "  ►", opens = {
                 keyScreen("TMDB key", RowSetup.TMDB_KEY_PAGE, listOf(

@@ -346,6 +346,22 @@ object Profiles {
                 } + listOf(Row("────────────────────"), Row("Adds their playlists, favourites and guide link."), Row("${p.name} keeps everything it already has.")))
             })
         }
+        if (others.isNotEmpty()) rows += Row("Copy keys from another profile", "►", opens = {
+            Screen("Copy keys into ${p.name}", others.map { o ->
+                val theirs = Settings.keysOf(settingsOf(app, o.id))
+                Row("From ${o.name}", if (theirs.isEmpty) "no keys" else theirs.names.joinToString(", ") + "  ►", action = {
+                    if (theirs.isEmpty) { app.toast("${o.name} has no keys saved"); return@Row }
+                    Settings.putKeys(settingsOf(app, p.id), theirs, app, send = current(app)?.id == p.id)
+                    app.toast("Copied ${theirs.names.joinToString(", ")} key${if (theirs.names.size > 1) "s" else ""} from ${o.name} to ${p.name}")
+                    app.back()
+                })
+            } + listOf(
+                Row("────────────────────"),
+                Row("TMDB (Where to watch, ages, Coming soon) with its region,"),
+                Row("and the TorBox and MDBList keys used in setup."),
+                Row("Keys ${p.name} doesn't get from them stay as they are."),
+            ))
+        })
         rows += Row("Sign ${p.name} in again", "►", opens = { signInAgain(app, p.id) })
         rows += Row("Kids lock (parent PIN)", (if (KidsGuard.state(app).isLocked(p.id)) "locked" else "off") + "  ►", opens = { KidsGuard.screen(app, p) })
         rows += Row("────────────────────")
