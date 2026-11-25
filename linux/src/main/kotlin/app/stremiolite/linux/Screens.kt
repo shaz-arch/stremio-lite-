@@ -686,6 +686,7 @@ object Details {
         DetailExtras.history(Lib.info(f.id)).forEach { (k, v) -> rows += Row(info(k, v)) }
         if (f.imdbUrl.isNotBlank()) rows += Row("IMDb page", "opens browser  ►", action = { WebLink.open(f.imdbUrl) })
         if (f.trailerUrl.isNotBlank()) rows += Row("Trailer", "opens browser  ►", action = { WebLink.open(f.trailerUrl) })
+        rows += watchRows(f)
         if (f.description.isNotBlank()) {
             rows += Row("────────────────────")
             MetaParse.wrap(f.description, App.columns()).forEach { rows += Row(it) }
@@ -758,13 +759,14 @@ object Details {
             // Picks up where you got to on another device (resume point, watched marks).
             Lib.pull(force = System.currentTimeMillis() - Lib.lastPull > 15_000) { full?.let { f -> if (App.isTop(s)) { s.rows = rows(f); App.refresh() } } }
             val f = full
-            if (f != null) { s.rows = rows(f); App.refresh() }
+            if (f != null) { s.rows = rows(f); App.refresh(); lookUpWatch(f, s) }
             else if (!started) {
                 started = true
                 App.async({ fetch(from, item.type, item.id) }) { r ->
                     r.onSuccess { loaded ->
                         full = loaded
                         s.rows = rows(loaded)
+                        lookUpWatch(loaded, s)
                         if (autoPlay && App.isTop(s)) {
                             val v = mainVideo(loaded)
                             val w = watchFor(loaded, v)
@@ -776,6 +778,52 @@ object Details {
             }
         }
         return s
+    }
+
+    /** Where to watch: how it was first released and where it's on now (needs your TMDB key). */
+    private fun watchRows(f: Full): List<Row> {
+        val W = app.stremiolite.WhereToWatch
+        if (f.type != "movie" && f.type != "series") return emptyList()
+        val region = Prefs.watchRegion
+        val where = W.regionName(region)
+        val head = Row("──── Where to watch ($where) ────")
+        if (Prefs.tmdbKey.isBlank()) return listOf(head, Row("Add a TMDB key to see this", "►", opens = { whereToWatchSettings() }))
+        val w = W.known(f.type, f.id, region)
+            ?: return listOf(head, Row(W.error(f.type, f.id, region)?.let { "Couldn't look it up: $it" } ?: "Looking it up…"))
+        val rows = mutableListOf(head)
+        w.released.forEach { (k, v) -> rows += Row(info(if (f.type == "movie") "Released: $k" else k, v)) }
+        fun line(label: String, names: List<String>) { if (names.isNotEmpty()) rows += Row(info(label, names.joinToString(", "))) }
+        line("Included with", w.included)
+        line("Free", w.free)
+        line("Rent", w.rent)
+        line("Buy", w.buy)
+        if (w.included.isEmpty() && w.free.isEmpty() && w.rent.isEmpty() && w.buy.isEmpty()) rows += Row("Not on any $where service just now.")
+        if (w.link.isNotBlank()) rows += Row("All the options", "opens browser  ►", action = { WebLink.open(w.link) })
+        rows += Row("Where-to-watch data from JustWatch, via TMDB.")
+        return rows
+    }
+
+    private fun lookUpWatch(f: Full, s: Screen) {
+        val W = app.stremiolite.WhereToWatch
+        val key = Prefs.tmdbKey
+        val region = Prefs.watchRegion
+        if (key.isBlank() || (f.type != "movie" && f.type != "series") || W.known(f.type, f.id, region) != null) return
+        App.async({ W.load(key, f.type, f.id, f.imdbUrl, region) }) { if (App.isTop(s)) { s.rows = rows(f); App.refresh() } }
+    }
+
+    /** Settings → Where to watch: your TMDB key and the country. */
+    fun whereToWatchSettings(): Screen {
+        val W = app.stremiolite.WhereToWatch
+        val region = Row("Country", "◄ ${W.regionName(Prefs.watchRegion)} ►")
+        region.action = {
+            Prefs.watchRegion = if (Prefs.watchRegion == "GB") "US" else "GB"; Prefs.syncOut()
+            region.detail = "◄ ${W.regionName(Prefs.watchRegion)} ►"; App.refresh()
+        }
+        return RowsSetup.keyScreen("TMDB key", W.KEY_PAGE, listOf(
+            "Shows how a title was first released (cinemas, Netflix, TV…) and where to watch it now,",
+            "on its details page. Free TMDB account, then Settings › API: copy the API key",
+            "(or the longer read access token). It follows your account.",
+        ), { Prefs.tmdbKey }, top = listOf(region, Row(""))) { Prefs.tmdbKey = it; Prefs.syncOut() }
     }
 
     private fun episodes(f: Full, season: Int, eps: List<Video>): Screen {
@@ -887,6 +935,7 @@ object Settings {
                 Row("Your rows (AIOMetadata)", "►", opens = { RowsSetup.screen() }),
                 Row("Your streams (AIOStreams)", "►", opens = { StreamsSetup.screen() }),
                 Row("Your add-ons", (Home.all().size.takeIf { it > 0 }?.let { "$it  " } ?: "") + "►", opens = { Addons.screen() }),
+                Row("Where to watch (TMDB key)", (if (Prefs.tmdbKey.isBlank()) "not set" else "set ✓ · ${app.stremiolite.WhereToWatch.regionName(Prefs.watchRegion)}") + "  ►", opens = { Details.whereToWatchSettings() }),
                 Row("──── Share ────"),
                 Row("Export my setup to another account", "►", opens = { Share.screen() }),
                 Row("Import a setup from another account", "►", opens = { Share.importScreen() }),

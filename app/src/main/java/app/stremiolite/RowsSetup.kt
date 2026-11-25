@@ -109,9 +109,9 @@ object RowsSetup {
     }
 
     /** One optional key: where to get it (link or QR code), and entering, changing or removing it. */
-    fun keyScreen(app: MainActivity, title: String, page: String, about: List<String>, get: () -> String, set: (String) -> Unit): Screen {
+    fun keyScreen(app: MainActivity, title: String, page: String, about: List<String>, get: () -> String, top: List<Row> = emptyList(), set: (String) -> Unit): Screen {
         lateinit var s: Screen
-        fun build(): List<Row> = about.map { Row(it) } + listOf(
+        fun build(): List<Row> = top + about.map { Row(it) } + listOf(
             Row(""),
             LinkOut.row(app, "Get your key", title, page),
             Row(if (get().isBlank()) "Enter the key" else "Change the key", if (get().isBlank()) "" else "…" + get().takeLast(4), action = {

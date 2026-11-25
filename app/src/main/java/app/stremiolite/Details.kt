@@ -61,6 +61,7 @@ object Details {
                 // Back from the player or an episode: redraw so resume points and marks are current.
                 quick.rows = rows(app, f)
                 app.refresh(quick)
+                lookUpWatch(app, f, quick)
             } else if (!started) {
                 started = true
                 Net.async({ fetch(from, item.type, item.id) }) { r ->
@@ -68,6 +69,7 @@ object Details {
                         full = loaded
                         if (loaded.videos.isNotEmpty()) History.applyAccountWatched(app, loaded.id, stremioOrder(loaded))
                         quick.rows = rows(app, loaded)
+                        lookUpWatch(app, loaded, quick)
                         val target = mainVideo(app, loaded)
                         if (autoPlay && target != null && app.isTop(quick)) {
                             app.refresh(quick)
@@ -310,6 +312,7 @@ object Details {
         DetailExtras.history(History.infos(app).firstOrNull { it.id == f.id }).forEach { (k, v) -> rows += Row(info(k, v)) }
         if (f.imdbUrl.isNotBlank()) rows += LinkOut.row(app, "IMDb page", "IMDb: ${f.name}", f.imdbUrl)
         if (f.trailerUrl.isNotBlank()) rows += LinkOut.row(app, "Trailer", "Trailer: ${f.name}", f.trailerUrl)
+        rows += watchRows(app, f)
         if (f.description.isNotBlank()) {
             rows += Row("────────────────────")
             Catalogs.wrap(f.description, app.columns()).forEach { rows += Row(it) }
@@ -317,6 +320,38 @@ object Details {
         rows += Row("────────────────────")
         rows += Row(info("Details from", f.source))
         return rows
+    }
+
+    /** Where to watch: how it was first released and where it's on now (needs your TMDB key). */
+    private fun watchRows(app: MainActivity, f: Full): List<Row> {
+        if (f.type != "movie" && f.type != "series") return emptyList()
+        val region = Settings.watchRegion(app)
+        val where = WhereToWatch.regionName(region)
+        val head = Row("──── Where to watch ($where) ────")
+        if (Settings.tmdbKey(app).isBlank()) return listOf(head, Row("Add a TMDB key to see this", "►", opens = { Settings.whereToWatch(app) }))
+        val w = WhereToWatch.known(f.type, f.id, region)
+            ?: return listOf(head, Row(WhereToWatch.error(f.type, f.id, region)?.let { "Couldn't look it up: $it" } ?: "Looking it up…"))
+        val rows = mutableListOf(head)
+        w.released.forEach { (k, v) -> rows += Row(info(if (f.type == "movie") "Released: $k" else k, v)) }
+        fun line(label: String, names: List<String>) { if (names.isNotEmpty()) rows += Row(info(label, names.joinToString(", "))) }
+        line("Included with", w.included)
+        line("Free", w.free)
+        line("Rent", w.rent)
+        line("Buy", w.buy)
+        if (w.included.isEmpty() && w.free.isEmpty() && w.rent.isEmpty() && w.buy.isEmpty()) rows += Row("Not on any $where service just now.")
+        if (w.link.isNotBlank()) rows += LinkOut.row(app, "All the options", "Where to watch: ${f.name}", w.link)
+        rows += Row("Where-to-watch data from JustWatch, via TMDB.")
+        return rows
+    }
+
+    /** Looks up Where to watch once the details are in (a quick TMDB call; kept a day). */
+    private fun lookUpWatch(app: MainActivity, f: Full, screen: Screen) {
+        val key = Settings.tmdbKey(app)
+        val region = Settings.watchRegion(app)
+        if (key.isBlank() || (f.type != "movie" && f.type != "series") || WhereToWatch.known(f.type, f.id, region) != null) return
+        Net.async({ WhereToWatch.load(key, f.type, f.id, f.imdbUrl, region) }) {
+            if (app.isTop(screen)) { screen.rows = rows(app, f); app.refresh(screen) }
+        }
     }
 
     /** ✓ for watched, time left for started. */

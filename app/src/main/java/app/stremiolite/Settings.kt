@@ -81,6 +81,9 @@ object Settings {
         // Your playlists follow the account, but never go out with "Share my setup".
         p.getString("playlists", null)?.let { o.put("playlists", it) }
         p.getString("liveFavs", null)?.let { o.put("liveFavs", it) }
+        // Your TMDB key follows your account (never "Share my setup").
+        p.getString("tmdbKey", null)?.let { o.put("tmdbKey", it) }
+        p.getString("watchRegion", null)?.let { o.put("watchRegion", it) }
         p.getString("liveGuide", null)?.let { o.put("liveGuide", it) }
         p.getString("liveFreeHide", null)?.let { o.put("liveFreeHide", it) }
         p.getString("newsFeeds", null)?.let { o.put("newsFeeds", it) }
@@ -119,6 +122,8 @@ object Settings {
         if (o.has("layout")) e.putString("layout", o.optString("layout"))
         if (o.has("playlists")) e.putString("playlists", o.optString("playlists"))
         if (o.has("liveFavs")) e.putString("liveFavs", o.optString("liveFavs"))
+        if (o.has("tmdbKey")) e.putString("tmdbKey", o.optString("tmdbKey"))
+        if (o.has("watchRegion")) e.putString("watchRegion", o.optString("watchRegion"))
         if (o.has("liveGuide")) e.putString("liveGuide", o.optString("liveGuide"))
         if (o.has("liveFreeHide")) e.putString("liveFreeHide", o.optString("liveFreeHide"))
         if (o.has("newsFeeds")) e.putString("newsFeeds", o.optString("newsFeeds"))
@@ -188,6 +193,34 @@ object Settings {
     fun gameStats(c: Context): String? = prefs(c).getString("games", null)
 
     fun setGameStats(c: Context, json: String) = prefs(c).edit().putString("games", json).apply()
+
+    /** Your TMDB key, for Where to watch on details pages ("" if none). */
+    fun tmdbKey(c: Context): String = prefs(c).getString("tmdbKey", "") ?: ""
+
+    fun setTmdbKey(c: Context, k: String) { prefs(c).edit().putString("tmdbKey", k).apply(); WhereToWatch.forget(); syncOut(c) }
+
+    /** The country for Where to watch: "GB" or "US". */
+    fun watchRegion(c: Context): String = prefs(c).getString("watchRegion", "GB") ?: "GB"
+
+    fun setWatchRegion(c: Context, r: String) { prefs(c).edit().putString("watchRegion", r).apply(); syncOut(c) }
+
+    /** Settings → Where to watch: your TMDB key and the country. */
+    fun whereToWatch(app: MainActivity): Screen {
+        lateinit var keys: Screen
+        val region = Row("Country", "◄ ${WhereToWatch.regionName(watchRegion(app))} ►")
+        region.action = {
+            setWatchRegion(app, if (watchRegion(app) == "GB") "US" else "GB")
+            region.detail = "◄ ${WhereToWatch.regionName(watchRegion(app))} ►"
+            app.refresh(keys)
+        }
+        keys = RowsSetup.keyScreen(app, "TMDB key", WhereToWatch.KEY_PAGE, listOf(
+            "Shows how a title was first released (cinemas, Netflix,",
+            "TV…) and where to watch it now, on its details page.",
+            "Free TMDB account, then Settings › API: copy the API key",
+            "(or the longer read access token). Follows your account.",
+        ), { tmdbKey(app) }, top = listOf(region, Row(""))) { setTmdbKey(app, it) }
+        return keys
+    }
 
     /** Channels played lately (this device only). */
     fun recent(c: Context): List<LiveTv.Channel> = LiveTv.favourites(prefs(c).getString("liveRecent", null))
@@ -366,6 +399,7 @@ object Settings {
                 Row("Your rows (AIOMetadata)", "►", opens = { RowsSetup.screen(app) }),
                 Row("Your streams (AIOStreams)", "►", opens = { StreamsSetup.screen(app) }),
                 Row("Your add-ons", (Home.addonCount()?.let { "$it  " } ?: "") + "►", opens = { Home.addonsScreen(app) }),
+                Row("Where to watch (TMDB key)", (if (tmdbKey(app).isBlank()) "not set" else "set ✓ · ${WhereToWatch.regionName(watchRegion(app))}") + "  ►", opens = { whereToWatch(app) }),
                 Row("──── Share ────"),
                 Row("Export my setup to another account", "►", opens = { Share.screen(app) }),
                 Row("Import a setup from another account", "►", opens = { Share.importScreen(app) }),

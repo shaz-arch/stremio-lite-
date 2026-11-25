@@ -148,6 +148,15 @@ object Prefs {
         get() = data().optString("comingFromShows", "")
         set(v) { data().put("comingFromShows", v); save() }
 
+    /** Your TMDB key, for Where to watch (synced, never shared). */
+    var tmdbKey: String
+        get() = data().optString("tmdbKey", "")
+        set(v) { data().put("tmdbKey", v); save(); app.stremiolite.WhereToWatch.forget() }
+    /** The country for Where to watch: "GB" or "US". */
+    var watchRegion: String
+        get() = data().optString("watchRegion", "GB")
+        set(v) { data().put("watchRegion", v); save() }
+
     /** Game scores (this profile, this computer: not in SHARED, so never synced). */
     var games: String?
         get() = data().optString("games").ifEmpty { null }
@@ -204,9 +213,9 @@ object Prefs {
     private const val SYNC_ID = "stremiolite:settings"
 
     /** Shared settings this build knows; one this computer has never had is always taken from the account. */
-    private val SHARED = listOf("theme", "subLang", "autoNext", "clock", "hideWatched", "layout", "autoFollow", "liveTv", "playlists", "liveFavs", "liveGuide", "liveFreeHide", "newsOn", "newsFeeds", "newsHide")
+    private val SHARED = listOf("theme", "subLang", "autoNext", "clock", "hideWatched", "layout", "autoFollow", "liveTv", "playlists", "liveFavs", "liveGuide", "liveFreeHide", "newsOn", "newsFeeds", "newsHide", "tmdbKey", "watchRegion")
     /** Synced with your own devices, but never sent to someone else with "Share my setup". */
-    private val NOT_SHARED = setOf("playlists", "liveFavs", "liveGuide")
+    private val NOT_SHARED = setOf("playlists", "liveFavs", "liveGuide", "tmdbKey")
     /** The look: shared by default, or kept to this computer ("lookLocal", which itself never syncs). */
     private val LOOK = setOf("theme", "clock")
 

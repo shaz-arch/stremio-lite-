@@ -108,9 +108,9 @@ object RowsSetup {
         return s
     }
 
-    fun keyScreen(title: String, page: String, about: List<String>, get: () -> String, set: (String) -> Unit): Screen {
+    fun keyScreen(title: String, page: String, about: List<String>, get: () -> String, top: List<Row> = emptyList(), set: (String) -> Unit): Screen {
         lateinit var s: Screen
-        fun build(): List<Row> = about.map { Row(it) } + listOf(
+        fun build(): List<Row> = top + about.map { Row(it) } + listOf(
             Row(""),
             Row("Get your key", "opens browser  ►", action = { WebLink.open(page) }),
             Row(if (get().isBlank()) "Enter the key" else "Change the key", if (get().isBlank()) "" else "…" + get().takeLast(4), action = {
