@@ -10,6 +10,7 @@ fun main(args: Array<String>) {
     Http.userAgent = "Stremonino/${Updates.current} (Linux)"
     Profiles.start()
     app.stremiolite.Guide.dir = java.io.File(Store.dir, "guides")
+    app.stremiolite.AgeRatings.dir = Store.root
     App.run(
         when {
             Profiles.all().size > 1 -> Profiles.chooser()

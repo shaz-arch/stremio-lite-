@@ -434,7 +434,7 @@ object Catalogs {
     fun detail(m: Meta): String {
         val kind = when (m.type) { "movie" -> "Movie"; "series" -> "Series"; else -> m.type }
         val rating = if (m.rating.isNotBlank()) "★ ${m.rating}" else ""
-        return "${m.year.take(9).padEnd(9)} ${rating.padEnd(6)} ${kind.padEnd(6)}"
+        return "${m.year.take(9).padEnd(9)} ${rating.padEnd(6)} ${app.stremiolite.AgeRatings.label(m.id).padEnd(5)} ${kind.padEnd(6)}"
     }
 
     fun mark(m: Meta): String? = mark(m.id, m.type)
@@ -508,6 +508,7 @@ object Catalogs {
                         if (page.isEmpty() || added == 0) ended = true
                     }.onFailure { e -> error = Net.describe(e) }
                     rebuild()
+                    RatingFill.fill(items) { if (App.inStack(s)) rebuild() }
                 }
             }
         }
@@ -553,6 +554,7 @@ object Search {
         val collections = HashSet<String>()
         var answered = 0
         var channels: List<app.stremiolite.LiveTv.Channel> = emptyList()
+        var rated = false
         fun row(p: Pair<Addon, Meta>): Row {
             val (a, m) = p
             return if (m.id in collections) Row(m.name, listOf(m.year, "Collection").filter { it.isNotBlank() }.joinToString("  ") + "  ►", opens = { Details.screen(a, m) })
@@ -580,6 +582,7 @@ object Search {
             group("Shows", g.shows)
             group("Other", g.other)
             if (answered >= sources.size && found.isEmpty() && channels.isEmpty() && sources.isNotEmpty()) rows += Row("Nothing found.")
+            if (answered >= sources.size && !rated) { rated = true; RatingFill.fill(found.values.map { it.second }) { if (App.inStack(s)) build() } }
             s.rows = rows
             App.refresh()
         }

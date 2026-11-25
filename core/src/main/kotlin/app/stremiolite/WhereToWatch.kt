@@ -51,7 +51,7 @@ object WhereToWatch {
     /** Throws [KeyRefused] if TMDB turns the key down (for the health check). */
     fun checkKey(key: String) { get(key, "/configuration") }
 
-    private fun get(key: String, path: String): JSONObject {
+    internal fun get(key: String, path: String): JSONObject {
         val bearer = key.startsWith("eyJ") // a TMDB "read access token" rather than the short API key
         val url = API + path + (if (bearer) "" else (if ('?' in path) "&" else "?") + "api_key=" + URLEncoder.encode(key, "UTF-8"))
         val c = URL(url).openConnection() as HttpURLConnection
@@ -70,7 +70,7 @@ object WhereToWatch {
     }
 
     /** TMDB's id for a title: from "tmdb:123", or by looking up its IMDb id ("tt…"). */
-    private fun tmdbId(key: String, tv: Boolean, id: String, imdbUrl: String): String? {
+    internal fun tmdbId(key: String, tv: Boolean, id: String, imdbUrl: String): String? {
         if (id.startsWith("tmdb:")) return id.removePrefix("tmdb:").substringBefore(':')
         val tt = Regex("tt\\d+").find(id)?.value ?: Regex("tt\\d+").find(imdbUrl)?.value ?: return null
         val r = get(key, "/find/$tt?external_source=imdb_id")
