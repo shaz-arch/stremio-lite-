@@ -98,6 +98,8 @@ object Settings {
         p.getString("liveFreeHide", null)?.let { o.put("liveFreeHide", it) }
         p.getString("newsFeeds", null)?.let { o.put("newsFeeds", it) }
         p.getString("newsHide", null)?.let { o.put("newsHide", it) }
+        // The profile's name, so every device signed in to this account shows the same one.
+        Profiles.current(c)?.name?.takeIf { it.isNotBlank() }?.let { o.put("profileName", it) }
         o.put("updated", now)
         p.edit().putLong("syncedAt", now).apply()
         item.put("name", o.toString()).put("removed", true).put("temp", false).put("_mtime", Sync.iso(now))
@@ -121,7 +123,11 @@ object Settings {
         }
         val o = runCatching { JSONObject(JSONObject(raw).optString("name")) }.getOrNull() ?: return false
         val updated = o.optLong("updated")
-        if (updated <= p.getLong("syncedAt", 0)) return false
+        if (updated <= p.getLong("syncedAt", 0)) {
+            // Set up before names were synced: a device that's synced before sends its profile name once.
+            if (!o.has("profileName") && p.getLong("syncedAt", 0) > 0) syncOut(c)
+            return false
+        }
         // The first time a device joins, keep the rows it had hidden as well as the account's.
         val first = p.getLong("syncedAt", 0) == 0L
         val remoteHidden = o.optJSONArray("hiddenRows")?.let { a -> (0 until a.length()).map { a.optString(it) }.toSet() } ?: emptySet()
@@ -138,6 +144,7 @@ object Settings {
         if (o.has("liveFreeHide")) e.putString("liveFreeHide", o.optString("liveFreeHide"))
         if (o.has("newsFeeds")) e.putString("newsFeeds", o.optString("newsFeeds"))
         if (o.has("newsHide")) e.putString("newsHide", o.optString("newsHide"))
+        if (o.has("profileName")) Profiles.takeName(c, o.optString("profileName"))
         e.putStringSet("hiddenRows", hidden)
         e.putLong("syncedAt", updated).apply()
         if (hidden != remoteHidden) syncOut(c)

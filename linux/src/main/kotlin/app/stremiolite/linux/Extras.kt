@@ -103,7 +103,11 @@ object Profiles {
                 val from = File(Store.dir, "settings.json")
                 val p = Profile(id, email.substringBefore('@').ifBlank { "Profile ${list.size + 1}" }, email)
                 dirFor(id).mkdirs()
-                if (id != "main" && from.isFile) runCatching { from.copyTo(File(dirFor(id), "settings.json"), overwrite = true) }
+                if (id != "main" && from.isFile) runCatching {
+                    // A copy of this profile's settings, but the new account's own synced settings (and name) win.
+                    val copy = JSONObject(from.readText()); copy.remove("syncedAt"); copy.remove("pendingSync")
+                    File(dirFor(id), "settings.json").writeText(copy.toString(2))
+                }
                 list += p
                 p
             }
@@ -126,7 +130,23 @@ object Profiles {
         App.resetTo(if (Account.authKey != null) Home.screen() else SignIn.screen())
     }
 
-    fun rename(id: String, name: String) = save(all().map { if (it.id == id) Profile(it.id, name, it.email) else it }, current()?.id)
+    fun rename(id: String, name: String) {
+        save(all().map { if (it.id == id) Profile(it.id, name, it.email) else it }, current()?.id)
+        // The name follows the account: now, or when that profile is next used.
+        if (current()?.id == id) Prefs.syncOut()
+        else runCatching {
+            val f = File(dirFor(id), "settings.json")
+            val d = if (f.isFile) JSONObject(f.readText()) else JSONObject()
+            f.parentFile?.mkdirs(); f.writeText(d.put("pendingSync", true).toString(2))
+        }
+    }
+
+    /** The account's name for the profile in use, from another device (no sync back). */
+    fun takeName(name: String) {
+        val cur = current() ?: return
+        if (name == cur.name) return
+        save(all().map { if (it.id == cur.id) Profile(it.id, name, it.email) else it }, cur.id)
+    }
 
     /** Signs [id] out of this computer: its sign-in and account caches go; the Stremio account stays. */
     fun remove(id: String) {

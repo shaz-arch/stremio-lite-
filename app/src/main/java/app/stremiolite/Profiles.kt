@@ -64,11 +64,22 @@ object Profiles {
         list += Profile(id, label, authKey, email.ifEmpty { same?.email ?: "" })
         write(c, list)
         select(c, id)
+        // A name typed here goes to the account; otherwise the account's name (from another device) is taken.
+        if (name.isNotBlank()) settingsOf(c, id).edit().putBoolean("pendingSync", true).apply()
         return list.last()
     }
 
     fun rename(c: Context, id: String, name: String) {
         write(c, all(c).map { if (it.id == id) Profile(it.id, name, it.authKey, it.email) else it })
+        // The name follows the account to other devices: now, or when that profile is next used.
+        if (current(c)?.id == id) Settings.syncOut(c) else settingsOf(c, id).edit().putBoolean("pendingSync", true).apply()
+    }
+
+    /** The account's name for the profile in use, from another device (no sync back). */
+    fun takeName(c: Context, name: String) {
+        val cur = current(c) ?: return
+        if (name.isBlank() || name == cur.name) return
+        write(c, all(c).map { if (it.id == cur.id) Profile(it.id, name, it.authKey, it.email) else it })
     }
 
     fun updateEmail(c: Context, email: String) {
@@ -106,6 +117,8 @@ object Profiles {
                     is Set<*> -> to.putStringSet(k, v.filterIsInstance<String>().toSet())
                 }
             }
+            // A new account takes its own synced settings (and name) if it has them, not this device's copy's age.
+            to.remove("syncedAt").remove("pendingSync")
             to.apply()
         }
     }

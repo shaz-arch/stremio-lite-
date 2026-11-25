@@ -282,8 +282,11 @@ object Prefs {
             if (d.opt(k) != o.opt(k)) { d.put(k, o.opt(k)); changed = true }
         }
         if (newer) o.optJSONArray("hiddenRows")?.let { d.put("hiddenRows", it); changed = true }
+        if (newer) o.optString("profileName").takeIf { it.isNotBlank() }?.let { Profiles.takeName(it) }
         if (newer) d.put("syncedAt", updated)
         save()
+        // Set up before names were synced: a computer that's synced before sends its profile name once.
+        if (!newer && !o.has("profileName") && syncedAt > 0) syncOut()
         return changed
     }
 
@@ -295,6 +298,8 @@ object Prefs {
         // Only settings chosen on this computer (or already taken from the account): never a default.
         val d = data()
         SHARED.forEach { k -> if (d.has(k) && shares(k)) o.put(k, d.opt(k)) }
+        // The profile's name, so every device signed in to this account shows the same one.
+        Profiles.current()?.name?.takeIf { it.isNotBlank() }?.let { o.put("profileName", it) }
         o.put("hiddenRows", JSONArray(hiddenRows.toList())).put("updated", now)
         syncedAt = now
         val item = raw ?: Sync.newItem(SYNC_ID, "other", "{}")
