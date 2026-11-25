@@ -307,7 +307,7 @@ object RowSetup {
 
     /**
      * Puts a Gemini key into a configuration and switches AIOMetadata's AI Search on (off when blank).
-     * AI only runs for searches starting with the trigger word ("ai" unless one is set), so ordinary
+     * AI only runs for searches starting with the trigger word "ai", so ordinary
      * searches, in Stremonino or Stremio's own apps, don't use your Gemini allowance.
      */
     fun setAiKey(config: JSONObject, key: String) {
@@ -315,7 +315,7 @@ object RowSetup {
         k.put("gemini", key.trim())
         val search = config.optJSONObject("search") ?: JSONObject().also { config.put("search", it) }
         search.put("ai_enabled", key.isNotBlank())
-        if (search.optString("ai_trigger_keyword").trim().length < 2) search.put("ai_trigger_keyword", AiSearch.TRIGGER)
+        search.put("ai_trigger_keyword", AiSearch.TRIGGER)   // Ask AI puts this word first, so the two must agree
     }
 
     /** Puts the picks' keys into a configuration (blank keys are left blank). */
