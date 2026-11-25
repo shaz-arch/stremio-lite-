@@ -117,6 +117,26 @@ object RowSetup {
         return (cat.isNotEmpty() && cat !in categories) || (!known && cat.isEmpty())
     }
 
+    /**
+     * Adds to an install the catalogue rows it doesn't have (switched off), so ticking a category
+     * always has rows to switch on. Installs made on AIOMetadata's own page, or from an older
+     * catalogue, can be missing whole categories. Returns how many were added.
+     */
+    fun complete(existing: JSONArray, r: Region): Int {
+        val have = HashSet<String>()
+        for (i in 0 until existing.length()) existing.optJSONObject(i)?.let { have += it.optString("id") + "|" + it.optString("type") }
+        val all = forRegion(r)
+        var added = 0
+        for (i in 0 until all.length()) {
+            val o = all.getJSONObject(i)
+            if (!have.add(o.optString("id") + "|" + o.optString("type"))) continue
+            o.put("enabled", false)
+            existing.put(o)
+            added++
+        }
+        return added
+    }
+
     /** Names of the rows in [existing] that are on and not in any category here. */
     fun others(existing: JSONArray): List<String> = (0 until existing.length()).mapNotNull { existing.optJSONObject(it) }
         .filter { it.optBoolean("enabled", true) && it.optString("mergedInto").isBlank() && isOther(it) }
@@ -270,7 +290,7 @@ object RowSetup {
             val o = catalogs.optJSONObject(i) ?: continue
             if (o.optString("id").contains(".us.") && o.optString("id").startsWith("flixpatrol.") && !o.optString("id").let { it.contains("hulu") || it.contains("peacock") || it.contains("starz") || it.contains("crunchyroll") }) us = true
             if (!o.optBoolean("enabled") || o.optString("mergedInto").isNotBlank()) continue
-            val (cat, svc) = group(o.optString("name"))
+            val (cat, svc) = group(nameOf(o))
             if (cat in categories) cats += cat
             svc?.let { svcs += it }
         }
@@ -278,7 +298,7 @@ object RowSetup {
         var extraGenre = false
         for (i in 0 until catalogs.length()) {
             val o = catalogs.optJSONObject(i) ?: continue
-            val n = o.optString("name")
+            val n = nameOf(o)
             if (o.optBoolean("enabled") && group(n).first == "Genres" && n.substringAfterLast(':').trim() !in coreGenres) extraGenre = true
         }
         var full = false

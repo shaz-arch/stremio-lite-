@@ -15,7 +15,12 @@ object RowsSetup {
         val rows = mutableListOf<Row>()
         if (aio.isNotEmpty()) {
             rows += Row("Categories and streaming services", "►", opens = {
-                RowPicker.entry { _, l, pw -> checklist(RowSetup.picksFrom(l.config), edit = l, password = pw) }
+                RowPicker.entry { _, l, pw ->
+                    // Read your ticks first, then add any catalogue rows the install is missing (switched off).
+                    val picks = RowSetup.picksFrom(l.config)
+                    RowSetup.complete(l.catalogs, picks.region)
+                    checklist(picks, edit = l, password = pw)
+                }
             })
             rows += Row("Switch single rows on or off", "►", opens = { RowPicker.entry() })
         }
