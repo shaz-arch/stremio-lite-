@@ -310,7 +310,7 @@ object RowSetup {
      * AI only runs for searches starting with the trigger word "ai", so ordinary
      * searches, in Stremonino or Stremio's own apps, don't use your Gemini allowance.
      */
-    fun setAiKey(config: JSONObject, key: String) {
+    fun setAiKey(config: JSONObject, key: String, model: String? = null) {
         val k = config.optJSONObject("apiKeys") ?: JSONObject().also { config.put("apiKeys", it) }
         k.put("gemini", key.trim())
         val search = config.optJSONObject("search") ?: JSONObject().also { config.put("search", it) }
@@ -320,7 +320,8 @@ object RowSetup {
             search.put("ai_provider", "gemini")
             // Older servers default to models Google has retired for new keys: name one that's current.
             val m = search.optString("ai_model")
-            if (m.isBlank() || m in AiSearch.RETIRED) search.put("ai_model", AiSearch.MODEL)
+            if (model != null) search.put("ai_model", model)       // one just seen answering
+            else if (m.isBlank() || m in AiSearch.RETIRED) search.put("ai_model", AiSearch.MODEL)
         }
     }
 

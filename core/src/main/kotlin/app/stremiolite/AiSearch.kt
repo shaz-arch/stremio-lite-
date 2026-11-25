@@ -14,6 +14,24 @@ object AiSearch {
     const val TRIGGER = "ai"
     /** Google's always-current Flash model; older AIOMetadata versions default to retired ones. */
     const val MODEL = "gemini-flash-latest"
+    /** Models tried in turn when one is busy: the lighter ones are usually less in demand. */
+    val MODELS = listOf("gemini-flash-latest", "gemini-flash-lite-latest", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite")
+
+    /** Google's "too busy, try later" answers (the key itself is fine). */
+    fun isBusy(reason: String) = listOf("high demand", "overloaded", "unavailable", "try again later", "503").any { it in reason.lowercase() }
+
+    /** The first model that answers with [key] (blocking), with what the others said: model → null if it worked, else reason. */
+    fun findModel(key: String): Pair<String?, List<Pair<String, String?>>> {
+        val tried = mutableListOf<Pair<String, String?>>()
+        for (m in MODELS) {
+            val r = runCatching { testKey(key, m) }.getOrElse { it.message ?: "no connection" }
+            tried += m to r
+            if (r == null) return m to tried
+            // A refused key won't work with any model: stop.
+            if (!isBusy(r) && ("api key" in r.lowercase() || "permission" in r.lowercase())) break
+        }
+        return null to tried
+    }
     val RETIRED = setOf("gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-flash-lite", "gemini-2.5-flash-lite-preview-09-2025", "gemini-3-flash", "gemini-3.1-pro", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro")
     private const val NOTICE = "aiom.error."
 
