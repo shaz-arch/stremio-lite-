@@ -823,7 +823,7 @@ object Details {
             "Shows how a title was first released (cinemas, Netflix, TV…) and where to watch it now,",
             "on its details page. Free TMDB account, then Settings › API: copy the API key",
             "(or the longer read access token). It follows your account.",
-        ), { Prefs.tmdbKey }, top = listOf(region, Row(""))) { Prefs.tmdbKey = it; Prefs.syncOut() }
+        ), { Prefs.tmdbKey }, { Prefs.tmdbKey = it; Prefs.syncOut() }, top = listOf(region, Row("")))
     }
 
     private fun episodes(f: Full, season: Int, eps: List<Video>): Screen {

@@ -218,7 +218,7 @@ object Settings {
             "TV…) and where to watch it now, on its details page.",
             "Free TMDB account, then Settings › API: copy the API key",
             "(or the longer read access token). Follows your account.",
-        ), { tmdbKey(app) }, top = listOf(region, Row(""))) { setTmdbKey(app, it) }
+        ), { tmdbKey(app) }, { setTmdbKey(app, it) }, top = listOf(region, Row("")))
         return keys
     }
 
