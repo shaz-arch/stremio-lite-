@@ -108,6 +108,11 @@ object Prefs {
         set(v) { data().put("layout", v); save() }
 
     /** Live TV on Home (on unless turned off). */
+    /** Set up Stremonino's progress on this computer. */
+    var setupDone: Set<String>
+        get() = data().optJSONArray("setupDone")?.let { a -> (0 until a.length()).map { a.optString(it) }.toSet() } ?: emptySet()
+        set(v) { data().put("setupDone", org.json.JSONArray(v.toList())); save() }
+
     var liveTv: Boolean
         get() = data().optBoolean("liveTv", true)
         set(v) { data().put("liveTv", v); save() }

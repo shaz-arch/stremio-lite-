@@ -946,6 +946,7 @@ object Settings {
         fun build() {
             // Same order as the phone and stick. Text size is the terminal's own (kitty: ctrl+shift+= / -).
             s.rows = listOf(
+                Row("Set up Stremonino", "step by step  ►", opens = { SetupWizard.screen() }),
                 Row("──── Playback ────"),
                 Row("Player", Prefs.player, action = {
                     App.ask("Player command (e.g. mpv)", Prefs.player) { v -> if (!v.isNullOrBlank()) { Prefs.player = v.trim(); build() } }
@@ -1474,7 +1475,7 @@ fun keysScreen(): Screen {
             RowsSetup.keyScreen("MDBList key", app.stremiolite.RowSetup.MDBLIST_KEY_PAGE, listOf(
                 "Your MDBList account: its lists, and your own Watchlist row.",
                 "Your rows keep the key they were made with: after changing it, use 'Put this key in my rows' below.",
-            ), { Prefs.mdblistKey }, { Prefs.mdblistKey = it }, after = { listOf(Row("Put this key in my rows", "►", action = { App.push(RowsSetup.useMdblistKey(Prefs.mdblistKey)) })) })
+            ), { Prefs.mdblistKey }, { Prefs.mdblistKey = it; if (it.isNotBlank()) KeysCheck.quick("MDBList key") { app.stremiolite.KeyCheck.mdblist(it) } }, after = { listOf(Row("Put this key in my rows", "►", action = { App.push(RowsSetup.useMdblistKey(Prefs.mdblistKey)) })) })
         }),
         Row("   Kept on this computer only."),
         Row("Gemini key", set(Prefs.geminiKey) + "  ►", opens = {
@@ -1482,7 +1483,7 @@ fun keysScreen(): Screen {
                 "For asking AI in Search: start a search with \"ai\" and describe what you want.",
                 "Free from Google AI Studio (aistudio.google.com): Get API key.",
                 "Your rows keep the key they were made with: after changing it, use 'Put this key in my rows' below.",
-            ), { Prefs.geminiKey }, { Prefs.geminiKey = it }, after = { listOf(Row("Put this key in my rows", "►", action = { App.push(RowsSetup.useAiKey(Prefs.geminiKey)) }), Row("Check my AI setup", "►", opens = { AiCheck.screen() })) })
+            ), { Prefs.geminiKey }, { Prefs.geminiKey = it; if (it.isNotBlank()) KeysCheck.quick("Gemini key") { app.stremiolite.KeyCheck.gemini(it) } }, after = { listOf(Row("Put this key in my rows", "►", action = { App.push(RowsSetup.useAiKey(Prefs.geminiKey)) }), Row("Check my AI setup", "►", opens = { AiCheck.screen() })) })
         }),
         Row("   Kept on this computer only."),
     )

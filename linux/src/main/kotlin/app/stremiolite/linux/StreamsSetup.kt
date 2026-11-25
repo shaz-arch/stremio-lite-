@@ -28,7 +28,10 @@ object StreamsSetup {
                 rows += Row(svc.name, "$detail  ►", opens = {
                     RowsSetup.keyScreen("${svc.name} key", svc.keyPage, listOf(svc.hint),
                         { Prefs.debridKeys.firstOrNull { it.first == svc.id }?.second.orEmpty() },
-                        { v -> Prefs.debridKeys = StreamSetup.withKey(Prefs.debridKeys, svc.id, v) })
+                        { v ->
+                            Prefs.debridKeys = StreamSetup.withKey(Prefs.debridKeys, svc.id, v)
+                            if (v.isNotBlank()) KeysCheck.quick("${svc.name} key") { app.stremiolite.KeyCheck.debrid(svc.id, v) }
+                        })
                 })
             }
             if (k.size > 1) {
@@ -60,10 +63,11 @@ object StreamsSetup {
             })
             rows += Row("Create my streams", if (current != null) "a new install  ►" else "►", action = {
                 if (Prefs.debridKeys.isEmpty()) { App.toast("Add a debrid key first") }
+                else if (SetupWizard.password != null) create(Prefs.debridKeys, SetupWizard.password!!, replace)
                 else App.ask("Choose an AIOStreams password (6+ characters)", hidden = true) { v ->
                     val pw = v.orEmpty()
                     if (pw.isEmpty()) return@ask
-                    if (pw.length < 6) App.toast("Use at least 6 characters") else create(Prefs.debridKeys, pw, replace)
+                    if (pw.length < 6) App.toast("Use at least 6 characters") else { SetupWizard.offer(pw); create(Prefs.debridKeys, pw, replace) }
                 }
             })
             return rows

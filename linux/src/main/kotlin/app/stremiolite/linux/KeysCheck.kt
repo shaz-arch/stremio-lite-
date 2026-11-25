@@ -9,6 +9,14 @@ object KeysCheck {
         if (withTmdb) Prefs.tmdbKey else "", Prefs.debridKeys, Prefs.mdblistKey, Prefs.geminiKey,
     ) { Net.describe(it) }
 
+    /** Checks one key straight after it's entered and says how it went. */
+    fun quick(name: String, check: () -> Health.Outcome) {
+        App.async({ check() }) { r ->
+            val o = r.getOrElse { Health.Outcome(false, Net.describe(it)) }
+            App.toast("$name: " + (if (o.ok) "✓ " else "✗ ") + o.text)
+        }
+    }
+
     fun screen(): Screen {
         lateinit var s: Screen
         var checks: List<Health.Check> = emptyList()

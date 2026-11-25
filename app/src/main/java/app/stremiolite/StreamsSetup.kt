@@ -31,7 +31,10 @@ object StreamsSetup {
                 rows += Row(svc.name, "$detail  ►", opens = {
                     RowsSetup.keyScreen(app, "${svc.name} key", svc.keyPage, listOf(svc.hint),
                         { keys().firstOrNull { it.first == svc.id }?.second.orEmpty() },
-                        { v -> Settings.setDebridKeys(app, StreamSetup.withKey(keys(), svc.id, v)) })
+                        { v ->
+                            Settings.setDebridKeys(app, StreamSetup.withKey(keys(), svc.id, v))
+                            if (v.isNotBlank()) KeysCheck.quick(app, "${svc.name} key") { KeyCheck.debrid(svc.id, v) }
+                        })
                 })
             }
             if (k.size > 1) {
@@ -100,6 +103,7 @@ object StreamsSetup {
     }
 
     private fun askPassword(app: MainActivity, done: (String) -> Unit) {
+        SetupWizard.password?.let { done(it); return }
         val pw = EditText(app).apply {
             hint = "Choose a password (6+ characters)"
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
@@ -111,7 +115,7 @@ object StreamsSetup {
             .setView(PhoneTyping.box(app, pw, Secret.toggle(app, pw)))
             .setPositiveButton("Create") { _, _ ->
                 val v = pw.text.toString()
-                if (v.length < 6) app.toast("Use at least 6 characters") else done(v)
+                if (v.length < 6) app.toast("Use at least 6 characters") else { SetupWizard.offer(v); done(v) }
             }
             .setNegativeButton("Cancel", null)
             .show()

@@ -37,6 +37,8 @@ object RowsSetup {
     private fun checklist(app: MainActivity, p: RowSetup.Picks, edit: AioRows.Loaded?, password: String?): Screen {
         // A key remembered from an earlier setup on this device is filled in.
         if (p.mdblistKey.isBlank()) p.mdblistKey = Settings.mdblistKey(app)
+        if (p.tmdbKey.isBlank()) p.tmdbKey = Settings.tmdbKey(app)
+        if (p.geminiKey.isBlank()) p.geminiKey = Settings.geminiKey(app)
         lateinit var s: Screen
         fun tick(on: Boolean) = if (on) "✓ " else "   "
         fun build(): List<Row> {
@@ -217,6 +219,8 @@ object RowsSetup {
     }
 
     private fun askNewPassword(app: MainActivity, p: RowSetup.Picks) {
+        // During Set up Stremonino, one password for rows and streams.
+        SetupWizard.password?.let { create(app, p, it); return }
         val pw = EditText(app).apply {
             hint = "Choose a password (6+ characters)"
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
@@ -228,7 +232,7 @@ object RowsSetup {
             .setView(PhoneTyping.box(app, pw, Secret.toggle(app, pw)))
             .setPositiveButton("Create") { _, _ ->
                 val v = pw.text.toString()
-                if (v.length < 6) app.toast("Use at least 6 characters") else create(app, p, v)
+                if (v.length < 6) app.toast("Use at least 6 characters") else { SetupWizard.offer(v); create(app, p, v) }
             }
             .setNegativeButton("Cancel", null)
             .show()

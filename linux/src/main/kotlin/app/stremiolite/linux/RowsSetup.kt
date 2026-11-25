@@ -37,6 +37,8 @@ object RowsSetup {
     private fun checklist(p: RowSetup.Picks, edit: AioRows.Loaded?, password: String?): Screen {
         // A key remembered from an earlier setup on this computer is filled in.
         if (p.mdblistKey.isBlank()) p.mdblistKey = Prefs.mdblistKey
+        if (p.tmdbKey.isBlank()) p.tmdbKey = Prefs.tmdbKey
+        if (p.geminiKey.isBlank()) p.geminiKey = Prefs.geminiKey
         lateinit var s: Screen
         fun tick(on: Boolean) = if (on) "✓ " else "   "
         fun build(): List<Row> {
@@ -207,10 +209,11 @@ object RowsSetup {
     }
 
     private fun askNewPassword(p: RowSetup.Picks) {
+        SetupWizard.password?.let { create(p, it); return }
         App.ask("Choose an AIOMetadata password (6+ characters, to change rows later)", hidden = true) { v ->
             val pw = v.orEmpty()
             if (pw.isEmpty()) return@ask
-            if (pw.length < 6) App.toast("Use at least 6 characters") else create(p, pw)
+            if (pw.length < 6) App.toast("Use at least 6 characters") else { SetupWizard.offer(pw); create(p, pw) }
         }
     }
 

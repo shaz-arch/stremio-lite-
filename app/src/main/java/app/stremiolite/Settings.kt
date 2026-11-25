@@ -69,6 +69,16 @@ object Settings {
     }
 
     /** Sends this device's shared settings to the account. */
+    /** Flips an on/off setting and syncs it (for Set up Stremonino's switches). */
+    fun flip(c: Context, key: String, default: Boolean) {
+        prefs(c).edit().putBoolean(key, !prefs(c).getBoolean(key, default)).apply()
+        syncOut(c)
+    }
+
+    /** Set up Stremonino's own progress on this device (which steps you've been through). */
+    fun setupDone(c: Context): Set<String> = prefs(c).getStringSet("setupDone", emptySet()) ?: emptySet()
+    fun markSetup(c: Context, step: String) { prefs(c).edit().putStringSet("setupDone", setupDone(c) + step).apply() }
+
     fun syncOut(c: Context) {
         val p = prefs(c)
         val now = System.currentTimeMillis()
@@ -224,7 +234,7 @@ object Settings {
                     "Your MDBList account: its lists, and your own Watchlist row.",
                     "Your rows keep the key they were made with: after changing it,",
                     "use 'Put this key in my rows' below.",
-                ), { mdblistKey(app) }, { setMdblistKey(app, it) }, after = { listOf(Row("Put this key in my rows", "►", action = { app.push(RowsSetup.useMdblistKey(app, mdblistKey(app))) })) })
+                ), { mdblistKey(app) }, { setMdblistKey(app, it); if (it.isNotBlank()) KeysCheck.quick(app, "MDBList key") { KeyCheck.mdblist(it) } }, after = { listOf(Row("Put this key in my rows", "►", action = { app.push(RowsSetup.useMdblistKey(app, mdblistKey(app))) })) })
             }),
             Row("   Kept on this device only."),
             Row("Gemini key", set(geminiKey(app)) + "  ►", opens = {
@@ -233,7 +243,7 @@ object Settings {
                     "Free from Google AI Studio (aistudio.google.com): Get API key.",
                     "Your rows keep the key they were made with: after changing it,",
                     "use 'Put this key in my rows' below. AI only runs when you Ask AI.",
-                ), { geminiKey(app) }, { setGeminiKey(app, it) }, after = { listOf(
+                ), { geminiKey(app) }, { setGeminiKey(app, it); if (it.isNotBlank()) KeysCheck.quick(app, "Gemini key") { KeyCheck.gemini(it) } }, after = { listOf(
                     Row("Put this key in my rows", "►", action = { app.push(RowsSetup.useAiKey(app, geminiKey(app))) }),
                     Row("Check my AI setup", "►", opens = { AiCheck.screen(app) }),
                 ) })
@@ -259,7 +269,7 @@ object Settings {
             "TV…) and where to watch it now, on its details page.",
             "Free TMDB account, then Settings › API: copy the API key",
             "(or the longer read access token). Follows your account.",
-        ), { tmdbKey(app) }, { setTmdbKey(app, it) }, top = listOf(region, Row("")))
+        ), { tmdbKey(app) }, { setTmdbKey(app, it); if (it.isNotBlank()) KeysCheck.quick(app, "TMDB key") { KeyCheck.tmdb(it) } }, top = listOf(region, Row("")))
         return keys
     }
 
@@ -482,6 +492,7 @@ object Settings {
         screen = Screen(
             "Settings",
             listOf(
+                Row("Set up Stremonino", "step by step  ►", opens = { SetupWizard.screen(app) }),
                 Row("──── Playback ────"), playerRow, langRow, nextRow, followRow,
                 Row("──── Look ────"),
                 lookRow, themeRow, sizeRow, clockRow, watchedRow, liveRow, newsRow, comingRow,

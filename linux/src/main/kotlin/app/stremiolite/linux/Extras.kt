@@ -181,7 +181,7 @@ object Profiles {
         return s
     }
 
-    private fun profile(p: Profile): Screen {
+    fun profile(p: Profile): Screen {
         val others = all().filter { it.id != p.id }
         val rows = mutableListOf(
             Row("Switch to ${p.name}", action = { switchTo(p.id) }),

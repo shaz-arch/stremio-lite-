@@ -7,6 +7,14 @@ object KeysCheck {
         if (withTmdb) Settings.tmdbKey(app) else "", Settings.debridKeys(app), Settings.mdblistKey(app), Settings.geminiKey(app),
     ) { Net.describe(it) }
 
+    /** Checks one key straight after it's entered and says how it went. */
+    fun quick(app: MainActivity, name: String, check: () -> Health.Outcome) {
+        Net.async({ check() }) { r ->
+            val o = r.getOrElse { Health.Outcome(false, Net.describe(it)) }
+            app.toast("$name: " + (if (o.ok) "✓ " else "✗ ") + o.text)
+        }
+    }
+
     fun screen(app: MainActivity): Screen {
         lateinit var s: Screen
         var checks: List<Health.Check> = emptyList()

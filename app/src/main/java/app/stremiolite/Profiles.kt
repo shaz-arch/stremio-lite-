@@ -298,7 +298,7 @@ object Profiles {
         return screen
     }
 
-    private fun profileScreen(app: MainActivity, p: Profile): Screen {
+    fun profileScreen(app: MainActivity, p: Profile): Screen {
         val others = all(app).filter { it.id != p.id }
         val rows = mutableListOf(
             Row("Switch to ${p.name}", action = { switchTo(app, p.id) }),

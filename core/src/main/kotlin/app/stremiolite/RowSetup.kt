@@ -97,6 +97,8 @@ object RowSetup {
         /** Optional keys: your own TMDB key, and an MDBList key (which switches on the MDBList rows). */
         var tmdbKey: String = ""
         var mdblistKey: String = ""
+        /** A Gemini key switches on AI Search in the new rows (Ask AI). */
+        var geminiKey: String = ""
         /** Editing: switch off rows in the install that aren't in any category here (see [others]). */
         var othersOff: Boolean = false
     }
@@ -391,6 +393,56 @@ object RowSetup {
                 .put("people_search_movie", "tmdb.people.search").put("people_search_series", "tmdb.people.search"))
                 .put("engineEnabled", engine).put("searchNames", JSONObject()))
             .put("streaming", JSONArray())
+            .also { if (p.geminiKey.isNotBlank()) setAiKey(it, p.geminiKey) }
+    }
+
+    // ---- bringing older rows up to date --------------------------------------------------------
+
+    /** Categories whose rows are added, switched on, to rows made before they existed. */
+    private val ADD_ON_UPDATE = setOf("Releases")
+
+    /** Rows in those categories that [config] doesn't have yet (names, for the setup screen). */
+    fun newRows(config: JSONObject): List<String> = newRowObjects(config).map { it.optString("name") }
+
+    /** The same from just the row ids an install shows (its manifest), so no password is needed to see it. */
+    fun newRowsFromIds(ids: Set<String>): List<String> {
+        val all = catalogue()
+        return (0 until all.length()).map { all.getJSONObject(it) }
+            .filter { o -> val id = o.optString("id"); group(o.optString("name")).first in ADD_ON_UPDATE && ids.none { it == id || it.startsWith(id + "_") } }
+            .map { it.optString("name") }.distinct()
+    }
+
+    private fun newRowObjects(config: JSONObject): List<JSONObject> {
+        val have = HashSet<String>()
+        val cats = config.optJSONArray("catalogs") ?: JSONArray()
+        for (i in 0 until cats.length()) cats.optJSONObject(i)?.let { have += it.optString("id") + "|" + it.optString("type") }
+        val all = forRegion(picksFrom(cats).region)
+        return (0 until all.length()).map { all.getJSONObject(it) }
+            .filter { group(it.optString("name")).first in ADD_ON_UPDATE && (it.optString("id") + "|" + it.optString("type")) !in have }
+    }
+
+    /**
+     * Brings rows made earlier up to date without changing your choices: adds the new rows (switched
+     * on), gives changed rows today's settings and names, and puts in any keys you've added.
+     * Returns how many rows were added.
+     */
+    fun bringUpToDate(config: JSONObject, tmdbKey: String, mdblistKey: String, geminiKey: String): Int {
+        val cats = config.optJSONArray("catalogs") ?: JSONArray().also { config.put("catalogs", it) }
+        val region = picksFrom(cats).region
+        val add = newRowObjects(config)
+        add.forEach { o -> o.put("enabled", true).put("showInHome", false); cats.put(o) }
+        for (i in 0 until cats.length()) {
+            val o = cats.optJSONObject(i) ?: continue
+            val name = nameOf(o)
+            if (name != o.optString("name")) o.put("name", name)
+            val key = o.optString("id") + "|" + o.optString("type")
+            if (key in refresh) regionRows(region)[key]?.optJSONObject("metadata")?.let { o.put("metadata", JSONObject(it.toString())) }
+        }
+        val k = config.optJSONObject("apiKeys") ?: JSONObject().also { config.put("apiKeys", it) }
+        if (tmdbKey.isNotBlank()) k.put("tmdb", tmdbKey.trim())
+        if (mdblistKey.isNotBlank()) k.put("mdblist", mdblistKey.trim())
+        if (geminiKey.isNotBlank()) setAiKey(config, geminiKey)
+        return add.size
     }
 
     class Created(val installUrl: String)
