@@ -147,6 +147,14 @@ object History {
         return m
     }
 
+    /** When [id] was last played or finished here or on the account (0 = never). */
+    fun lastPlayed(c: Context, id: String): Long {
+        ensure(c)
+        val here = maxOf(items.firstOrNull { it.id == id }?.updated ?: 0L, log.firstOrNull { it.id == id }?.time ?: 0L)
+        val acc = remote[id]?.let { runCatching { LibraryItems.read(JSONObject(it)) }.getOrNull() }?.let { maxOf(it.lastWatched, it.updated) } ?: 0L
+        return maxOf(here, acc)
+    }
+
     /** A film marked as watched. */
     fun isWatched(c: Context, id: String) = marks(c)[id] == Marks.WATCHED
 

@@ -37,7 +37,7 @@ object Settings {
 
     private const val SYNC_ID = "stremiolite:settings"
     private val INT_KEYS = listOf("subLang", "theme", "clock", "textSize")
-    private val BOOL_KEYS = listOf("autoNext", "hideWatched", "autoFollow", "liveTv", "newsOn")
+    private val BOOL_KEYS = listOf("autoNext", "hideWatched", "autoFollow", "liveTv", "newsOn", "comingOn")
     /** The look: shared by default, or kept to this device ("lookLocal", which itself never syncs). */
     private val LOOK_KEYS = setOf("theme", "clock", "textSize")
 
@@ -169,6 +169,7 @@ object Settings {
 
     /** News and Coming soon on Home (on unless turned off). */
     fun newsOn(c: Context) = prefs(c).getBoolean("newsOn", true)
+    fun comingOn(c: Context) = prefs(c).getBoolean("comingOn", true)
 
     /** News feeds you've added (synced). */
     fun newsFeeds(c: Context): List<News.Feed> = News.feeds(prefs(c).getString("newsFeeds", null))
@@ -316,6 +317,7 @@ object Settings {
         lateinit var lookRow: Row
         lateinit var liveRow: Row
         lateinit var newsRow: Row
+        lateinit var comingRow: Row
 
         fun show() {
             lookRow.detail = "◄ ${if (lookLocal(app)) "This device only" else "Same on all devices"} ►"
@@ -329,6 +331,7 @@ object Settings {
             followRow.detail = "◄ ${if (autoFollow(app)) "On" else "Off: I choose"} ►"
             liveRow.detail = "◄ ${if (liveTv(app)) "Shown" else "Hidden"} ►"
             newsRow.detail = "◄ ${if (newsOn(app)) "Shown" else "Hidden"} ►"
+            comingRow.detail = "◄ ${if (comingOn(app)) "Shown" else "Hidden"} ►"
             app.refresh(screen)
         }
         lateinit var updateRow: Row
@@ -363,8 +366,14 @@ object Settings {
             Home.redraw()
             show()
         })
-        newsRow = Row("News & Coming soon on Home", action = {
+        newsRow = Row("News on Home", action = {
             prefs(app).edit().putBoolean("newsOn", !newsOn(app)).apply()
+            syncOut(app)
+            Home.redraw()
+            show()
+        })
+        comingRow = Row("Coming soon in Browse", action = {
+            prefs(app).edit().putBoolean("comingOn", !comingOn(app)).apply()
             syncOut(app)
             Home.redraw()
             show()
@@ -391,7 +400,7 @@ object Settings {
             listOf(
                 Row("──── Playback ────"), playerRow, langRow, nextRow, followRow,
                 Row("──── Look ────"),
-                lookRow, themeRow, sizeRow, clockRow, watchedRow, liveRow, newsRow,
+                lookRow, themeRow, sizeRow, clockRow, watchedRow, liveRow, newsRow, comingRow,
                 Row("──── Index ────"),
                 Row("Arrange your Index", "►", opens = { Arrange.screen(app) }),
                 Row("Hide rows", "►", opens = { rowsScreen(app) }),

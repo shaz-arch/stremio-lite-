@@ -209,11 +209,15 @@ object Home {
                 rows += Row("──── Browse ────")
                 val entries = Index.entries(list)
                 val main = entries.groupingBy { it.addon }.eachCount().maxByOrNull { it.value }?.key
-                Index.front(entries).forEach { e ->
+                val front = Index.front(entries)
+                val coming = if (Prefs.comingOn && !KidsGuard.hides()) app.stremiolite.ComingSoonPlace.after(front.map { it.name }) else -1
+                front.forEachIndexed { n, e ->
+                    if (n == coming) rows += Row("Coming soon", "films & shows  ►", opens = { Feeds.comingSoon() })
                     val tag = if (e.addon === main) "" else e.addon.name.substringBefore('|').trim().take(18) + " · "
                     rows += Row(e.name, tag + MetaParse.typeLabel(e.catalog.type) + "  ►", opens = { Catalogs.screen(e.addon, e.catalog) },
                         play = null)
                 }
+                if (coming >= 0 && coming == front.size) rows += Row("Coming soon", "films & shows  ►", opens = { Feeds.comingSoon() })
                 val folders = Index.folderRows(entries)
                 if (folders.isNotEmpty()) {
                     rows += Row("──── Index ────")
@@ -225,7 +229,6 @@ object Home {
             if (KidsGuard.locked()) rows += Row("Games", "►", opens = { GamesScreen.screen() })
             if (Prefs.newsOn && !KidsGuard.hides()) {
                 rows += Row("News", "film & TV headlines  ►", opens = { Feeds.news() })
-                rows += Row("Coming soon", "films & shows  ►", opens = { Feeds.comingSoon() })
             }
             rows += SleepTimer.row()
             // Setup items (add-ons, export/import, device check, about) live inside Settings.
@@ -945,8 +948,11 @@ object Settings {
                 Row("Live TV on Home", "◄ ${if (Prefs.liveTv) "Shown" else "Hidden"} ►", action = {
                     Prefs.liveTv = !Prefs.liveTv; Prefs.syncOut(); Home.redraw(); build()
                 }),
-                Row("News & Coming soon on Home", "◄ ${if (Prefs.newsOn) "Shown" else "Hidden"} ►", action = {
+                Row("News on Home", "◄ ${if (Prefs.newsOn) "Shown" else "Hidden"} ►", action = {
                     Prefs.newsOn = !Prefs.newsOn; Prefs.syncOut(); Home.redraw(); build()
+                }),
+                Row("Coming soon in Browse", "◄ ${if (Prefs.comingOn) "Shown" else "Hidden"} ►", action = {
+                    Prefs.comingOn = !Prefs.comingOn; Prefs.syncOut(); Home.redraw(); build()
                 }),
                 Row("──── Index ────"),
                 Row("Arrange your Index", "►", opens = { Arrange.screen() }),
@@ -1029,6 +1035,18 @@ object Waiting {
         }.filter { it.id.isNotEmpty() }
     }
 
+    /** The list without films that are done with ([app.stremiolite.WaitRules]); saved back if any left. */
+    fun current(): List<Entry> {
+        val all = list()
+        val keep = all.filter { e ->
+            val i = Lib.info(e.id)
+            !app.stremiolite.WaitRules.done(e.better, e.ready, i?.continuing == true, i?.filmWatched == true,
+                i?.let { maxOf(it.lastWatched, it.updated) } ?: 0L)
+        }
+        if (keep.size != all.size) save(keep)
+        return keep
+    }
+
     fun has(id: String) = list().any { it.id == id && !it.better }
     fun watchingForBetter(id: String) = list().any { it.id == id && it.better }
 
@@ -1068,7 +1086,7 @@ object Waiting {
     private fun following() = NewEpisodes.followedNow()
 
     fun summary(): String {
-        val l = list()
+        val l = current()
         val ready = l.count { it.ready > 0 }
         val upgrades = l.count { it.ready == 0L && it.better }
         // Ended shows with nothing more coming aren't counted (same as the phone and stick).
@@ -1090,7 +1108,7 @@ object Waiting {
 
     /** The line for the top of Home when a film you're waiting on became ready, or null. */
     fun homeRow(): Row? {
-        val new = list().filter { it.ready > Prefs.readySeen }.sortedByDescending { it.ready }
+        val new = current().filter { it.ready > Prefs.readySeen }.sortedByDescending { it.ready }
         val label = app.stremiolite.ReadyNotice.label(new.map { it.name }) ?: return null
         return Row(label, "►", action = {
             Prefs.readySeen = System.currentTimeMillis()
@@ -1102,14 +1120,15 @@ object Waiting {
         Prefs.readySeen = System.currentTimeMillis()
         val rows = mutableListOf(Row("──── Films ────"))
         // Films you've started (or finished) leave the list.
-        val films = list().filter { !it.better && Lib.info(it.id)?.let { i -> i.continuing || i.filmWatched } != true }
+        val now = current()
+        val films = now.filter { !it.better }
             .sortedWith(compareByDescending<Entry> { it.ready }.thenBy { it.name })
         if (films.isEmpty()) rows += Row("None. On a film, choose 'Tell me when a stream is available'.")
         films.forEach { e ->
             rows += Row(Marks.title(if (e.ready > 0) Marks.READY else if (e.better) Marks.BETTER else Marks.WAITING, e.name) + if (e.year.isNotEmpty()) " (${e.year})" else "",
                 if (e.ready > 0) "ready  ►" else "waiting  ►", opens = { Details.screenFor(e.id, e.type, e.name) })
         }
-        val upgrades = list().filter { it.better }
+        val upgrades = now.filter { it.better }
         if (upgrades.isNotEmpty()) {
             rows += Row("──── Better versions ────")
             upgrades.sortedWith(compareByDescending<Entry> { it.ready }.thenBy { it.name }).forEach { e ->

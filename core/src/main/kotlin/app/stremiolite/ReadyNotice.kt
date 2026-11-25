@@ -38,3 +38,14 @@ object ReadyNotice {
     fun writeSeen(old: Set<String>, add: Collection<String>): String =
         (add.toList() + old.filter { it !in add }).take(400).joinToString("|")
 }
+
+/** When a film leaves Waiting for streams by itself. */
+object WaitRules {
+    /**
+     * Waiting for a first stream: once you've started or finished it. Waiting for a better version:
+     * once one was found and you've played it since (it's in Continue watching or finished again).
+     */
+    fun done(better: Boolean, ready: Long, continuing: Boolean, watched: Boolean, lastPlayed: Long): Boolean =
+        if (!better) continuing || watched
+        else ready > 0 && (continuing || watched) && lastPlayed > ready
+}

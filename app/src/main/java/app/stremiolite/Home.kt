@@ -44,7 +44,6 @@ object Home {
         var notices = 0
         val news = listOf(
             Row("News", "film & TV headlines  ►", opens = { Feeds.news(app) }),
-            Row("Coming soon", "films & shows  ►", opens = { Feeds.comingSoon(app) }),
         )
         val sleepRow = SleepTimer.row(app)
         val appRows = listOf(
@@ -202,6 +201,9 @@ object Home {
         val rows = front.mapTo(mutableListOf()) { e ->
             val tag = if (e.addon === main) "" else shortName(e.addon.name) + " · "
             Row(e.name, tag + Catalogs.typeLabel(e.catalog.type) + "  ►", opens = { Catalogs.screen(app, e.addon, e.catalog) })
+        }
+        if (Settings.comingOn(app) && !KidsGuard.hides(app)) {
+            rows.add(ComingSoonPlace.after(front.map { it.name }), Row("Coming soon", "films & shows  ►", opens = { Feeds.comingSoon(app) }))
         }
         val folders = Index.folderRows(app, entries)
         if (folders.isNotEmpty()) {

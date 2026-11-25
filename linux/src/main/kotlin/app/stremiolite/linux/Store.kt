@@ -131,6 +131,10 @@ object Prefs {
     var newsOn: Boolean
         get() = data().optBoolean("newsOn", true)
         set(v) { data().put("newsOn", v); save() }
+
+    var comingOn: Boolean
+        get() = data().optBoolean("comingOn", true)
+        set(v) { data().put("comingOn", v); save() }
     /** News feeds you've added (kept as text, as on Android, so they sync between them). */
     var newsFeeds: List<app.stremiolite.News.Feed>
         get() = app.stremiolite.News.feeds(data().optString("newsFeeds", ""))
@@ -223,7 +227,7 @@ object Prefs {
     private const val SYNC_ID = "stremiolite:settings"
 
     /** Shared settings this build knows; one this computer has never had is always taken from the account. */
-    private val SHARED = listOf("theme", "subLang", "autoNext", "clock", "hideWatched", "layout", "autoFollow", "liveTv", "playlists", "liveFavs", "liveGuide", "liveFreeHide", "newsOn", "newsFeeds", "newsHide", "tmdbKey", "watchRegion")
+    private val SHARED = listOf("theme", "subLang", "autoNext", "clock", "hideWatched", "layout", "autoFollow", "liveTv", "playlists", "liveFavs", "liveGuide", "liveFreeHide", "newsOn", "comingOn", "newsFeeds", "newsHide", "tmdbKey", "watchRegion")
     /** Synced with your own devices, but never sent to someone else with "Share my setup". */
     private val NOT_SHARED = setOf("playlists", "liveFavs", "liveGuide", "tmdbKey")
     /** The look: shared by default, or kept to this computer ("lookLocal", which itself never syncs). */

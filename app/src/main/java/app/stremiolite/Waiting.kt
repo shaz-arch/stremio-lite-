@@ -65,6 +65,18 @@ object Waiting {
 
     fun list(c: Context): List<Entry> = parse(History.rawRemote(c, ID))
 
+    /** The list without films that are done with ([WaitRules]); saved back if any left. */
+    fun current(c: Context): List<Entry> {
+        val all = list(c)
+        val marks = History.marks(c)
+        val keep = all.filter { e ->
+            val m = marks[e.id]
+            !WaitRules.done(e.better, e.ready, m == Marks.CONTINUE, m == Marks.WATCHED, if (e.better) History.lastPlayed(c, e.id) else 0)
+        }
+        if (keep.size != all.size) save(c, keep)
+        return keep
+    }
+
     fun has(c: Context, id: String) = list(c).any { it.id == id && !it.better }
 
     fun watchingForBetter(c: Context, id: String) = list(c).any { it.id == id && it.better }
@@ -130,6 +142,7 @@ object Waiting {
 
     /** The line for the top of Home, or null when there's nothing new. */
     fun homeRow(app: MainActivity): Row? {
+        current(app)
         val new = unseen(app)
         val label = ReadyNotice.label(new.map { it.name }) ?: return null
         return Row(label, "►", action = {
@@ -240,7 +253,7 @@ object Waiting {
 
     /** The Home line's right-hand text. */
     fun summary(c: Context): String {
-        val l = list(c)
+        val l = current(c)
         val followed = following(c)
         val ids = followed.map { it.first }.toSet()
         val infos = History.infos(c).associateBy { it.id }
@@ -263,10 +276,8 @@ object Waiting {
         fun build(): List<Row> {
             // Films you've since watched drop off the list.
             val marks = History.marks(app)
-            val all = list(app)
-            // Films you've finished or started (they're in Continue watching) leave the list.
-            val keep = all.filter { it.better || (marks[it.id] != Marks.WATCHED && marks[it.id] != Marks.CONTINUE) }
-            if (keep.size != all.size) save(app, keep)
+            // Films you've finished or started leave the list; better versions once you've played the one found.
+            val keep = current(app)
             val last = lastCheck(app)
             val rows = mutableListOf(
                 // When on the left, how often on the right (on a phone in portrait, the line below).
