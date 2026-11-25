@@ -47,11 +47,20 @@ object StreamsSetup {
                 rows += Row("   Every service is checked for ready-to-play copies; if a stream")
                 rows += Row("   fails, the next one is tried, from any of them.")
             } else rows += Row("   Add a second service as a backup if you have one.")
+            val current = existing.firstOrNull { StreamSetup.installOf(it.transportUrl) != null }
+            rows += Row("────────────────────")
+            if (current != null) {
+                rows += Row("Update my streams with these keys", "►", action = {
+                    if (keys().isEmpty()) app.toast("Add a debrid key first")
+                    else askCurrentPassword(app) { pw -> update(app, current.transportUrl, keys(), pw) }
+                })
+                rows += Row("   Same install: only the debrid services change. Needs its password.")
+                rows += Row("────────────────────")
+            }
             if (existing.isNotEmpty()) rows += Row((if (replace) "✓ " else "   ") + "Replace my current AIOStreams", existing.size.toString(), action = {
                 replace = !replace; s.rows = build(); app.refresh(s)
             })
-            rows += Row("────────────────────")
-            rows += Row("Create my streams", "►", action = {
+            rows += Row("Create my streams", if (current != null) "a new install  ►" else "►", action = {
                 if (keys().isEmpty()) app.toast("Add a debrid key first")
                 else askPassword(app) { pw -> create(app, keys(), pw, replace) }
             })
@@ -61,6 +70,33 @@ object StreamsSetup {
         s.rows = build()
         s.onShow = { s.rows = build(); app.refresh(s) }
         return s
+    }
+
+    /** The password you chose when the streams were made (or set on AIOStreams' page). */
+    private fun askCurrentPassword(app: MainActivity, done: (String) -> Unit) {
+        val pw = EditText(app).apply { hint = "Your AIOStreams password"; setSingleLine() }
+        android.app.AlertDialog.Builder(app)
+            .setTitle("AIOStreams password")
+            .setMessage("The one you chose when your streams were made.")
+            .setView(PhoneTyping.box(app, pw, Secret.toggle(app, pw)))
+            .setPositiveButton("Update") { _, _ -> pw.text.toString().takeIf { it.isNotEmpty() }?.let(done) }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun update(app: MainActivity, link: String, keys: List<Pair<String, String>>, password: String) {
+        val status = Screen("Updating your streams", listOf(Row("Saving your debrid services into your AIOStreams…")))
+        app.push(status)
+        Net.async({ StreamSetup.update(link, password, keys) }) { r ->
+            status.rows = r.fold(
+                { listOf(Row("Done: your streams now use ${StreamSetup.names(keys).joinToString(", then ")}."), Row("Nothing else changed. Every device signed in uses them.")) },
+                { e -> listOf(
+                    Row("Couldn't update: " + (if (e is AioRows.Failed) e.message else Net.describe(e))),
+                    Row("Try again", action = { app.back(); askCurrentPassword(app) { pw -> update(app, link, keys, pw) } }),
+                ) },
+            )
+            app.refresh(status)
+        }
     }
 
     private fun askPassword(app: MainActivity, done: (String) -> Unit) {

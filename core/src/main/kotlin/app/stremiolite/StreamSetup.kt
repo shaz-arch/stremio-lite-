@@ -58,17 +58,55 @@ object StreamSetup {
      * Creates the install (blocking) from the stick-tuned settings with your debrid services, in
      * your order, and returns its install link. Throws [AioRows.Failed] with a plain reason.
      */
+    /** Puts your services first in [config], in your order (AIOStreams ranks by it); other services there stay after them. */
+    private fun putServices(config: JSONObject, use: List<Pair<String, String>>) {
+        val old = config.optJSONArray("services") ?: JSONArray()
+        val services = JSONArray()
+        use.forEach { (id, k) -> services.put(JSONObject().put("id", id).put("enabled", true).put("credentials", JSONObject().put("apiKey", k))) }
+        for (i in 0 until old.length()) old.optJSONObject(i)?.takeIf { service(it.optString("id")) == null }?.let { services.put(it) }
+        config.put("services", services)
+    }
+
+    /** The install's id and server from its link (…/stremio/<uuid>/<encrypted password>/manifest.json), or null. */
+    fun installOf(link: String): Pair<String, String>? {
+        val m = Regex("""^(https?://[^/]+(?:/[^/]+)*?)/stremio/([0-9a-fA-F-]{36})/""").find(link) ?: return null
+        return m.groupValues[1] to m.groupValues[2]
+    }
+
+    /**
+     * Swaps the debrid services in your current install for [keys], keeping everything else it has
+     * (blocking). Same install, same link: nothing changes on your Stremio account.
+     */
+    fun update(installLink: String, password: String, keys: List<Pair<String, String>>) {
+        val use = keys.filter { it.second.isNotBlank() && service(it.first) != null }.distinctBy { it.first }
+        if (use.isEmpty()) throw AioRows.Failed("add a debrid key first")
+        val (server, uuid) = installOf(installLink) ?: throw AioRows.Failed("this AIOStreams can't be updated from here: use 'Create my streams'")
+        val auth = mapOf("Authorization" to "Basic " + Http.base64("$uuid:$password".toByteArray(Charsets.UTF_8)))
+        fun fail(code: Int, text: String, what: String): Nothing {
+            val err = runCatching { JSONObject(text).optJSONObject("error") }.getOrNull()
+            val msg = listOf(err?.optString("message"), err?.optString("code")).firstOrNull { !it.isNullOrBlank() && it != "null" }.orEmpty()
+            throw AioRows.Failed(when {
+                code == 401 || code == 403 || "password" in msg.lowercase() || "auth" in msg.lowercase() -> "the AIOStreams password didn't match"
+                msg.isNotBlank() -> msg
+                else -> "couldn't $what (the server answered $code)"
+            })
+        }
+        // Read the install's settings with its password (sent in the header, never in the link).
+        val (gc, gt) = Http.sendJson("$server/api/v1/user", "GET", null, 30_000, auth)
+        val got = runCatching { JSONObject(gt) }.getOrNull()
+        val config = got?.optJSONObject("data")?.optJSONObject("userData")
+        if (gc >= 400 || got?.optBoolean("success") != true || config == null) fail(gc, gt, "read your streams' settings")
+        putServices(config, use)
+        val body = JSONObject().put("config", config)
+        val (pc, pt) = Http.sendJson("$server/api/v1/user", "PUT", body.toString(), 120_000, auth)
+        if (pc >= 400 || runCatching { JSONObject(pt).optBoolean("success") }.getOrDefault(false) != true) fail(pc, pt, "save the new keys")
+    }
+
     fun create(keys: List<Pair<String, String>>, password: String, server: String = SERVER): String {
         val use = keys.filter { it.second.isNotBlank() && service(it.first) != null }.distinctBy { it.first }
         if (use.isEmpty()) throw AioRows.Failed("add a debrid key first")
         val config = preset()
-        val old = config.optJSONArray("services") ?: JSONArray()
-        val services = JSONArray()
-        // Your services first, in your order: AIOStreams ranks by this order.
-        use.forEach { (id, k) -> services.put(JSONObject().put("id", id).put("enabled", true).put("credentials", JSONObject().put("apiKey", k))) }
-        // Anything else the settings had (not one of these debrid services) stays after them.
-        for (i in 0 until old.length()) old.optJSONObject(i)?.takeIf { service(it.optString("id")) == null }?.let { services.put(it) }
-        config.put("services", services)
+        putServices(config, use)
         val body = JSONObject().put("config", config).put("password", password)
         val (code, text) = Http.sendJson("$server/api/v1/user", "POST", body.toString(), timeoutMs = 120_000)
         val o = runCatching { JSONObject(text) }.getOrNull()

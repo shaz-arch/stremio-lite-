@@ -60,26 +60,22 @@ object Health {
             }
         }
 
-        // Streams for the test film, one add-on at a time.
+        // Streams for the test film, one add-on at a time. Add-ons that say they answer streams but
+        // aren't stream providers (TMDB Collections opens film series) can't fail this.
         val streamers = online.filter { it.supports("stream", "movie", TEST_ID) }
         for (a in streamers) list += safe("Streams: ${StreamParse.shortName(a.name)}") {
             val found = StreamParse.fetchAll(listOf(a), "movie", TEST_ID)
             val ready = found.count { it.cached == true }
             val fits = found.count { Best.score(it, 142.0) != null }
             when {
+                found.isEmpty() && !isStreamProvider(a) -> Outcome(true, "not a stream add-on (fine)")
                 found.isEmpty() -> Outcome(false, "no streams for the test film",
-                    "Check your debrid (e.g. TorBox) is still active and its key is right in the add-on's config.")
+                    "Check your debrid service is still active and its key is right (Settings › Your streams).")
                 fits == 0 -> Outcome(false, "${found.size} found, none this device plays well", "All 4K, cam or not ready yet.")
                 else -> Outcome(true, "${found.size} found, $ready ready, $fits fit this device")
             }
         }
-        if (streamers.isNotEmpty()) list += safe("Speed: streams to this device") {
-            val url = SpeedTest.testUrl(streamers) ?: return@safe Outcome(false, "no stream to test with", "See the Streams lines above.")
-            val mbps = SpeedTest.measure(url)
-            onSpeed?.invoke(mbps)
-            if (mbps < 5) Outcome(false, SpeedTest.advice(mbps), "Slow for HD: try 5 GHz Wi-Fi, moving the router, or an Ethernet adapter.")
-            else Outcome(true, SpeedTest.advice(mbps))
-        }
+        if (streamers.isNotEmpty()) list += speedCheck(streamers, describe, onSpeed)
         if (online.isNotEmpty() && streamers.isEmpty()) list += Check("Streams") {
             Outcome(false, "no add-on gives streams", "Install a stream add-on such as AIOStreams.")
         }
@@ -90,6 +86,24 @@ object Health {
             catch (e: Throwable) { Outcome(false, describe(e)) }
         }
         return list
+    }
+
+    /** Add-ons whose job is giving streams (AIOStreams, Torrentio, Comet…), as opposed to ones that only link out. */
+    fun isStreamProvider(a: Addon): Boolean {
+        val n = (a.name + " " + a.id).lowercase()
+        return StreamSetup.isAioStreams(a) || listOf("torrentio", "comet", "mediafusion", "stremthru", "jackett", "debrid", "torbox", "peerflix", "knightcrawler", "easynews", "usenet")
+            .any { it in n }
+    }
+
+    /** The speed test as a check (for Is everything working? and the Stream speed screen). */
+    fun speedCheck(addons: List<Addon>, describe: (Throwable) -> String, onSpeed: ((Double) -> Unit)? = null): Check = Check("Speed: streams to this device") {
+        try {
+            val url = SpeedTest.testUrl(addons) ?: return@Check Outcome(false, "no stream to test with", "Is everything working? shows why.")
+            val mbps = SpeedTest.measure(url)
+            onSpeed?.invoke(mbps)
+            if (mbps < 5) Outcome(false, SpeedTest.advice(mbps), "Slow for HD: try 5 GHz Wi-Fi, moving the router, or an Ethernet adapter.")
+            else Outcome(true, SpeedTest.advice(mbps))
+        } catch (e: Throwable) { Outcome(false, describe(e)) }
     }
 
     /** One line for the top of the screen. */

@@ -43,11 +43,22 @@ object StreamsSetup {
                 })
                 rows += Row("   Every service is checked for ready-to-play copies; if a stream fails, the next one is tried, from any of them.")
             } else rows += Row("   Add a second service as a backup if you have one.")
+            val current = existing.firstOrNull { StreamSetup.installOf(it.transportUrl) != null }
+            rows += Row("────────────────────")
+            if (current != null) {
+                rows += Row("Update my streams with these keys", "►", action = {
+                    if (Prefs.debridKeys.isEmpty()) App.toast("Add a debrid key first")
+                    else App.ask("Your AIOStreams password (the one you chose when your streams were made)", hidden = true) { v ->
+                        if (!v.isNullOrEmpty()) update(current.transportUrl, Prefs.debridKeys, v)
+                    }
+                })
+                rows += Row("   Same install: only the debrid services change. Needs its password.")
+                rows += Row("────────────────────")
+            }
             if (existing.isNotEmpty()) rows += Row((if (replace) "✓ " else "   ") + "Replace my current AIOStreams", existing.size.toString(), action = {
                 replace = !replace; s.rows = build(); App.refresh()
             })
-            rows += Row("────────────────────")
-            rows += Row("Create my streams", "►", action = {
+            rows += Row("Create my streams", if (current != null) "a new install  ►" else "►", action = {
                 if (Prefs.debridKeys.isEmpty()) { App.toast("Add a debrid key first") }
                 else App.ask("Choose an AIOStreams password (6+ characters)", hidden = true) { v ->
                     val pw = v.orEmpty()
@@ -61,6 +72,18 @@ object StreamsSetup {
         s.rows = build()
         s.onShow = { s.rows = build(); App.refresh() }
         return s
+    }
+
+    private fun update(link: String, keys: List<Pair<String, String>>, password: String) {
+        val status = Screen("Updating your streams", listOf(Row("Saving your debrid services into your AIOStreams…")))
+        App.push(status)
+        App.async({ StreamSetup.update(link, password, keys) }) { r ->
+            status.rows = r.fold(
+                { listOf(Row("Done: your streams now use ${StreamSetup.names(keys).joinToString(", then ")}."), Row("Nothing else changed. Every device signed in uses them.")) },
+                { e -> listOf(Row("Couldn't update: " + (if (e is AioRows.Failed) e.message else Net.describe(e)))) },
+            )
+            App.refresh()
+        }
     }
 
     private fun create(keys: List<Pair<String, String>>, password: String, replace: Boolean) {

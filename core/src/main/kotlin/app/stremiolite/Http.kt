@@ -23,19 +23,40 @@ object Http {
         request(url, body, timeoutMs, allowErrors = true)
 
     /** Sends JSON with [method] (POST, PUT…) and returns the status code with the reply text. */
-    fun sendJson(url: String, method: String, body: String, timeoutMs: Int = 30_000): Pair<Int, String> {
+    fun sendJson(url: String, method: String, body: String?, timeoutMs: Int = 30_000, headers: Map<String, String> = emptyMap()): Pair<Int, String> {
         val c = open(url, timeoutMs)
         try {
             c.requestMethod = method
-            c.doOutput = true
-            c.setRequestProperty("Content-Type", "application/json")
-            c.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+            headers.forEach { (k, v) -> c.setRequestProperty(k, v) }
+            if (body != null) {
+                c.doOutput = true
+                c.setRequestProperty("Content-Type", "application/json")
+                c.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+            }
             val code = c.responseCode
             val stream = if (code >= 400) c.errorStream else c.inputStream
             return code to (stream?.use { it.readBytes().toString(Charsets.UTF_8) } ?: "")
         } finally {
             c.disconnect()
         }
+    }
+
+    /** Base64 (java.util.Base64 isn't on Android 5). */
+    fun base64(bytes: ByteArray): String {
+        val t = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+        val sb = StringBuilder()
+        var i = 0
+        while (i < bytes.size) {
+            val b0 = bytes[i].toInt() and 0xff
+            val b1 = if (i + 1 < bytes.size) bytes[i + 1].toInt() and 0xff else -1
+            val b2 = if (i + 2 < bytes.size) bytes[i + 2].toInt() and 0xff else -1
+            sb.append(t[b0 shr 2])
+            sb.append(t[((b0 and 3) shl 4) or (if (b1 < 0) 0 else b1 shr 4)])
+            sb.append(if (b1 < 0) '=' else t[((b1 and 15) shl 2) or (if (b2 < 0) 0 else b2 shr 6)])
+            sb.append(if (b2 < 0) '=' else t[b2 and 63])
+            i += 3
+        }
+        return sb.toString()
     }
 
     fun getBytes(url: String, timeoutMs: Int = 15_000): ByteArray {

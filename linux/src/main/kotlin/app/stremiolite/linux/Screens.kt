@@ -964,7 +964,7 @@ object Settings {
                 Row("──── Rows & streams ────"),
                 Row("Your rows (AIOMetadata)", "►", opens = { RowsSetup.screen() }),
                 Row("Your streams (AIOStreams)", "►", opens = { StreamsSetup.screen() }),
-                Row(info("Stream speed", SpeedCheck.summary()), "►", opens = { HealthScreen.screen() }),
+                Row(info("Stream speed", SpeedCheck.summary()), "►", opens = { SpeedScreen.screen() }),
                 Row("Your add-ons", (Home.all().size.takeIf { it > 0 }?.let { "$it  " } ?: "") + "►", opens = { Addons.screen() }),
                 Row("Where to watch (TMDB key)", (if (Prefs.tmdbKey.isBlank()) "not set" else "set ✓ · ${app.stremiolite.WhereToWatch.regionName(Prefs.watchRegion)}") + "  ►", opens = { Details.whereToWatchSettings() }),
                 Row("Your keys", "TMDB, TorBox, MDBList  ►", opens = { keysScreen() }),
