@@ -172,12 +172,16 @@ object Home {
         lateinit var s: Screen
         val status = Row("")
         var placed = false
+        var notices = 0
         fun build() {
             val list = addons
             val rows = mutableListOf<Row>()
             Waiting.homeRow()?.let { rows += it }
             NewEpisodes.homeRow()?.let { rows += it }
             Updates.homeRow()?.let { rows += it }
+            // A notice you've just opened has gone: back to Search, not the line that moved up.
+            if (rows.size < notices) placed = false
+            notices = rows.size
             if (rows.isNotEmpty()) rows += Row("────────────────────")
             status.label = when {
                 loading && list == null -> "Loading your rows…"

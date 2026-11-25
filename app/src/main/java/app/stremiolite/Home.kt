@@ -41,6 +41,7 @@ object Home {
 
         val search = Row("Search", "☰  ►", opens = { Search.menu(app) })
         var placed = false
+        var notices = 0
         val news = listOf(
             Row("News", "film & TV headlines  ►", opens = { Feeds.news(app) }),
             Row("Coming soon", "films & shows  ►", opens = { Feeds.comingSoon(app) }),
@@ -97,6 +98,9 @@ object Home {
                 rows.add(0, Row("Update available: build $n. Press OK to install", "►", action = { Updates.install(app) }))
                 top++
             }
+            // A notice you've just opened has gone: back to Search, not the line that moved up.
+            if (top < notices) placed = false
+            notices = top
             rows.addAll(top, listOf(
                 Row("──── Watching ────"),
             ) + (if (KidsGuard.hides(app)) emptyList() else listOf(search)) + listOf(
