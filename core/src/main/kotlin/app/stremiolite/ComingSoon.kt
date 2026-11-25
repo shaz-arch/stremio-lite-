@@ -43,6 +43,9 @@ object ComingSoon {
      */
     fun catalogs(addons: List<Addon>, chosen: String = ""): List<Pair<Addon, Addon.Catalog>> {
         if (chosen.isNotEmpty()) find(addons, chosen)?.let { return listOf(it) }
+        // The Releases rows (UK cinema releases, most popular first) say it best: coming and just out.
+        val releases = choices(addons).filter { (_, c) -> c.id == "tmdb.discover.xp_rel_cinema_next" || c.id == "tmdb.discover.xp_rel_cinema_now" }
+        if (releases.isNotEmpty()) return releases.sortedBy { if (it.second.id.endsWith("_next")) 0 else 1 }
         val all = choices(addons).filter { (_, c) -> !anime(c) }
         return (all.filter { upcoming(it.second) }.take(1) + all.filter { inCinemas(it.second) }.take(1))
     }

@@ -73,7 +73,7 @@ object RowSetup {
     /** Categories in the catalogue, in the order shown; the first ones are ticked to start with. */
     val categories = listOf(
         "Top 10", "Streaming", "Genres", "Kids & Family", "Charts", "Decades", "Documentaries", "Collections",
-        "Themes", "Sitcoms", "Studios", "Directors", "New & Latest",
+        "Themes", "Sitcoms", "Studios", "Directors", "Releases", "New & Latest",
         "World: European", "World: East Asian", "World: South Asian", "World: Middle Eastern",
         "Channels", "UK services", "Free services", "Film & specialist", "Indian services", "Asian services", "Other countries",
         "Franchises", "Actors", "Anime", "Seasonal", "Runtime", "Reality", "Indian", "Pakistani",
@@ -84,7 +84,7 @@ object RowSetup {
     enum class Size(val label: String, val categories: Set<String>) {
         MINIMAL("Minimal", setOf("Top 10", "Streaming", "Genres", "Kids & Family")),
         STANDARD("Standard", setOf("Top 10", "Streaming", "Genres", "Kids & Family", "Charts", "Decades", "Documentaries", "Collections",
-            "Themes", "Sitcoms", "Studios", "Directors")),
+            "Themes", "Sitcoms", "Studios", "Directors", "Releases")),
         FULL("Full", STANDARD.categories + setOf("New & Latest", "World: European", "World: East Asian", "World: South Asian",
             "World: Middle Eastern", "Channels", "UK services", "Free services", "Film & specialist", "Franchises", "Actors",
             "Anime", "Seasonal", "Runtime", "Reality")),

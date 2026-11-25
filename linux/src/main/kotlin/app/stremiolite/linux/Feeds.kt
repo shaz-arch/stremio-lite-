@@ -142,7 +142,7 @@ object Feeds {
                 list == null -> rows += Row("Looking at what's coming…")
                 used.isEmpty() -> {
                     rows += Row("None of your catalogues has an Upcoming or In Cinemas list.")
-                    rows += Row("Pick any film list with From, or tick New & Latest in Your rows (AIOMetadata).")
+                    rows += Row("Pick any film list with From, or tick Releases in Your rows (AIOMetadata).")
                 }
                 list.isEmpty() -> rows += Row("Nothing in that list just now.")
             }
@@ -192,7 +192,7 @@ object Feeds {
     private fun chooseList(): Screen {
         val chosen = Prefs.comingFrom
         val rows = mutableListOf(
-            Row("Automatic: Upcoming and In Cinemas", if (chosen.isEmpty()) "✓" else "", action = { Prefs.comingFrom = ""; App.back() }),
+            Row("Automatic: Releases (or Upcoming and In Cinemas)", if (chosen.isEmpty()) "✓" else "", action = { Prefs.comingFrom = ""; App.back() }),
             Row("──── Or one of your film lists ────"),
         )
         ComingSoon.choices(Home.all()).forEach { (a, c) ->
