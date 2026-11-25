@@ -23,6 +23,8 @@ class PhoneKeyboard(
     private val onText: (String) -> Unit,
     /** Go pressed on the phone (background thread). */
     private val onGo: (String) -> Unit,
+    /** A password or key: hidden on the phone's page too, with a Show tick box. */
+    private val secret: Boolean = false,
 ) {
     val token: String = ByteArray(9).also { SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
     private var server: ServerSocket? = null
@@ -71,7 +73,7 @@ class PhoneKeyboard(
         if (key != token) return reply(c, 403, "text/plain", "This link has expired. Scan the code on the TV again.")
         val body = if (length in 1..4096) readBody(input, length) else ""
         when {
-            method == "GET" && path == "/" -> reply(c, 200, "text/html; charset=utf-8", page(title, initial))
+            method == "GET" && path == "/" -> reply(c, 200, "text/html; charset=utf-8", page(title, initial, secret))
             method == "POST" && path == "/t" -> { onText(body); reply(c, 204, "text/plain", "") }
             method == "POST" && path == "/go" -> { onGo(body); reply(c, 200, "text/plain", "ok") }
             else -> reply(c, 404, "text/plain", "")
@@ -119,7 +121,7 @@ class PhoneKeyboard(
         fun decode(s: String): String = runCatching { URLDecoder.decode(s, "UTF-8") }.getOrDefault(s)
 
         /** The phone's page: one box, sent as you type, and a Go button. Plain, big, no scripts from elsewhere. */
-        fun page(title: String, initial: String) = """<!DOCTYPE html>
+        fun page(title: String, initial: String, secret: Boolean = false) = """<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Stremonino: ${esc(title)}</title>
 <style>
@@ -130,7 +132,8 @@ button{margin-top:14px;width:100%;font-size:20px;padding:14px;border:0;border-ra
 p{color:#999;font-size:14px}
 </style></head><body>
 <h1>${esc(title)}</h1>
-<form id="f"><input id="t" value="${esc(initial)}" autofocus autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="go">
+<form id="f"><input id="t" type="${if (secret) "password" else "text"}" value="${esc(initial)}" autofocus autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="go">
+${if (secret) "<label style=\"display:block;margin-top:12px;font-size:18px\"><input type=\"checkbox\" onchange=\"t.type=this.checked?'text':'password'\" style=\"width:auto\"> Show</label>" else ""}
 <button type="submit">Go</button></form>
 <p id="s">Shows on the TV as you type.</p>
 <script>

@@ -133,13 +133,14 @@ object History {
         val continuing = items.mapTo(HashSet()) { it.id }
         val saved = library.mapTo(HashSet()) { it.id }
         val waits = runCatching { Waiting.list(c) }.getOrDefault(emptyList()).associateBy { it.id }
+        val next = NextWatch.parse(remote[NextWatch.ID]).mapTo(HashSet()) { it.id }
         val m = HashMap<String, String>()
-        for (id in watched + continuing + saved + waits.keys) {
+        for (id in watched + continuing + saved + waits.keys + next) {
             val w = waits[id]
             Marks.pick(
                 watched = id in watched, continuing = id in continuing,
                 ready = w != null && w.ready > 0, better = w != null && w.better, waiting = w != null,
-                library = id in saved,
+                library = id in saved, next = id in next,
             )?.let { m[id] = it }
         }
         marks = m

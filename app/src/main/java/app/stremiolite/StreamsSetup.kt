@@ -44,7 +44,7 @@ object StreamsSetup {
         android.app.AlertDialog.Builder(app)
             .setTitle("AIOStreams password")
             .setMessage("Needed to change these settings later on AIOStreams' page.")
-            .setView(pw)
+            .setView(PhoneTyping.box(app, pw, Secret.toggle(app, pw)))
             .setPositiveButton("Create") { _, _ ->
                 val v = pw.text.toString()
                 if (v.length < 6) app.toast("Use at least 6 characters") else done(v)

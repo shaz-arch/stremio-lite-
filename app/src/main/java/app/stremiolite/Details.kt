@@ -179,6 +179,7 @@ object Details {
             app.refreshTop()
         })
         rows += lib
+        NextList.row(app, f)?.let { rows += it }
         if (f.type == "series") {
             // Following is separate from the Library: shows you've started are followed automatically.
             lateinit var fol: Row

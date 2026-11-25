@@ -26,7 +26,7 @@ object StreamsSetup {
             Row("────────────────────"),
             Row("Create my streams", "►", action = {
                 if (torbox.isBlank()) { App.toast("Add your TorBox key first") }
-                else App.ask("Choose an AIOStreams password (6+ characters)") { v ->
+                else App.ask("Choose an AIOStreams password (6+ characters)", hidden = true) { v ->
                     val pw = v.orEmpty()
                     if (pw.isEmpty()) return@ask
                     if (pw.length < 6) App.toast("Use at least 6 characters") else create(torbox, pw, replace)

@@ -114,7 +114,7 @@ object RowsSetup {
             Row(""),
             Row("Get your key", "opens browser  ►", action = { WebLink.open(page) }),
             Row(if (get().isBlank()) "Enter the key" else "Change the key", if (get().isBlank()) "" else "…" + get().takeLast(4), action = {
-                App.ask("$title (ctrl+shift+v pastes)", get()) { v -> if (v != null) { set(v.trim()); s.rows = build(); App.refresh() } }
+                App.ask("$title (ctrl+shift+v pastes)", get(), hidden = true) { v -> if (v != null) { set(v.trim()); s.rows = build(); App.refresh() } }
             }),
         ) + (if (get().isNotBlank()) listOf(Row("Remove the key", action = { set(""); s.rows = build(); App.refresh() })) else emptyList()) +
             listOf(Row("Done", action = { App.back() }))
@@ -178,7 +178,7 @@ object RowsSetup {
     }
 
     private fun askNewPassword(p: RowSetup.Picks) {
-        App.ask("Choose an AIOMetadata password (6+ characters, to change rows later)") { v ->
+        App.ask("Choose an AIOMetadata password (6+ characters, to change rows later)", hidden = true) { v ->
             val pw = v.orEmpty()
             if (pw.isEmpty()) return@ask
             if (pw.length < 6) App.toast("Use at least 6 characters") else create(p, pw)
@@ -213,7 +213,7 @@ object RowsSetup {
                     Row("Couldn't create the rows: " + (if (e is AioRows.Failed) e.message else Net.describe(e))),
                     if (needsKey) Row("Free key: themoviedb.org › Settings › API (copy the 'API Key')") else null,
                     if (needsKey) Row("Enter a TMDB key", "►", action = {
-                        App.ask("TMDB API key (ctrl+shift+v pastes)") { k ->
+                        App.ask("TMDB API key (ctrl+shift+v pastes)", hidden = true) { k ->
                             val key2 = k?.trim().orEmpty()
                             if (key2.isNotEmpty()) { App.back(); create(p, password, key2) }
                         }

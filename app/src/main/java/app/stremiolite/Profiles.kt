@@ -202,7 +202,7 @@ object Profiles {
         val box = android.widget.LinearLayout(app).apply {
             orientation = android.widget.LinearLayout.VERTICAL
             setPadding(48, 24, 48, 0)
-            addView(name); addView(email); addView(password)
+            addView(name); addView(email); addView(password); addView(Secret.toggle(app, password))
         }
         android.app.AlertDialog.Builder(app)
             .setTitle("New profile")

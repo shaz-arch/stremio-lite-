@@ -83,7 +83,7 @@ object KidsGuard {
         val pass = EditText(app).apply { hint = "Its Stremio password"; inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD; setSingleLine() }
         AlertDialog.Builder(app)
             .setTitle("Clear the kids lock")
-            .setView(boxed(app, email, pass))
+            .setView(boxed(app, email, pass, Secret.toggle(app, pass)))
             .setPositiveButton("Clear it") { _, _ ->
                 val e = email.text.toString().trim()
                 if (Profiles.all(app).none { it.email.equals(e, ignoreCase = true) }) { app.toast("That account isn't signed in on this device"); return@setPositiveButton }

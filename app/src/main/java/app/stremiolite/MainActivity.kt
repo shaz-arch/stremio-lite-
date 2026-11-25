@@ -360,6 +360,7 @@ class MainActivity : Activity() {
             setPadding(48, 24, 48, 0)
             addView(email)
             addView(password)
+            addView(Secret.toggle(this@MainActivity, password))
         }
         AlertDialog.Builder(this)
             .setTitle("Sign in to Stremio")

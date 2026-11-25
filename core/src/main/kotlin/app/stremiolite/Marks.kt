@@ -9,6 +9,7 @@ package app.stremiolite
 object Marks {
     const val WATCHED = "●"
     const val CONTINUE = "◐"
+    const val NEXT = "◔"
     const val READY = "◆"
     const val BETTER = "◇"
     const val WAITING = "◷"
@@ -16,13 +17,14 @@ object Marks {
 
     /** In priority order, with what each means (for a key on screen if wanted). */
     val KEY = listOf(
-        LIBRARY to "in your Library", CONTINUE to "Continue watching", WATCHED to "watched",
+        LIBRARY to "in your Library", NEXT to "Next watch", CONTINUE to "Continue watching", WATCHED to "watched",
         WAITING to "waiting for a stream", READY to "stream now ready", BETTER to "better version coming",
     )
 
-    fun pick(watched: Boolean, continuing: Boolean, ready: Boolean, better: Boolean, waiting: Boolean, library: Boolean): String? = when {
+    fun pick(watched: Boolean, continuing: Boolean, ready: Boolean, better: Boolean, waiting: Boolean, library: Boolean, next: Boolean = false): String? = when {
         watched -> WATCHED
         continuing -> CONTINUE
+        next -> NEXT
         ready -> READY
         better -> BETTER
         waiting -> WAITING

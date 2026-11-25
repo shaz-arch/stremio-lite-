@@ -67,7 +67,7 @@ object CloneScreen {
             hint = "Password"; setSingleLine()
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
-        box.addView(email); box.addView(pw)
+        box.addView(email); box.addView(pw); box.addView(Secret.toggle(app, pw))
         android.app.AlertDialog.Builder(app)
             .setTitle("Another Stremio account")
             .setMessage("Used once for this copy, then signed out and forgotten. Nothing is saved.")

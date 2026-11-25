@@ -57,7 +57,7 @@ object RowPicker {
         val box = LinearLayout(app).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(48, 24, 48, 0)
-            addView(pw); addView(keep)
+            addView(pw); addView(Secret.toggle(app, pw)); addView(keep)
         }
         android.app.AlertDialog.Builder(app)
             .setTitle(if (a.stickRows) "Stremonino's rows" else "Stremio's rows")

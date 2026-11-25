@@ -20,9 +20,12 @@ object PhoneTyping {
     fun show(
         app: MainActivity, b: AlertDialog.Builder, input: EditText, title: String,
         box: LinearLayout = box(app, input),
+        /** A password or key: hidden, with a Show tick box (and hidden on the phone's page too). */
+        secret: Boolean = false,
         submit: (AlertDialog) -> Unit = { it.getButton(DialogInterface.BUTTON_POSITIVE)?.performClick() },
     ): AlertDialog {
         var kb: PhoneKeyboard? = null
+        if (secret) box.addView(Secret.toggle(app, input), 1)
         b.setView(box)
         // On a phone you already have a keyboard.
         if (app.isPhone) return b.show()
@@ -32,7 +35,7 @@ object PhoneTyping {
         dialog.show()
         dialog.getButton(DialogInterface.BUTTON_NEUTRAL)?.setOnClickListener { button ->
             if (kb != null) return@setOnClickListener
-            val k = PhoneKeyboard(title, input.text.toString(),
+            val k = PhoneKeyboard(title, if (secret) "" else input.text.toString(), secret = secret,
                 onText = { t -> app.runOnUiThread { if (dialog.isShowing) { input.setText(t); input.setSelection(input.text.length) } } },
                 onGo = { t -> app.runOnUiThread { if (dialog.isShowing) { input.setText(t); submit(dialog) } } },
             )

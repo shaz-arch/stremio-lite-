@@ -66,7 +66,7 @@ object App {
     private var prompt: Prompt? = null
     private var listHeight = 10
 
-    private class Prompt(val label: String, var text: String, val hidden: Boolean, val done: (String?) -> Unit)
+    private class Prompt(val label: String, var text: String, val hidden: Boolean, val done: (String?) -> Unit) { var showing = false }
 
     // ---- threads ----------------------------------------------------------------------------
 
@@ -253,6 +253,8 @@ object App {
         when (k.keyType) {
             KeyType.Enter -> { prompt = null; p.done(p.text) }
             KeyType.Escape -> { prompt = null; p.done(null) }
+            // Tab shows or hides a password or key while you type it.
+            KeyType.Tab -> if (p.hidden) p.showing = !p.showing
             KeyType.Backspace -> if (p.text.isNotEmpty()) p.text = p.text.dropLast(1)
             KeyType.Character -> if (k.isCtrlDown && (k.character == 'c' || k.character == 'C')) { prompt = null; p.done(null) } else p.text += k.character
             else -> {}
@@ -362,9 +364,10 @@ object App {
             p != null -> {
                 g.backgroundColor = t.bar
                 g.foregroundColor = t.barText
-                val shown = if (p.hidden) "*".repeat(p.text.length) else p.text
+                val shown = if (p.hidden && !p.showing) "*".repeat(p.text.length) else p.text
+                val hint = if (p.hidden) (if (p.showing) "  (Tab hides)" else "  (Tab shows)") else ""
                 g.putString(left - 1, h - 1, " ".repeat(inner + 2))
-                g.putString(left, h - 1, fit("${p.label}: $shown▌", inner))
+                g.putString(left, h - 1, fit("${p.label}$hint: $shown▌", inner))
                 g.backgroundColor = t.bg
             }
             msg != null -> {

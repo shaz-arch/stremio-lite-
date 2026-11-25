@@ -198,6 +198,7 @@ object Home {
             val searchRow = Row("Search", "/  ►", opens = null, action = { Search.start() })
             if (!KidsGuard.hides()) rows += searchRow
             rows += Row("Continue watching", if (cw.isEmpty()) "nothing yet" else "${cw.size}  ►", opens = { continueScreen() })
+            rows += Row("Next watch", NextList.summary(), opens = { NextList.screen() })
             rows += Row("Library", if (lib.isEmpty()) "empty" else "${lib.size}  ►", opens = { libraryScreen() })
             rows += Row("New episodes", NewEpisodes.recentCount()?.let { if (it == 0) "none  ►" else "$it  ►" } ?: "", opens = { NewEpisodes.screen() })
             rows += Row("Calendar", NewEpisodes.weekCount()?.let { if (it == 0) "nothing this week  ►" else "$it this week  ►" } ?: "", opens = { NewEpisodes.calendar() })
@@ -442,7 +443,7 @@ object Catalogs {
         return Marks.pick(
             watched = type == "movie" && Lib.filmWatched(id), continuing = info?.continuing == true,
             ready = w != null && w.ready > 0, better = w != null && w.better, waiting = w != null,
-            library = info?.inLibrary == true,
+            library = info?.inLibrary == true, next = NextList.has(id),
         )
     }
 
@@ -723,6 +724,7 @@ object Details {
             App.toast(if (added) "Added to library" else "Removed from library")
         })
         rows += lib
+        NextList.row(f)?.let { rows += it }
         if (f.type == "series") {
             lateinit var fol: Row
             fun folLabel() = if (Follow.isFollowed(f.id)) "Following new episodes and seasons ✓ (stop)" else "Tell me about new episodes and seasons"

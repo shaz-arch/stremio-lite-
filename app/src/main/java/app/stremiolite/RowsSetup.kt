@@ -118,7 +118,7 @@ object RowsSetup {
                 val input = EditText(app).apply { hint = title; setSingleLine(); setText(get()) }
                 PhoneTyping.show(app, android.app.AlertDialog.Builder(app).setTitle(title).setMessage("Type or paste it.")
                     .setPositiveButton("OK") { _, _ -> set(input.text.toString().trim()); s.rows = build(); app.refresh(s) }
-                    .setNegativeButton("Cancel", null), input, title)
+                    .setNegativeButton("Cancel", null), input, title, secret = true)
             }),
         ) + (if (get().isNotBlank()) listOf(Row("Remove the key", action = { set(""); s.rows = build(); app.refresh(s) })) else emptyList()) +
             listOf(Row("Done", action = { app.back() }))
@@ -191,7 +191,7 @@ object RowsSetup {
         android.app.AlertDialog.Builder(app)
             .setTitle("AIOMetadata password")
             .setMessage("Used to change these rows later (here or on AIOMetadata's page). This device remembers it.")
-            .setView(pw)
+            .setView(PhoneTyping.box(app, pw, Secret.toggle(app, pw)))
             .setPositiveButton("Create") { _, _ ->
                 val v = pw.text.toString()
                 if (v.length < 6) app.toast("Use at least 6 characters") else create(app, p, v)
@@ -233,7 +233,7 @@ object RowsSetup {
                             .setPositiveButton("Create") { _, _ ->
                                 val k = input.text.toString().trim()
                                 if (k.isNotEmpty()) { app.back(); create(app, p, password, k) }
-                            }.setNegativeButton("Cancel", null), input, "TMDB key")
+                            }.setNegativeButton("Cancel", null), input, "TMDB key", secret = true)
                     }) else Row("Try again", action = { app.back(); create(app, p, password, tmdbKey) }),
                 )
             }
