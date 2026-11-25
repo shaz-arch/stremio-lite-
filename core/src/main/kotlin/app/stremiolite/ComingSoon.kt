@@ -68,7 +68,15 @@ object ComingSoon {
     /** Looks up one film's release date from its details. Blocking. */
     fun lookUp(addons: List<Addon>, e: Entry) {
         if (e.date >= 0) return
-        e.date = runCatching { day(MetaParse.fetch(addons, e.meta.type, e.meta.id).releasedDay) }.getOrDefault(0L)
+        // Ask the list's own add-on first (AIOMetadata knows the date); others, like Cinemeta, often
+        // have no exact date for a film not out yet, so keep asking until one has it.
+        val order = listOf(e.addon) + addons.filter { it !== e.addon && it.base != e.addon.base }
+        e.date = 0L
+        for (a in order) {
+            if (!a.supports("meta", e.meta.type, e.meta.id)) continue
+            val d = runCatching { day(MetaParse.fetch(listOf(a), e.meta.type, e.meta.id).releasedDay) }.getOrDefault(0L)
+            if (d > 0) { e.date = d; return }
+        }
     }
 
     /** "2026-12-18…" → that day (UTC midnight), or 0. */
