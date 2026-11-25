@@ -16,7 +16,7 @@ object Health {
     class Outcome(val ok: Boolean, val text: String, val help: String = "")
     class Check(val name: String, val run: () -> Outcome)
 
-    fun checks(authKey: String?, loaded: List<Addon>?, tmdbKey: String, describe: (Throwable) -> String, onSpeed: ((Double) -> Unit)? = null): List<Check> {
+    fun checks(authKey: String?, loaded: List<Addon>?, tmdbKey: String, describe: (Throwable) -> String, onSpeed: ((Double) -> Unit)? = null, keys: List<Check> = emptyList()): List<Check> {
         val addons = loaded ?: emptyList()
         fun offline(d: String) = listOf("address not found", "timed out", "refused", "unreachable", "network").any { it in d.lowercase() }
         fun safe(name: String, f: () -> Outcome) = Check(name) { try { f() } catch (e: Throwable) { Outcome(false, describe(e)) } }
@@ -85,6 +85,8 @@ object Health {
             catch (e: WhereToWatch.KeyRefused) { Outcome(false, "key not accepted", "Copy it again from themoviedb.org › Settings › API.") }
             catch (e: Throwable) { Outcome(false, describe(e)) }
         }
+        // Your other keys (debrid, MDBList, Gemini), each with its own service.
+        list += keys
         return list
     }
 

@@ -213,6 +213,7 @@ object Settings {
         fun build(): List<Row> = listOf(
             Row("Keys for this profile. Each one is yours: change it if"),
             Row("someone here should use their own account."),
+            Row("Check all my keys", "►", opens = { KeysCheck.screen(app) }),
             Row("────────────────────"),
             Row("TMDB key", set(tmdbKey(app)) + "  ►", opens = { whereToWatch(app) }),
             Row("   Where to watch, age ratings, Coming soon. Synced, never shared."),

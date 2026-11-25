@@ -1464,6 +1464,7 @@ fun keysScreen(): Screen {
     fun set(k: String) = if (k.isBlank()) "not set" else "…" + k.takeLast(4)
     fun build(): List<Row> = listOf(
         Row("Keys for this profile. Each one is yours: change it if someone here should use their own account."),
+        Row("Check all my keys", "►", opens = { KeysCheck.screen() }),
         Row("────────────────────"),
         Row("TMDB key", set(Prefs.tmdbKey) + "  ►", opens = { Details.whereToWatchSettings() }),
         Row("   Where to watch, age ratings, Coming soon. Synced, never shared."),
