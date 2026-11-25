@@ -192,7 +192,7 @@ object NewEpisodes {
                 loading -> "Checking $followedCount shows… $checked done"
                 followedCount == 0 -> "Start watching a show, or on a show choose 'Tell me about new episodes and seasons', to see its new episodes here."
                 list.isEmpty() -> "No new episodes in the last ${Releases.DAYS} days ($followedCount shows followed)."
-                else -> "Out in the last ${Releases.DAYS} days · $followedCount shows followed · ▶ plays"
+                else -> "Out in the last ${Releases.DAYS} days · $followedCount shows followed · ► plays"
             }
             list.forEach { f ->
                 val date = runCatching { pretty.format(iso.parse(f.ep.released)!!) }.getOrDefault(f.ep.released)

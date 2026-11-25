@@ -427,7 +427,7 @@ object Catalogs {
 
     fun mark(m: Meta): String? = when {
         m.type == "movie" && Lib.filmWatched(m.id) -> "✓"
-        Lib.info(m.id)?.continuing == true -> "▶"
+        Lib.info(m.id)?.continuing == true -> "►"
         else -> null
     }
 
@@ -837,7 +837,7 @@ object Details {
             s.rows = eps.map { v ->
                 val mark = when {
                     v.id in done -> "✓ "
-                    info?.continuing == true && info.videoId == v.id -> "▶ "
+                    info?.continuing == true && info.videoId == v.id -> "► "
                     else -> "  "
                 }
                 val when_ = if (upcoming(v)) "out ${v.released}" else v.released

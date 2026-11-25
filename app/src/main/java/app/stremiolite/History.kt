@@ -116,7 +116,7 @@ object History {
     private val writeLock = Any()
     @Volatile private var writeSeq = 0
 
-    /** "✓" watched film, "▶" started or next up, by title id. Rebuilt only after a change. */
+    /** "✓" watched film, "►" started or next up, by title id. Rebuilt only after a change. */
     private var marks: Map<String, String>? = null
 
     fun marks(c: Context): Map<String, String> {
@@ -130,7 +130,7 @@ object History {
             val st = o.optJSONObject("state") ?: return@forEach
             if (o.optString("type") == "movie" && (st.optInt("timesWatched") > 0 || st.optInt("flaggedWatched") > 0)) m[id] = "✓"
         }
-        items.forEach { if (m[it.id] == null) m[it.id] = "▶" }
+        items.forEach { if (m[it.id] == null) m[it.id] = "►" }
         marks = m
         return m
     }

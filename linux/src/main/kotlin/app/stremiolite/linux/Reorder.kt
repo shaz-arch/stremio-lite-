@@ -57,7 +57,7 @@ class Reorder<T>(
         return h + items.mapIndexed { i, it ->
             val isCarried = mode == Mode.CARRYING && it === carried
             Row(
-                if (isCarried) "▶ ${label(it)} ◀" else label(it),
+                if (isCarried) "► ${label(it)} ◄" else label(it),
                 when {
                     isCarried -> if (false) "tap where it goes" else "↑↓ move · OK drops"
                     mode == Mode.PICKING -> "pick up"
