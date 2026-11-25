@@ -207,7 +207,7 @@ object Share {
                 p.optJSONObject("s")?.let { Settings.importShared(app, it, hide) }
                 live?.let { Settings.addLive(app, it) }
                 app.applyLook()
-                Home.forget()
+                Home.refreshAddons(app)
                 runCatching { Account.addonCache(app).delete() }
                 app.replaceTop(done(app, from, failed, p.optBoolean("st") && !hadStreams))
             }

@@ -23,6 +23,27 @@ object Home {
      */
     fun rowAddons(list: List<Addon> = allAddons()): List<Addon> = Folders.rowAddons(list)
 
+    /**
+     * Reloads the add-ons from the account now (after rows or streams were made or changed), so
+     * everything sees them straight away instead of after Home's next load. [done] runs after.
+     */
+    fun refreshAddons(app: MainActivity, done: () -> Unit = {}) {
+        val key = Account.authKey(app) ?: return done()
+        Net.async({
+            val json = Stremio.withLiveManifests(Stremio.addonsJson(key))
+            json to Stremio.parseAddons(json)
+        }) { r ->
+            r.onSuccess { (json, list) ->
+                addons = list
+                savedJson = json
+                checks.clear()
+                Net.async({ runCatching { Account.addonCache(app).writeText(json) } }) { }
+            }
+            rebuildHome?.invoke()
+            done()
+        }
+    }
+
     fun forget() {
         addons = null
         savedJson = null

@@ -5,7 +5,8 @@ import android.widget.EditText
 
 /** Settings › Your streams: create an AIOStreams install tuned for Stremonino, with your debrid services. */
 object StreamsSetup {
-    fun screen(app: MainActivity): Screen {
+    /** [keysOnly]: just the debrid keys and their order (Your keys), without making or updating streams. */
+    fun screen(app: MainActivity, keysOnly: Boolean = false): Screen {
         val existing = Home.allAddons().filter { StreamSetup.isAioStreams(it) }
         var replace = existing.isNotEmpty()
         lateinit var s: Screen
@@ -50,6 +51,12 @@ object StreamsSetup {
                 rows += Row("   Every service is checked for ready-to-play copies; if a stream")
                 rows += Row("   fails, the next one is tried, from any of them.")
             } else rows += Row("   Add a second service as a backup if you have one.")
+            if (keysOnly) {
+                rows += Row("────────────────────")
+                rows += Row("Your streams use these after 'Update my streams' or 'Create my streams'")
+                rows += Row("in Settings › Your streams.")
+                return rows
+            }
             val current = existing.firstOrNull { StreamSetup.installOf(it.transportUrl) != null }
             rows += Row("────────────────────")
             if (current != null) {
@@ -69,7 +76,7 @@ object StreamsSetup {
             })
             return rows
         }
-        s = Screen("Your streams (AIOStreams)", emptyList())
+        s = Screen(if (keysOnly) "Debrid keys" else "Your streams (AIOStreams)", emptyList())
         s.rows = build()
         s.onShow = { s.rows = build(); app.refresh(s) }
         return s
@@ -92,7 +99,7 @@ object StreamsSetup {
         app.push(status)
         Net.async({ StreamSetup.update(link, password, keys) }) { r ->
             status.rows = r.fold(
-                { listOf(Row("Done: your streams now use ${StreamSetup.names(keys).joinToString(", then ")}."), Row("Nothing else changed. Every device signed in uses them.")) },
+                { listOfNotNull(Row("Done: your streams now use ${StreamSetup.names(keys).joinToString(", then ")}."), Row("Nothing else changed. Every device signed in uses them."), SetupWizard.continueRow(app)) },
                 { e -> listOf(
                     Row("Couldn't update: " + (if (e is AioRows.Failed) e.message else Net.describe(e))),
                     Row("Try again", action = { app.back(); askCurrentPassword(app) { pw -> update(app, link, keys, pw) } }),
@@ -130,12 +137,13 @@ object StreamsSetup {
             url to StreamSetup.install(key, url, replace)
         }) { r ->
             r.onSuccess { (_, removed) ->
-                Home.forget()
+                Home.refreshAddons(app)
                 status.rows = listOfNotNull(
                     Row("Done. Your streams are on your Stremio account."),
                     if (removed > 0) Row("Your old AIOStreams was taken off the account.") else null,
                     Row("Every device signed in to it uses them."),
                     Row("Keep your password: it opens the settings on AIOStreams' page."),
+                    SetupWizard.continueRow(app),
                 )
             }.onFailure { e ->
                 status.rows = listOf(

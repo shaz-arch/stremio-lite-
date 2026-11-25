@@ -10,6 +10,24 @@ object SetupWizard {
     var password: String? = null
         private set
     private var active = false
+    private var currentStep: Screen? = null
+    private var currentIndex = 0
+
+    /** On a "Done" page reached from a setup step: back to that step, then on to the next. */
+    fun continueRow(app: MainActivity): Row? {
+        val step = currentStep ?: return null
+        if (!active || !app.inStack(step)) return null
+        return Row("Continue setting up", "►", action = {
+            while (!app.isTop(step) && app.inStack(step)) app.back()
+            next(app, currentIndex)
+        })
+    }
+
+    private fun next(app: MainActivity, i: Int) {
+        Settings.markSetup(app, STEPS[i].first)
+        app.back()
+        app.push(if (i + 1 < STEPS.size) step(app, i + 1) else finished(app))
+    }
 
     /** A password just chosen for rows or streams: the other uses it too. */
     fun offer(v: String) { if (active && password == null) password = v }
@@ -54,7 +72,8 @@ object SetupWizard {
             app.refresh(s)
         }
         s = Screen("Set up Stremonino", emptyList())
-        s.onShow = { build() }
+        // What's on the account right now, not what Home last loaded.
+        s.onShow = { build(); Home.refreshAddons(app) { if (app.isTop(s)) build() } }
         s.position = 3
         return s
     }
@@ -66,17 +85,20 @@ object SetupWizard {
             val rows = mutableListOf<Row>()
             rows += Row(status(app, id).removeSuffix("  ►"))
             rows += Row("────────────────────")
-            rows += body(app, id) { s.rows = mutableListOf(); s.onShow?.invoke() }
+            rows += body(app, id) { build() }
             rows += Row("────────────────────")
-            rows += if (i + 1 < STEPS.size) Row("Next: ${STEPS[i + 1].second}", "►", action = {
-                Settings.markSetup(app, id); app.back(); app.push(step(app, i + 1))
-            }) else Row("Finish", "►", action = { Settings.markSetup(app, id); app.back(); app.push(finished(app)) })
+            rows += if (i + 1 < STEPS.size) Row("Next: ${STEPS[i + 1].second}", "►", action = { next(app, i) })
+                else Row("Finish", "►", action = { next(app, i) })
             rows += Row("Back to the list of steps", action = { Settings.markSetup(app, id); app.back() })
             s.rows = rows
             app.refresh(s)
         }
         s = Screen("Step ${i + 1} of ${STEPS.size}: $name", emptyList())
-        s.onShow = { build() }
+        s.onShow = {
+            currentStep = s; currentIndex = i
+            build()
+            Home.refreshAddons(app) { if (app.isTop(s)) build() }
+        }
         return s
     }
 
@@ -110,10 +132,13 @@ object SetupWizard {
                 Row("Change my categories", "►", opens = { RowsSetup.screen(app) }),
             )
         }
-        "streams" -> listOf(
-            Row("Your streams come from AIOStreams with your debrid services."),
-            Row(if (Home.allAddons().any { StreamSetup.isAioStreams(it) }) "Already set up: update its keys, or make a new one there." else "Add your debrid keys there, then Create my streams."),
-            Row("Your streams", "►", opens = { StreamsSetup.screen(app) }),
+        "streams" -> if (Home.allAddons().any { StreamSetup.isAioStreams(it) }) listOf(
+            Row("You have streams. To use the keys from step 2, update them:"),
+            Row("Update my streams with my keys", "►", opens = { StreamsSetup.screen(app) }),
+            Row("   (It's the first button there. 'Create' makes a second install: not needed.)"),
+        ) else listOf(
+            Row("Your streams come from AIOStreams with your debrid services (step 2)."),
+            Row("Create my streams", "►", opens = { StreamsSetup.screen(app) }),
         )
         "home" -> listOf(
             Row("Live TV on Home", if (Settings.liveTv(app)) "◄ Shown ►" else "◄ Hidden ►", action = { Settings.flip(app, "liveTv", true); Home.redraw(); refresh() }),
@@ -124,7 +149,10 @@ object SetupWizard {
         )
         else -> listOf(
             Row("Checks your account, add-ons, rows, streams, speed and every key."),
-            Row("Is everything working?", "►", opens = { HealthScreen.screen(app) }),
+            Row("Is everything working?", "►", action = {
+                app.toast("Getting your add-ons…")
+                Home.refreshAddons(app) { app.push(HealthScreen.screen(app)) }
+            }),
         )
     }
 
@@ -137,7 +165,8 @@ object SetupWizard {
             status.label = r.fold({ (if (added > 0) "Done: $added new rows added and switched on." else "Done: your rows were already complete.") + " Keys and settings updated." }) { e ->
                 "Couldn't save: " + (if (e is AioRows.Failed) e.message else Net.describe(e))
             }
-            if (r.isSuccess) Home.forget()
+            if (r.isSuccess) continueRow(app)?.let { s.rows = s.rows + it }
+            if (r.isSuccess) Home.refreshAddons(app)
             app.refresh(s)
         }
         s

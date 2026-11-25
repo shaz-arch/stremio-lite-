@@ -97,7 +97,7 @@ object RowPicker {
                 r.onSuccess {
                     saved = true
                     App.toast("Saved. Your rows reload on Home; Stremio picks them up when it next loads.")
-                    java.io.File(Store.dir, "addons.json").delete(); Home.forget(); Home.load(force = true)
+                    Home.refresh()
                     App.back()
                 }.onFailure { e -> App.toast("Couldn't save: " + (if (e is AioRows.Failed) e.message else Net.describe(e))) }
             }

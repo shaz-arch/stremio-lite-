@@ -227,7 +227,7 @@ object Settings {
             Row("────────────────────"),
             Row("TMDB key", set(tmdbKey(app)) + "  ►", opens = { whereToWatch(app) }),
             Row("   Where to watch, age ratings, Coming soon. Synced, never shared."),
-            Row("Debrid keys", debridKeys(app).let { if (it.isEmpty()) "not set" else StreamSetup.names(it).joinToString(", ") } + "  ►", opens = { StreamsSetup.screen(app) }),
+            Row("Debrid keys", debridKeys(app).let { if (it.isEmpty()) "not set" else StreamSetup.names(it).joinToString(", ") } + "  ►", opens = { StreamsSetup.screen(app, keysOnly = true) }),
             Row("   Kept on this device only."),
             Row("MDBList key", set(mdblistKey(app)) + "  ►", opens = {
                 RowsSetup.keyScreen(app, "MDBList key", RowSetup.MDBLIST_KEY_PAGE, listOf(

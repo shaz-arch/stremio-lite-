@@ -141,7 +141,7 @@ object RowsSetup {
         RowSetup.setMdblistKey(l.config, key)
         Net.async({ AioRows.save(l, pw) }) { r ->
             status.label = r.fold({ "Saved: your rows use this key now. Home reloads them." }) { e -> "Couldn't save: " + (if (e is AioRows.Failed) e.message else Net.describe(e)) }
-            if (r.isSuccess) Home.forget()
+            if (r.isSuccess) Home.refreshAddons(app)
             app.refresh(s)
         }
         s
@@ -156,7 +156,7 @@ object RowsSetup {
             status.label = r.fold({ "Saved: Ask AI is on (Search › Ask AI). In Stremio's own apps, start a search with \"ai\"." }) { e ->
                 "Couldn't save: " + (if (e is AioRows.Failed) e.message else Net.describe(e))
             }
-            if (r.isSuccess) Home.forget()
+            if (r.isSuccess) Home.refreshAddons(app)
             app.refresh(s)
         }
         s
@@ -169,7 +169,7 @@ object RowsSetup {
         Net.async({ AioRows.save(l, password) }) { r ->
             r.onSuccess {
                 app.toast("Saved. Your rows reload on Home.")
-                Home.forget(); app.back()
+                Home.refreshAddons(app); app.back()
             }.onFailure { e -> app.toast("Couldn't save: " + (if (e is AioRows.Failed) e.message else Net.describe(e))) }
         }
     }
@@ -185,7 +185,7 @@ object RowsSetup {
             val key = Account.authKey(app) ?: return
             app.toast("Adding TMDB Collections…")
             Net.async({ Stremio.installAddon(key, link, detailsOnly = true) }) { r ->
-                r.onSuccess { addedHere = true; Home.forget(); app.toast("Added. Collections now open their film series."); redraw() }
+                r.onSuccess { addedHere = true; Home.refreshAddons(app); app.toast("Added. Collections now open their film series."); redraw() }
                     .onFailure { e -> app.toast("Couldn't add it: " + Net.describe(e)) }
             }
         }
@@ -207,7 +207,7 @@ object RowsSetup {
             if (onAccount(app)) Row("Take it off the account", action = {
                 val key = Account.authKey(app)
                 if (key != null) Net.async({ RowSetup.collectionsAddons(Stremio.parseAddons(Stremio.addonsJson(key))).forEach { Stremio.removeAddon(key, it.transportUrl) } }) { r ->
-                    r.onSuccess { addedHere = false; Home.forget(); app.toast("Taken off. Collections rows won't open."); redraw() }
+                    r.onSuccess { addedHere = false; Home.refreshAddons(app); app.toast("Taken off. Collections rows won't open."); redraw() }
                         .onFailure { e -> app.toast("Couldn't: " + Net.describe(e)) }
                 }
             }) else null,
@@ -252,13 +252,14 @@ object RowsSetup {
             r.onSuccess { made ->
                 RowPicker.remember(app, made.installUrl, password)
                 val stick = Home.allAddons().any { it.stickRows }
-                Home.forget()
+                Home.refreshAddons(app)
                 status.rows = listOfNotNull(
                     Row("Done. Your rows are on your Stremio account."),
                     Row("Every device signed in to it gets them."),
                     Row("Back on Home they load in a moment."),
                     if (stick) Row("You also have a stick rows install, which Stremonino shows instead: remove it in Your add-ons.") else null,
                     Row("Keep your password: you need it to change rows on another device."),
+                    SetupWizard.continueRow(app),
                 )
             }.onFailure { e ->
                 val needsKey = e is AioRows.Failed && e.message?.contains("TMDB") == true

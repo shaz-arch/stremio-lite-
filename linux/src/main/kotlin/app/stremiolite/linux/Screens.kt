@@ -166,6 +166,19 @@ object Home {
     fun loaded(): List<Addon>? = addons
     fun rowAddons() = Folders.rowAddons(all())
     fun forget() { addons = null; error = null }
+
+    /** Reloads the add-ons from the account now (after rows or streams changed); [done] runs after. */
+    fun refresh(done: () -> Unit = {}) {
+        val key = Account.authKey ?: return done()
+        App.async({
+            val json = Stremio.withLiveManifests(Stremio.addonsJson(key))
+            json to Stremio.parseAddons(json)
+        }) { r ->
+            r.onSuccess { (json, list) -> addons = list; error = null; runCatching { Store.file("addons.json").writeText(json) } }
+            rebuild?.invoke()
+            done()
+        }
+    }
     fun redraw() { rebuild?.invoke() }
 
     fun screen(): Screen {
@@ -1469,7 +1482,7 @@ fun keysScreen(): Screen {
         Row("────────────────────"),
         Row("TMDB key", set(Prefs.tmdbKey) + "  ►", opens = { Details.whereToWatchSettings() }),
         Row("   Where to watch, age ratings, Coming soon. Synced, never shared."),
-        Row("Debrid keys", Prefs.debridKeys.let { if (it.isEmpty()) "not set" else app.stremiolite.StreamSetup.names(it).joinToString(", ") } + "  ►", opens = { StreamsSetup.screen() }),
+        Row("Debrid keys", Prefs.debridKeys.let { if (it.isEmpty()) "not set" else app.stremiolite.StreamSetup.names(it).joinToString(", ") } + "  ►", opens = { StreamsSetup.screen(keysOnly = true) }),
         Row("   Kept on this computer only."),
         Row("MDBList key", set(Prefs.mdblistKey) + "  ►", opens = {
             RowsSetup.keyScreen("MDBList key", app.stremiolite.RowSetup.MDBLIST_KEY_PAGE, listOf(

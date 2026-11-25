@@ -163,7 +163,7 @@ object RowPicker {
             r.onSuccess {
                 done()
                 app.toast("Saved. Your rows will reload on Home; Stremio picks them up when it next loads.")
-                Home.forget()
+                Home.refreshAddons(app)
                 app.back()
             }.onFailure { e -> app.toast("Couldn't save: " + (if (e is AioRows.Failed) e.message else Net.describe(e))) }
         }
