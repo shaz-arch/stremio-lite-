@@ -1099,14 +1099,14 @@ object Waiting {
             .sortedWith(compareByDescending<Entry> { it.ready }.thenBy { it.name })
         if (films.isEmpty()) rows += Row("None. On a film, choose 'Tell me when a stream is available'.")
         films.forEach { e ->
-            rows += Row((if (e.ready > 0) Marks.READY + " " else "") + e.name + if (e.year.isNotEmpty()) " (${e.year})" else "",
+            rows += Row(Marks.title(if (e.ready > 0) Marks.READY else if (e.better) Marks.BETTER else Marks.WAITING, e.name) + if (e.year.isNotEmpty()) " (${e.year})" else "",
                 if (e.ready > 0) "ready  ►" else "waiting  ►", opens = { Details.screenFor(e.id, e.type, e.name) })
         }
         val upgrades = list().filter { it.better }
         if (upgrades.isNotEmpty()) {
             rows += Row("──── Better versions ────")
             upgrades.sortedWith(compareByDescending<Entry> { it.ready }.thenBy { it.name }).forEach { e ->
-                rows += Row((if (e.ready > 0) Marks.READY + " " else "") + e.name + if (e.year.isNotEmpty()) " (${e.year})" else "",
+                rows += Row(Marks.title(if (e.ready > 0) Marks.READY else if (e.better) Marks.BETTER else Marks.WAITING, e.name) + if (e.year.isNotEmpty()) " (${e.year})" else "",
                     (if (e.ready > 0) "found: ${e.found}" else "have: ${e.have}") + "  ►",
                     opens = { Details.screenFor(e.id, e.type, e.name) })
             }
