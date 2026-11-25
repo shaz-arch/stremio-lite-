@@ -187,14 +187,14 @@ object Home {
             val waiting = Waiting.list()
             rows += Row("──── Watching ────")
             val searchRow = Row("Search", "/  ►", opens = null, action = { Search.start() })
-            rows += searchRow
+            if (!KidsGuard.hides()) rows += searchRow
             rows += Row("Continue watching", if (cw.isEmpty()) "nothing yet" else "${cw.size}  ►", opens = { continueScreen() })
             rows += Row("Library", if (lib.isEmpty()) "empty" else "${lib.size}  ►", opens = { libraryScreen() })
             rows += Row("New episodes", NewEpisodes.recentCount()?.let { if (it == 0) "none  ►" else "$it  ►" } ?: "", opens = { NewEpisodes.screen() })
             rows += Row("Calendar", NewEpisodes.weekCount()?.let { if (it == 0) "nothing this week  ►" else "$it this week  ►" } ?: "", opens = { NewEpisodes.calendar() })
             rows += Row("Watched", Watched.list().size.let { if (it == 0) "" else "$it  ►" }, opens = { watchedScreen() })
             rows += Row("Waiting for streams", Waiting.summary(), opens = { Waiting.screen() })
-            if (Prefs.liveTv) rows += Row("Live TV", Live.homeDetail(), opens = { Live.screen() })
+            if (Prefs.liveTv && !KidsGuard.hides()) rows += Row("Live TV", Live.homeDetail(), opens = { Live.screen() })
             if (list != null) {
                 rows += Row("──── Browse ────")
                 val entries = Index.entries(list)
@@ -212,20 +212,22 @@ object Home {
             }
             rows += Row("──── App ────")
             // Same order and wording as the phone and stick.
-            if (Prefs.newsOn) {
+            if (KidsGuard.locked()) rows += Row("Games", "►", opens = { GamesScreen.screen() })
+            if (Prefs.newsOn && !KidsGuard.hides()) {
                 rows += Row("News", "film & TV headlines  ►", opens = { Feeds.news() })
                 rows += Row("Coming soon", "films & shows  ►", opens = { Feeds.comingSoon() })
             }
+            rows += SleepTimer.row()
             // Setup items (add-ons, export/import, device check, about) live inside Settings.
-            rows += Row("Settings", "►", opens = { Settings.screen() })
+            rows += Row("Settings", "►", action = { KidsGuard.guard { App.push(Settings.screen()) } })
             rows += Row("Reload my rows and add-ons", action = { load(force = true) })
             rows += Row("──── Profile ────")
-            rows += Row(Profiles.current()?.name ?: "…", "current")
-            rows += Row("Switch profile", "►", opens = { Profiles.chooser() })
-            rows += Row("Sign out of this profile", opens = { signOut() })
+            rows += Row(Profiles.current()?.name ?: "…", if (KidsGuard.locked()) "current · locked" else "current")
+            rows += Row("Switch profile", "►", action = { KidsGuard.guard { App.push(Profiles.chooser()) } })
+            rows += Row("Sign out of this profile", action = { KidsGuard.guard { App.push(signOut()) } })
             s.rows = rows
             // Open on Search, not on the "Watching" header above it.
-            if (!placed) { placed = true; s.moveTo = rows.indexOf(searchRow) }
+            if (!placed) { placed = true; s.moveTo = rows.indexOf(searchRow).takeIf { it >= 0 } ?: rows.indexOfFirst { it.label == "Continue watching" } }
             App.refresh()
         }
         rebuild = { build() }
@@ -942,6 +944,7 @@ object Settings {
                 Row("──── About ────"),
                 Row(info("App version", "build ${Updates.current}")),
                 Row("Check for updates", action = { Updates.checkNow() }),
+                Row("Is everything working?", "check it all  ►", opens = { HealthScreen.screen() }),
                 Row("Device check", "►", opens = { DeviceCheck.screen() }),
                 Row("About Stremonino", "►", opens = { Home.about() }),
             )

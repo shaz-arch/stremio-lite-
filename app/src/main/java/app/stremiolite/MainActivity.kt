@@ -115,12 +115,23 @@ class MainActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode != Player.REQUEST_PLAY) return
+        playerOpen = false
         val (watch, launched) = History.takePending(this)
         val extras = data?.extras
         fun num(vararg keys: String): Long? = keys.firstNotNullOfOrNull { k -> (extras?.get(k) as? Number)?.toLong() }
-        val position = num("extra_position", "position")?.takeIf { it >= 0 }
+        // Closed by the sleep timer: the player may not say where it got to, so use the time it ran.
+        val slept = launched > 0 && Sleep.stoppedSince(launched)
+        val position = num("extra_position", "position")?.takeIf { it >= 0 } ?: if (slept) Sleep.reached() else null
         val duration = num("extra_duration", "duration")?.takeIf { it > 0 }
         val completed = extras?.getString("end_by") == "playback_completion"
+        if (slept) {
+            onPlayerFailed = null
+            if (watch != null) History.record(this, watch, position, duration, false)
+            toast("Sleep timer: stopped at ${History.clock(position ?: 0)}")
+            refreshTop()
+            stack.lastOrNull()?.onShow?.invoke()
+            return
+        }
 
         // Back within 15 seconds without getting past 5: the stream didn't play.
         // A "video" under 2 minutes is an error clip (e.g. ElfHosted's "couldn't play this" screen), not the title.
@@ -135,7 +146,7 @@ class MainActivity : Activity() {
         } else if (watch != null) {
             History.record(this, watch, position, duration, completed)
             val finished = completed || History.isFinished(position ?: 0, duration ?: 0)
-            if (finished && watch.nextVideoId != null && Settings.autoNext(this)) {
+            if (finished && watch.nextVideoId != null && Settings.autoNext(this) && !Sleep.stopsNext()) {
                 push(Binge.upNext(this, watch))
                 return
             }
@@ -146,6 +157,9 @@ class MainActivity : Activity() {
 
     /** Set by Play best before starting the player; returns true if it is trying another stream. */
     var onPlayerFailed: (() -> Boolean)? = null
+
+    /** True while the video player we started is open (for the sleep timer). */
+    var playerOpen = false
 
     override fun onPause() {
         super.onPause()
@@ -449,7 +463,7 @@ class MainActivity : Activity() {
                 return true
             }
             KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_SEARCH -> {
-                if (event.action == KeyEvent.ACTION_UP && Account.authKey(this) != null) Search.start(this)
+                if (event.action == KeyEvent.ACTION_UP && Account.authKey(this) != null && !KidsGuard.hides(this)) Search.start(this)
                 return true
             }
         }

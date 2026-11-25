@@ -226,7 +226,7 @@ object App {
                 'k' -> move(s, -1)
                 'j' -> move(s, 1)
                 'p', 'P' -> s.rows.getOrNull(s.pos)?.let { r -> (r.play ?: r.action)?.invoke() }
-                '/' -> Search.start()
+                '/' -> if (!KidsGuard.hides()) Search.start()
                 'q', 'Q' -> if (stack.size <= 1) quit() else back()
                 ' ' -> choose(s)
                 else -> if (k.isCtrlDown && (c == 'c' || c == 'C')) quit()

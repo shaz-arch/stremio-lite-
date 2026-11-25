@@ -347,6 +347,7 @@ object Profiles {
             })
         }
         rows += Row("Sign ${p.name} in again", "►", opens = { signInAgain(app, p.id) })
+        rows += Row("Kids lock (parent PIN)", (if (KidsGuard.state(app).isLocked(p.id)) "locked 🔒" else "off") + "  ►", opens = { KidsGuard.screen(app, p) })
         rows += Row("────────────────────")
         rows += Row("Remove ${p.name} from this stick", action = {
             val wasCurrent = current(app)?.id == p.id

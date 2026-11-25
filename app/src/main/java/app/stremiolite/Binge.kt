@@ -31,9 +31,12 @@ object Binge {
         var left = SECONDS
         var active = false
 
+        val shownAt = System.currentTimeMillis()
         fun go() {
             if (nw == null) return
             active = false
+            // The sleep timer ran out during the countdown: stop here.
+            if (Sleep.timeUp() || Sleep.stoppedSince(shownAt)) { app.back(); app.toast("Sleep timer: stopped before the next episode"); return }
             val title = "${nw.name} ${nw.label.substringBefore(' ')}"
             app.replaceTop(Streams.playBest(app, nw.type, nw.videoId, title, nw.runtime, nw, 0))
         }

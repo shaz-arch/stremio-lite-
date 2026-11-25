@@ -1,5 +1,6 @@
 package app.stremiolite.linux
 
+import app.stremiolite.Sleep
 import app.stremiolite.Best
 import app.stremiolite.Http
 import app.stremiolite.LibraryItems
@@ -233,11 +234,13 @@ object Play {
 object After {
     fun played(w: Watch, r: Player.Result) {
         if (r.pos <= 0 && r.dur <= 0) return
-        val done = LibraryItems.finished(r.pos, r.dur)
+        val slept = r.launched > 0 && Sleep.stoppedSince(r.launched)
+        val done = !slept && LibraryItems.finished(r.pos, r.dur)
         Lib.record(w, r.pos, r.dur, positionKnown = true, done = done)
         Home.redraw()
+        if (slept) { App.toast("Sleep timer: stopped at ${clock(r.pos)}"); return }
         val next = w.nextVideoId
-        if (done && next != null && Prefs.autoNext) App.push(upNext(w, next))
+        if (done && next != null && Prefs.autoNext && !Sleep.stopsNext()) App.push(upNext(w, next))
     }
 
     private fun label(id: String): String {
@@ -256,8 +259,10 @@ object After {
         var cancelled = false
         lateinit var s: Screen
         val status = Row("")
+        val shownAt = System.currentTimeMillis()
         fun tick() {
             if (cancelled || !App.isTop(s)) return
+            if (Sleep.timeUp() || Sleep.stoppedSince(shownAt)) { cancelled = true; App.back(); App.toast("Sleep timer: stopped before the next episode"); return }
             if (left <= 0) { App.replaceTop(Play.best(w.type, nextId, title, nw, 0)); return }
             status.label = "Next: ${nw.label} starts in $left s"
             left--
@@ -281,7 +286,16 @@ object After {
  * through mpv's IPC socket, so resume, watched marks and next episode all work.
  */
 object Player {
-    class Result(val pos: Long, val dur: Long, val failed: Boolean, val why: String)
+    class Result(val pos: Long, val dur: Long, val failed: Boolean, val why: String, val launched: Long = 0)
+
+    @Volatile private var current: Process? = null
+
+    /** Closes the player if one is open (the sleep timer); true if there was one. */
+    fun stop(): Boolean {
+        val p = current?.takeIf { it.isAlive } ?: return false
+        p.destroy()   // mpv quits cleanly on SIGTERM; the position it reported so far is kept
+        return true
+    }
 
     fun play(url: String, title: String, sub: Sub?, startAt: Long, done: (Result) -> Unit) {
         val cmd = Prefs.player
@@ -304,6 +318,8 @@ object Player {
             done(Result(0, 0, true, "player missing"))
             return
         }
+        current = proc
+        Sleep.started(startAt, launched)
         val posMs = java.util.concurrent.atomic.AtomicLong(0)
         val durMs = java.util.concurrent.atomic.AtomicLong(0)
         if (isMpv) {
@@ -351,7 +367,11 @@ object Player {
                 code != 0 && ran < 15_000 -> "the player stopped with an error"
                 else -> "it closed straight away"
             }
-            App.post { done(Result(p, d, failed, why)) }
+            if (current === proc) current = null
+            val slept = Sleep.stoppedSince(launched)
+            // Players other than mpv don't report a position: use the time it ran.
+            val pos = if (slept && p <= 0) Sleep.reached() else p
+            App.post { done(Result(pos, d, failed && !slept, why, launched)) }
         }.apply { isDaemon = true }.start()
     }
 }

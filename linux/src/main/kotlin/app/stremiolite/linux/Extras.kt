@@ -225,6 +225,7 @@ object Profiles {
                 })
             } + listOf(Row("────────────────────"), Row("Adds their playlists, favourites and guide link. ${p.name} keeps everything it already has.")))
         })
+        rows += Row("Kids lock (parent PIN)", (if (KidsGuard.state().isLocked(p.id)) "locked" else "off") + "  ►", opens = { KidsGuard.screen(p) })
         rows += Row("────────────────────")
         rows += Row("Remove ${p.name} from this computer", action = {
             val wasCurrent = current()?.id == p.id

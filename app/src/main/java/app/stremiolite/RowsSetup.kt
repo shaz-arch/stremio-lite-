@@ -116,9 +116,9 @@ object RowsSetup {
             LinkOut.row(app, "Get your key", title, page),
             Row(if (get().isBlank()) "Enter the key" else "Change the key", if (get().isBlank()) "" else "…" + get().takeLast(4), action = {
                 val input = EditText(app).apply { hint = title; setSingleLine(); setText(get()) }
-                android.app.AlertDialog.Builder(app).setTitle(title).setMessage("Type or paste it.").setView(input)
+                PhoneTyping.show(app, android.app.AlertDialog.Builder(app).setTitle(title).setMessage("Type or paste it.")
                     .setPositiveButton("OK") { _, _ -> set(input.text.toString().trim()); s.rows = build(); app.refresh(s) }
-                    .setNegativeButton("Cancel", null).show()
+                    .setNegativeButton("Cancel", null), input, title)
             }),
         ) + (if (get().isNotBlank()) listOf(Row("Remove the key", action = { set(""); s.rows = build(); app.refresh(s) })) else emptyList()) +
             listOf(Row("Done", action = { app.back() }))
@@ -162,10 +162,10 @@ object RowsSetup {
             if (!onAccount(app)) Row("Add it now (standard settings)", "►", action = { install(RowSetup.collectionsAddon) }) else null,
             Row("Use my own install link", "paste  ►", action = {
                 val input = EditText(app).apply { hint = "https://…/manifest.json"; setSingleLine() }
-                android.app.AlertDialog.Builder(app).setTitle("TMDB Collections install link")
-                    .setMessage("From its settings page: Install, or copy the link.").setView(input)
+                PhoneTyping.show(app, android.app.AlertDialog.Builder(app).setTitle("TMDB Collections install link")
+                    .setMessage("From its settings page: Install, or copy the link.")
                     .setPositiveButton("Add") { _, _ -> input.text.toString().trim().takeIf { it.isNotEmpty() }?.let { install(it) } }
-                    .setNegativeButton("Cancel", null).show()
+                    .setNegativeButton("Cancel", null), input, "TMDB Collections link")
             }),
             LinkOut.row(app, "Its settings page (language, adult, search)", "TMDB Collections settings", RowSetup.collectionsPage),
             if (onAccount(app)) Row("Take it off the account", action = {
@@ -229,11 +229,11 @@ object RowsSetup {
                     if (needsKey) Row("Free key: themoviedb.org › Settings › API (copy the 'API Key')") else null,
                     if (needsKey) Row("Enter a TMDB key", "►", action = {
                         val input = EditText(app).apply { hint = "TMDB API key"; setSingleLine() }
-                        android.app.AlertDialog.Builder(app).setTitle("TMDB key").setView(input)
+                        PhoneTyping.show(app, android.app.AlertDialog.Builder(app).setTitle("TMDB key")
                             .setPositiveButton("Create") { _, _ ->
                                 val k = input.text.toString().trim()
                                 if (k.isNotEmpty()) { app.back(); create(app, p, password, k) }
-                            }.setNegativeButton("Cancel", null).show()
+                            }.setNegativeButton("Cancel", null), input, "TMDB key")
                     }) else Row("Try again", action = { app.back(); create(app, p, password, tmdbKey) }),
                 )
             }

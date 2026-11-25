@@ -34,7 +34,7 @@ object Home {
     fun screen(app: MainActivity): Screen {
         // Just the profile's name (the email stays in Switch profile).
         fun whoText() = Profiles.current(app)?.name ?: "…"
-        val who = Row(whoText(), "current")
+        val who = Row(whoText(), if (KidsGuard.locked(app)) "current · locked 🔒" else "current")
         val addonsRow = Row("Your add-ons", "", opens = { addonList(app) })
         val status = Row("")
         lateinit var screen: Screen
@@ -45,9 +45,11 @@ object Home {
             Row("News", "film & TV headlines  ►", opens = { Feeds.news(app) }),
             Row("Coming soon", "films & shows  ►", opens = { Feeds.comingSoon(app) }),
         )
+        val sleepRow = SleepTimer.row(app)
         val appRows = listOf(
             // Setup items (add-ons, export/import, device check, about) live inside Settings.
-            Row("Settings", "►", opens = { Settings.screen(app) }),
+            sleepRow,
+            Row("Settings", "►", action = { KidsGuard.guard(app) { app.push(Settings.screen(app)) } }),
             Row("Reload my rows and add-ons", action = {
                 // Also fetches your history, follows and waiting list from the account straight away.
                 History.pull(app, full = true) { rebuildHome?.invoke() }
@@ -55,16 +57,21 @@ object Home {
             }),
             Row("──── Profile ────"),
             who,
-            Row("Switch profile", "►", opens = { Profiles.chooser(app) }),
-            Row("Sign out of this profile", opens = { signOut(app) }),
+            Row("Switch profile", "►", action = { KidsGuard.guard(app) { app.push(Profiles.chooser(app)) } }),
+            Row("Sign out of this profile", action = { KidsGuard.guard(app) { app.push(signOut(app)) } }),
         )
         // The App rows; News and Coming soon sit above Settings unless hidden in Settings → Look.
-        fun tools() = listOf(Row("──── App ────")) + (if (Settings.newsOn(app)) news else emptyList()) + appRows
+        val games = Row("Games", "►", opens = { GamesScreen.screen(app) })
+        fun tools() = listOf(Row("──── App ────")) +
+            (if (KidsGuard.hides(app)) emptyList() else if (Settings.newsOn(app)) news else emptyList()) +
+            (if (KidsGuard.locked(app)) listOf(games) else emptyList()) + appRows
 
         fun rebuild() {
             val list = addons
             addonsRow.detail = if (list != null) "${list.size}  ►" else ""
             who.label = whoText()
+            who.detail = if (KidsGuard.locked(app)) "current · locked 🔒" else "current"
+            sleepRow.detail = Sleep.summary() + "  ►"
             screen.tag = Profiles.current(app)?.name ?: ""
             val rows = mutableListOf<Row>()
             if (list != null) rows += homeRows(app, list)
@@ -87,19 +94,19 @@ object Home {
             }
             rows.addAll(if (Updates.available != null) 1 else 0, listOf(
                 Row("──── Watching ────"),
-                search,
+            ) + (if (KidsGuard.hides(app)) emptyList() else listOf(search)) + listOf(
                 Row("Continue watching", if (cw.isEmpty()) "nothing yet" else "${cw.size}  ►", opens = { continueScreen(app) }),
                 Row("Library", if (lib.isEmpty()) "empty" else "${lib.size}  ►", opens = { libraryScreen(app) }),
                 Row("New episodes", NewEpisodes.recentCount()?.let { if (it == 0) "none  ►" else "$it  ►" } ?: "", opens = { NewEpisodes.screen(app) }),
                 Row("Calendar", NewEpisodes.weekCount()?.let { if (it == 0) "nothing this week  ►" else "$it this week  ►" } ?: "", opens = { NewEpisodes.calendar(app) }),
                 Row("Watched", History.watched(app).size.let { if (it == 0) "" else "$it  ►" }, opens = { watchedScreen(app) }),
                 Row("Waiting for streams", Waiting.summary(app), opens = { Waiting.screen(app) }),
-            ) + (if (Settings.liveTv(app)) listOf(Row("Live TV", Live.homeDetail(app), opens = { Live.screen(app) })) else emptyList()) + listOf(
+            ) + (if (Settings.liveTv(app) && !KidsGuard.hides(app)) listOf(Row("Live TV", Live.homeDetail(app), opens = { Live.screen(app) })) else emptyList()) + listOf(
                 Row("──── Browse ────"),
             ))
             screen.rows = rows + tools()
             // Open on Search, not on the "Watching" header above it.
-            if (!placed) { placed = true; screen.moveTo = screen.rows.indexOf(search) }
+            if (!placed) { placed = true; screen.moveTo = screen.rows.indexOf(search).takeIf { it >= 0 } ?: screen.rows.indexOfFirst { it.label == "Continue watching" } }
             app.refresh(screen)
         }
         rebuildHome = { rebuild() }
@@ -109,6 +116,7 @@ object Home {
             // A renamed profile shows its new name in the title straight away.
             screen.tag = Profiles.current(app)?.name ?: ""
             who.label = whoText()
+            sleepRow.detail = Sleep.summary() + "  ►"
             History.pull(app) { rebuild() }
             Updates.check { rebuild() }
             Waiting.checkSoon(app) { rebuild() }
@@ -303,6 +311,9 @@ object Home {
     /** Settings' "Your add-ons" line opens this. */
     fun addonsScreen(app: MainActivity) = addonList(app)
 
+    /** The add-ons as loaded (null while loading), for the health check. */
+    fun loadedAddons(): List<Addon>? = addons
+
     /** How many add-ons the account has (for Settings), or null while loading. */
     fun addonCount(): Int? = addons?.size
 
@@ -371,14 +382,13 @@ object Home {
             hint = "https://…/manifest.json"
             setSingleLine()
         }
-        android.app.AlertDialog.Builder(app)
+        PhoneTyping.show(app, android.app.AlertDialog.Builder(app)
             .setTitle("Add-on link")
             .setMessage(
                 if (stickRows) "Paste the install link of the config whose rows this app should show. " +
                     "Stremio's own apps won't see it, so your phone keeps its own rows."
                 else "Paste the add-on's install link. If you already have this add-on (e.g. AIOMetadata), it is replaced.",
             )
-            .setView(input)
             .setPositiveButton("Install") { _, _ ->
                 val link = input.text.toString().trim()
                 if (link.isEmpty()) return@setPositiveButton
@@ -393,8 +403,7 @@ object Home {
                     if (r.isSuccess) { forget() }
                 }
             }
-            .setNegativeButton("Cancel", null)
-            .show()
+            .setNegativeButton("Cancel", null), input, "Add-on link")
     }
 
     private fun addonDetails(app: MainActivity, a: Addon): Screen {
