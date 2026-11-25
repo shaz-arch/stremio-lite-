@@ -63,6 +63,15 @@ object RowsSetup {
                 })
                 rows += r
             }
+            if (edit != null) {
+                val others = RowSetup.others(edit.catalogs)
+                if (others.isNotEmpty()) {
+                    rows += Row("Other rows in your config", "${others.size} · ◄ ${if (p.othersOff) "Turn off" else "Keep"} ►", action = {
+                        p.othersOff = !p.othersOff; s.rows = build(); app.refresh(s)
+                    })
+                    rows += Row("   See which (older rows, your own lists)", "►", opens = { Screen("Other rows (${others.size})", others.map { Row(it) }) })
+                }
+            }
             rows += Row("──── Add-ons these rows need ────")
             rows += Row("TMDB Collections", (when {
                 onAccount(app) -> "on your account ✓"
@@ -230,7 +239,7 @@ object RowsSetup {
     private fun fits(app: MainActivity, p: RowSetup.Picks, existing: AioRows.Loaded? = null): Boolean {
         val n = RowSetup.serverCountFor(p, existing?.catalogs)
         if (n <= RowSetup.SERVER_LIMIT) return true
-        val big = RowSetup.biggest(p).joinToString(", ") { "${it.first} (${it.second})" }
+        val big = RowSetup.biggest(p, existing = existing?.catalogs).joinToString(", ") { "${it.first} (${it.second})" }
         android.app.AlertDialog.Builder(app).setTitle("Too many rows: $n")
             .setMessage("ElfHosted's free AIOMetadata allows 200 rows per install. Untick some of the biggest: $big.")
             .setPositiveButton("OK", null).show()

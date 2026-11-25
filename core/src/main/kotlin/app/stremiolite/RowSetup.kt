@@ -45,8 +45,10 @@ object RowSetup {
     fun hasCollectionsAddon(list: List<Addon>) = list.any { "tmdb-collections" in it.transportUrl || "tmdbcollections" in it.id.lowercase() }
 
     /** The biggest ticked categories, to suggest unticking when over the limit. */
-    fun biggest(p: Picks, n: Int = 4): List<Pair<String, Int>> =
-        p.categories.map { it to countIn(p, it) }.sortedByDescending { it.second }.take(n)
+    fun biggest(p: Picks, n: Int = 4, existing: JSONArray? = null): List<Pair<String, Int>> =
+        (p.categories.map { it to countIn(p, it) } +
+            (if (existing != null && !p.othersOff) listOf("Other rows in your config" to others(existing).size) else emptyList()))
+            .filter { it.second > 0 }.sortedByDescending { it.second }.take(n)
 
     /** ElfHosted's free public AIOMetadata server (it supplies a TMDB key, so none is needed). */
     const val SERVER = "https://aiometadata.elfhosted.com"
@@ -95,7 +97,30 @@ object RowSetup {
         /** Optional keys: your own TMDB key, and an MDBList key (which switches on the MDBList rows). */
         var tmdbKey: String = ""
         var mdblistKey: String = ""
+        /** Editing: switch off rows in the install that aren't in any category here (see [others]). */
+        var othersOff: Boolean = false
     }
+
+    /** Today's name for each catalogue row ("id|type" → name): older installs may have earlier names. */
+    private val currentNames: Map<String, String> by lazy {
+        val all = catalogue()
+        (0 until all.length()).map { all.getJSONObject(it) }.associate { (it.optString("id") + "|" + it.optString("type")) to it.optString("name") }
+    }
+
+    /** A row's name as the catalogue has it today (older installs were made before some groups were split). */
+    private fun nameOf(o: JSONObject): String = currentNames[o.optString("id") + "|" + o.optString("type")] ?: o.optString("name")
+
+    /** A row that isn't in any category this checklist can tick (an older or hand-made row, your own lists). */
+    private fun isOther(o: JSONObject): Boolean {
+        val known = currentNames.containsKey(o.optString("id") + "|" + o.optString("type"))
+        val (cat, _) = group(nameOf(o))
+        return (cat.isNotEmpty() && cat !in categories) || (!known && cat.isEmpty())
+    }
+
+    /** Names of the rows in [existing] that are on and not in any category here. */
+    fun others(existing: JSONArray): List<String> = (0 until existing.length()).mapNotNull { existing.optJSONObject(it) }
+        .filter { it.optBoolean("enabled", true) && it.optString("mergedInto").isBlank() && isOther(it) }
+        .map { nameOf(it) }
 
     /** Where to get each key (shown as a link on phones and Linux, a QR code on the stick). */
     const val TMDB_KEY_PAGE = "https://www.themoviedb.org/settings/api"
@@ -213,9 +238,11 @@ object RowSetup {
             val o = catalogs.optJSONObject(i) ?: continue
             // Parts of a merged row stay off (the merged row fetches them); a row with no setting counts as on.
             if (o.optString("mergedInto").isNotBlank()) { o.put("enabled", false); continue }
-            val name = o.optString("name")
+            // Rows from an older install get today's name, so they land in today's categories.
+            val name = nameOf(o)
+            if (name != o.optString("name")) o.put("name", name)
+            if (isOther(o)) { if (p.othersOff) o.put("enabled", false); continue }
             val (cat, _) = group(name)
-            if (cat.isNotEmpty() && cat !in categories) continue
             val keyOk = o.optString("id") !in needsMdblist || p.mdblistKey.isNotBlank()
             o.put("enabled", keyOk && sizeOk(o.optString("id"), o.optString("type"), p) && wanted(name, p))
             if (cat.isNotEmpty()) o.put("showInHome", false)

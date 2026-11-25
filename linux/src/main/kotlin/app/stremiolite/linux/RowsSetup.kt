@@ -63,6 +63,15 @@ object RowsSetup {
                 })
                 rows += r
             }
+            if (edit != null) {
+                val others = RowSetup.others(edit.catalogs)
+                if (others.isNotEmpty()) {
+                    rows += Row("Other rows in your config", "${others.size} · ◄ ${if (p.othersOff) "Turn off" else "Keep"} ►", action = {
+                        p.othersOff = !p.othersOff; s.rows = build(); App.refresh()
+                    })
+                    rows += Row("   See which (older rows, your own lists)", "►", opens = { Screen("Other rows (${others.size})", others.map { Row(it) }) })
+                }
+            }
             rows += Row("──── Add-ons these rows need ────")
             rows += Row("TMDB Collections", (when {
                 onAccount() -> "on your account ✓"
@@ -213,7 +222,7 @@ object RowsSetup {
     private fun fits(p: RowSetup.Picks, existing: AioRows.Loaded? = null): Boolean {
         val n = RowSetup.serverCountFor(p, existing?.catalogs)
         if (n <= RowSetup.SERVER_LIMIT) return true
-        val big = RowSetup.biggest(p).joinToString(", ") { "${it.first} (${it.second})" }
+        val big = RowSetup.biggest(p, existing = existing?.catalogs).joinToString(", ") { "${it.first} (${it.second})" }
         App.toast("$n rows: ElfHosted allows 200 per install. Untick some of: $big")
         return false
     }
