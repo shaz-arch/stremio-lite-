@@ -67,7 +67,7 @@ object NextList {
                 rows += Row("──── ${g?.heading ?: "Checking…"} ────")
                 items.forEach { e ->
                     val st = NextStatus.of(e.id)
-                    rows += Row(Marks.title(st?.shape ?: Marks.NEXT, e.name), detail(e) + "  ►", opens = { Details.screenFor(app, e.id, e.type, e.name, e.year) })
+                    rows += Row(Marks.title(st?.shape ?: Marks.NEXT, e.name), detail(e) + "  ►", action = { Details.screenFor(app, e.id, e.type, e.name, e.year)?.let { app.push(it) } })
                 }
             }
             if (list.isNotEmpty()) rows += Row("────────────────────")

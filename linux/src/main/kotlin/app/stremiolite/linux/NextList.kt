@@ -65,7 +65,7 @@ object NextList {
                 rows += Row("──── ${g?.heading ?: "Checking…"} ────")
                 items.forEach { e ->
                     val st = app.stremiolite.NextStatus.of(e.id)
-                    rows += Row(Marks.title(st?.shape ?: Marks.NEXT, e.name), detail(e) + "  ►", opens = { Details.screenFor(e.id, e.type, e.name) })
+                    rows += Row(Marks.title(st?.shape ?: Marks.NEXT, e.name), detail(e) + "  ►", action = { Details.screenFor(e.id, e.type, e.name)?.let { App.push(it) } })
                 }
             }
             if (list.isNotEmpty()) rows += Row("────────────────────")
