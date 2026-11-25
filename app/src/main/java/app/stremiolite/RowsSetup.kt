@@ -111,7 +111,7 @@ object RowsSetup {
     }
 
     /** One optional key: where to get it (link or QR code), and entering, changing or removing it. */
-    fun keyScreen(app: MainActivity, title: String, page: String, about: List<String>, get: () -> String, set: (String) -> Unit, top: List<Row> = emptyList()): Screen {
+    fun keyScreen(app: MainActivity, title: String, page: String, about: List<String>, get: () -> String, set: (String) -> Unit, top: List<Row> = emptyList(), after: (() -> List<Row>)? = null): Screen {
         lateinit var s: Screen
         fun build(): List<Row> = top + about.map { Row(it) } + listOf(
             Row(""),
@@ -123,6 +123,7 @@ object RowsSetup {
                     .setNegativeButton("Cancel", null), input, title, secret = true)
             }),
         ) + (if (get().isNotBlank()) listOf(Row("Remove the key", action = { set(""); s.rows = build(); app.refresh(s) })) else emptyList()) +
+            (if (get().isNotBlank()) after?.invoke().orEmpty() else emptyList()) +
             listOf(Row("Done", action = { app.back() }))
         s = Screen(title, build())
         return s

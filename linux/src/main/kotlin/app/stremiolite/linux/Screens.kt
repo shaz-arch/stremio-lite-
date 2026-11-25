@@ -1440,17 +1440,15 @@ fun keysScreen(): Screen {
         Row("TorBox key", set(Prefs.torboxKey) + "  ►", opens = {
             RowsSetup.keyScreen("TorBox key", app.stremiolite.StreamSetup.TORBOX_KEY_PAGE, listOf(
                 "Your debrid account, used when making your streams.",
-                "Your streams keep the key they were made with: after changing it, use 'Make my streams with this key' above.",
-            ), { Prefs.torboxKey }, { Prefs.torboxKey = it }, top = listOf(Row("Make my streams with this key", "►", opens = { StreamsSetup.screen() }), Row("")))
+                "Your streams keep the key they were made with: after changing it, use 'Make my streams with this key' below.",
+            ), { Prefs.torboxKey }, { Prefs.torboxKey = it }, after = { listOf(Row("Make my streams with this key", "►", opens = { StreamsSetup.screen() })) })
         }),
         Row("   Kept on this computer only."),
         Row("MDBList key", set(Prefs.mdblistKey) + "  ►", opens = {
             RowsSetup.keyScreen("MDBList key", app.stremiolite.RowSetup.MDBLIST_KEY_PAGE, listOf(
                 "Your MDBList account: its lists, and your own Watchlist row.",
-                "Your rows keep the key they were made with: after changing it, use 'Put this key in my rows' above.",
-            ), { Prefs.mdblistKey }, { Prefs.mdblistKey = it }, top = listOf(Row("Put this key in my rows", "►", action = {
-                if (Prefs.mdblistKey.isBlank()) App.toast("Enter the key first") else App.push(RowsSetup.useMdblistKey(Prefs.mdblistKey))
-            }), Row("")))
+                "Your rows keep the key they were made with: after changing it, use 'Put this key in my rows' below.",
+            ), { Prefs.mdblistKey }, { Prefs.mdblistKey = it }, after = { listOf(Row("Put this key in my rows", "►", action = { App.push(RowsSetup.useMdblistKey(Prefs.mdblistKey)) })) })
         }),
         Row("   Kept on this computer only."),
     )

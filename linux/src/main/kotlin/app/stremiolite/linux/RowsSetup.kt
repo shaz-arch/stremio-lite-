@@ -110,7 +110,7 @@ object RowsSetup {
         return s
     }
 
-    fun keyScreen(title: String, page: String, about: List<String>, get: () -> String, set: (String) -> Unit, top: List<Row> = emptyList()): Screen {
+    fun keyScreen(title: String, page: String, about: List<String>, get: () -> String, set: (String) -> Unit, top: List<Row> = emptyList(), after: (() -> List<Row>)? = null): Screen {
         lateinit var s: Screen
         fun build(): List<Row> = top + about.map { Row(it) } + listOf(
             Row(""),
@@ -119,6 +119,7 @@ object RowsSetup {
                 App.ask("$title (ctrl+shift+v pastes)", get(), hidden = true) { v -> if (v != null) { set(v.trim()); s.rows = build(); App.refresh() } }
             }),
         ) + (if (get().isNotBlank()) listOf(Row("Remove the key", action = { set(""); s.rows = build(); App.refresh() })) else emptyList()) +
+            (if (get().isNotBlank()) after?.invoke().orEmpty() else emptyList()) +
             listOf(Row("Done", action = { App.back() }))
         s = Screen(title, build())
         return s

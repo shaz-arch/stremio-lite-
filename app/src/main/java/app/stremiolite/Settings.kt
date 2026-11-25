@@ -220,23 +220,16 @@ object Settings {
                 RowsSetup.keyScreen(app, "TorBox key", StreamSetup.TORBOX_KEY_PAGE, listOf(
                     "Your debrid account, used when making your streams.",
                     "Your streams keep the key they were made with: after changing it,",
-                    "use 'Make my streams with this key' above.",
-                ), { torboxKey(app) }, { setTorboxKey(app, it) }, top = listOf(
-                    Row("Make my streams with this key", "►", opens = { StreamsSetup.screen(app) }), Row(""),
-                ))
+                    "use 'Make my streams with this key' below.",
+                ), { torboxKey(app) }, { setTorboxKey(app, it) }, after = { listOf(Row("Make my streams with this key", "►", opens = { StreamsSetup.screen(app) })) })
             }),
             Row("   Kept on this device only."),
             Row("MDBList key", set(mdblistKey(app)) + "  ►", opens = {
                 RowsSetup.keyScreen(app, "MDBList key", RowSetup.MDBLIST_KEY_PAGE, listOf(
                     "Your MDBList account: its lists, and your own Watchlist row.",
                     "Your rows keep the key they were made with: after changing it,",
-                    "use 'Put this key in my rows' above.",
-                ), { mdblistKey(app) }, { setMdblistKey(app, it) }, top = listOf(
-                    Row("Put this key in my rows", "►", action = {
-                        val k = mdblistKey(app)
-                        if (k.isBlank()) app.toast("Enter the key first") else app.push(RowsSetup.useMdblistKey(app, k))
-                    }), Row(""),
-                ))
+                    "use 'Put this key in my rows' below.",
+                ), { mdblistKey(app) }, { setMdblistKey(app, it) }, after = { listOf(Row("Put this key in my rows", "►", action = { app.push(RowsSetup.useMdblistKey(app, mdblistKey(app))) })) })
             }),
             Row("   Kept on this device only."),
         )
