@@ -250,7 +250,7 @@ object Games {
 
     /** Catalogues worth quizzing on: plain film and show lists, popular or trending ones first. */
     fun quizCatalogues(addons: List<Addon>): List<Pair<Addon, Addon.Catalog>> =
-        addons.flatMap { a -> a.catalogs.filter { (it.type == "movie" || it.type == "series") && it.required.isEmpty() }.map { a to it } }
+        addons.flatMap { a -> a.catalogs.filter { (it.type == "movie" || it.type == "series") && Folders.openable(it) }.map { a to it } }
             .sortedBy { (_, c) -> if (Regex("popular|trending|top", RegexOption.IGNORE_CASE).containsMatchIn(c.name)) 0 else 1 }
             .take(4)
 }

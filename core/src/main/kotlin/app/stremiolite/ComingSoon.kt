@@ -27,9 +27,11 @@ object ComingSoon {
 
     private fun anime(c: Addon.Catalog) = c.id.contains("anime", true) || c.name.contains("anime", true)
 
-    /** Film lists that can be read without extra choices: what Coming soon can use. */
+    /** Film lists Coming soon can use (including rows hidden from Stremio's home: those need a genre, which AIOMetadata fills in). */
     fun choices(addons: List<Addon>): List<Pair<Addon, Addon.Catalog>> =
-        addons.flatMap { a -> a.catalogs.filter { it.type == "movie" && it.required.isEmpty() }.map { a to it } }
+        addons.flatMap { a -> a.catalogs.filter { it.type == "movie" && Folders.openable(it) }.map { a to it } }
+            // The same list can come from two installs (your rows and the stick-rows copy): once is enough.
+            .distinctBy { (_, c) -> c.id + "|" + c.type }
 
     /** The list [chosen] (a row key), if it's still there. */
     fun find(addons: List<Addon>, chosen: String): Pair<Addon, Addon.Catalog>? =

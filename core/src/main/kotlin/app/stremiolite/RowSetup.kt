@@ -107,6 +107,15 @@ object RowSetup {
         (0 until all.length()).map { all.getJSONObject(it) }.associate { (it.optString("id") + "|" + it.optString("type")) to it.optString("name") }
     }
 
+    /**
+     * Rows whose settings changed since installs were made (e.g. Upcoming now asks for UK cinema
+     * releases in the next 90 days, most popular first, rather than every film worldwide from today).
+     * Saving your rows brings these up to date.
+     */
+    private val refresh: Set<String> by lazy {
+        file.optJSONArray("refresh")?.let { a -> (0 until a.length()).map { a.getString(it) }.toSet() } ?: emptySet()
+    }
+
     /** A row's name as the catalogue has it today (older installs were made before some groups were split). */
     private fun nameOf(o: JSONObject): String = currentNames[o.optString("id") + "|" + o.optString("type")] ?: o.optString("name")
 
@@ -222,6 +231,15 @@ object RowSetup {
 
     private fun sizeOk(id: String, type: String, p: Picks) = p.size == Size.FULL || "$id|$type" !in fullOnly
 
+    /** A region's catalogue rows by "id|type". */
+    private val regionCache = HashMap<Region, Map<String, JSONObject>>()
+    private fun regionRows(r: Region): Map<String, JSONObject> = synchronized(regionCache) {
+        regionCache.getOrPut(r) {
+            val a = forRegion(r)
+            (0 until a.length()).map { a.getJSONObject(it) }.associateBy { it.optString("id") + "|" + it.optString("type") }
+        }
+    }
+
     /** Rows that need an MDBList key (lists from MDBList, or merged rows using them). */
     val needsMdblist: Set<String> by lazy {
         file.optJSONArray("needsMdblist")?.let { a -> (0 until a.length()).map { a.getString(it) }.toSet() } ?: emptySet()
@@ -261,6 +279,8 @@ object RowSetup {
             // Rows from an older install get today's name, so they land in today's categories.
             val name = nameOf(o)
             if (name != o.optString("name")) o.put("name", name)
+            val key = o.optString("id") + "|" + o.optString("type")
+            if (key in refresh) regionRows(p.region)[key]?.optJSONObject("metadata")?.let { o.put("metadata", JSONObject(it.toString())) }
             if (isOther(o)) { if (p.othersOff) o.put("enabled", false); continue }
             val (cat, _) = group(name)
             val keyOk = o.optString("id") !in needsMdblist || p.mdblistKey.isNotBlank()
