@@ -24,6 +24,8 @@ object PhoneTyping {
     ): AlertDialog {
         var kb: PhoneKeyboard? = null
         b.setView(box)
+        // On a phone you already have a keyboard.
+        if (app.isPhone) return b.show()
         b.setNeutralButton("Type on my phone", null)
         val dialog = b.create()
         dialog.setOnDismissListener { kb?.stop(); kb = null }

@@ -162,6 +162,7 @@ object Home {
     private var rebuild: (() -> Unit)? = null
 
     fun all(): List<Addon> = addons ?: emptyList()
+    fun loaded(): List<Addon>? = addons
     fun rowAddons() = Folders.rowAddons(all())
     fun forget() { addons = null; error = null }
     fun redraw() { rebuild?.invoke() }

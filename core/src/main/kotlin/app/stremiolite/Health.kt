@@ -16,7 +16,9 @@ object Health {
     class Outcome(val ok: Boolean, val text: String, val help: String = "")
     class Check(val name: String, val run: () -> Outcome)
 
-    fun checks(authKey: String?, addons: List<Addon>, tmdbKey: String, describe: (Throwable) -> String): List<Check> {
+    fun checks(authKey: String?, loaded: List<Addon>?, tmdbKey: String, describe: (Throwable) -> String): List<Check> {
+        val addons = loaded ?: emptyList()
+        fun offline(d: String) = listOf("address not found", "timed out", "refused", "unreachable", "network").any { it in d.lowercase() }
         fun safe(name: String, f: () -> Outcome) = Check(name) { try { f() } catch (e: Throwable) { Outcome(false, describe(e)) } }
         fun timed(f: () -> Unit): Long { val t = System.currentTimeMillis(); f(); return System.currentTimeMillis() - t }
         val list = mutableListOf<Check>()
@@ -35,7 +37,7 @@ object Health {
             } catch (e: Throwable) {
                 val d = describe(e)
                 if ("session" in d.lowercase() || "auth" in d.lowercase()) Outcome(false, "signed out", "Sign in again: Home › Sign out of this profile, then sign in.")
-                else Outcome(false, d, "Stremio's servers may be down; try again later.")
+                else Outcome(false, d, if (offline(d)) "Sort out the internet first." else "Stremio's servers may be down; try again later.")
             }
         }
 
@@ -45,7 +47,8 @@ object Health {
             if (ms > SLOW_MS) Outcome(true, "slow: $ms ms", "It works, but rows and streams from it will be slow.")
             else Outcome(true, "OK  $ms ms")
         }
-        if (online.isEmpty()) list += Check("Add-ons") { Outcome(false, "none installed", "Settings › Your add-ons, or set up from your phone.") }
+        if (loaded == null) list += Check("Add-ons") { Outcome(false, "not loaded", "They load with your rows: sort out the internet or sign-in, then Check again.") }
+        else if (online.isEmpty()) list += Check("Add-ons") { Outcome(false, "none installed", "Settings › Your add-ons, or set up from your phone.") }
 
         // A row of titles from the first add-on with a row that needs nothing extra.
         online.firstNotNullOfOrNull { a -> a.catalogs.firstOrNull { it.required.isEmpty() }?.let { a to it } }?.let { (a, c) ->

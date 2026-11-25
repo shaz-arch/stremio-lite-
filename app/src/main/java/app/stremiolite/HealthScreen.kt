@@ -29,8 +29,7 @@ object HealthScreen {
         fun run() {
             val g = ++round
             results = mutableMapOf()
-            val addons = Home.loadedAddons() ?: emptyList()
-            checks = Health.checks(Profiles.current(app)?.authKey, addons, Settings.tmdbKey(app)) { Net.describe(it) }
+            checks = Health.checks(Profiles.current(app)?.authKey, Home.loadedAddons(), Settings.tmdbKey(app)) { Net.describe(it) }
             build()
             checks.forEachIndexed { i, c ->
                 Net.async({ c.run() }) { r ->
