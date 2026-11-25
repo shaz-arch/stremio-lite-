@@ -168,6 +168,9 @@ object Prefs {
     var mdblistKey: String
         get() = data().optString("mdblistKey", "")
         set(v) { data().put("mdblistKey", v); save() }
+    var geminiKey: String
+        get() = data().optString("geminiKey", "")
+        set(v) { data().put("geminiKey", v); save() }
 
     var tmdbKey: String
         get() = data().optString("tmdbKey", "")

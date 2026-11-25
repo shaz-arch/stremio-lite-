@@ -145,6 +145,21 @@ object RowsSetup {
         s
     }
 
+    /** Puts a Gemini key into your rows' config and switches AI Search on (Ask AI in Search). */
+    fun useAiKey(app: MainActivity, key: String): Screen = RowPicker.entry(app) { _, l, pw ->
+        val status = Row("Saving the key into your rows…")
+        val s = Screen("Gemini key", listOf(status))
+        RowSetup.setAiKey(l.config, key)
+        Net.async({ AioRows.save(l, pw) }) { r ->
+            status.label = r.fold({ "Saved: Ask AI is on (Search › Ask AI). In Stremio's own apps, start a search with \"ai\"." }) { e ->
+                "Couldn't save: " + (if (e is AioRows.Failed) e.message else Net.describe(e))
+            }
+            if (r.isSuccess) Home.forget()
+            app.refresh(s)
+        }
+        s
+    }
+
     private fun save(app: MainActivity, l: AioRows.Loaded, password: String, p: RowSetup.Picks) {
         RowSetup.putKeys(l.config, p)
         RowSetup.apply(l.catalogs, p)

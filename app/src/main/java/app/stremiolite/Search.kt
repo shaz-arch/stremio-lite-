@@ -29,6 +29,8 @@ object Search {
         lateinit var screen: Screen
         fun build(): List<Row> {
             val rows = mutableListOf(Row("New search…", "☰", action = { start(app) }))
+            // Ask AI once a Gemini key is set on this profile (it lives in your rows' config).
+            if (Settings.geminiKey(app).isNotBlank()) rows += Row("Ask AI…", "describe what you want  ►", action = { askAi(app) })
             val recent = recent(app)
             if (recent.isNotEmpty()) {
                 rows += Row("──── Recent searches ────")
@@ -46,6 +48,54 @@ object Search {
         screen = Screen("Search", build())
         screen.onShow = { screen.rows = build(); app.refresh(screen) }
         return screen
+    }
+
+    /** "Ask AI": a description in your own words, answered by AIOMetadata's AI Search. */
+    private fun askAi(app: MainActivity) {
+        val input = EditText(app).apply {
+            hint = "e.g. 90s heist films with a twist"
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        }
+        val b = AlertDialog.Builder(app)
+            .setTitle("Ask AI")
+            .setMessage("Describe what you'd like to watch. Your words go to Google's Gemini through your AIOMetadata.")
+            .setPositiveButton("Ask") { _, _ ->
+                val q = input.text.toString().trim()
+                if (q.length >= 3) app.push(aiResults(app, q))
+            }
+            .setNegativeButton("Cancel", null)
+        PhoneTyping.show(app, b, input, "Ask AI")
+    }
+
+    private fun aiResults(app: MainActivity, query: String): Screen {
+        lateinit var s: Screen
+        var found: List<Pair<Addon, Meta>>? = null
+        var error: String? = null
+        fun build() {
+            val rows = mutableListOf(Row("\"$query\""), Row("Ask again", action = { askAi(app) }), Row("────────────────────"))
+            when {
+                error != null -> rows += Row("Couldn't ask: $error")
+                found == null -> rows += Row("Asking AI… (this can take a few seconds)")
+                found!!.isEmpty() -> rows += Row("AI found nothing for that. Try describing it differently.")
+                else -> found!!.forEach { rows += row(app, it) }
+            }
+            s.rows = rows
+            app.refresh(s)
+        }
+        s = Screen("Ask AI", listOf(Row("Asking AI…")))
+        var started = false
+        s.onShow = {
+            if (!started) {
+                started = true
+                Net.async({ AiSearch.ask(Home.allAddons(), query) }) { r ->
+                    r.onSuccess { found = it; RatingFill.fill(app, s, it.map { p -> p.second }) { if (app.inStack(s)) build() } }
+                        .onFailure { error = it.message ?: Net.describe(it) }
+                    build()
+                }
+            }
+            build()
+        }
+        return s
     }
 
     /** Opens the TV keyboard, then the results screen. */
@@ -93,7 +143,7 @@ object Search {
 
     private fun results(app: MainActivity, query: String): Screen {
         val sources = Home.rowAddons().filter { !it.isLocal }.flatMap { a ->
-            a.catalogs.filter { it.searchable }.map { c -> a to c }
+            a.catalogs.filter { it.searchable && !AiSearch.isAiCatalog(it) }.map { c -> a to c }
         }
         // Each catalogue's results, kept in catalogue order so the list doesn't jump about.
         val results = arrayOfNulls<List<Meta>>(sources.size)

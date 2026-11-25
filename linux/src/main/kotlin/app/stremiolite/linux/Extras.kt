@@ -232,7 +232,7 @@ object Profiles {
                 if (!theirs.has("debridKeys") && theirs.optString("torboxKey").isNotBlank())
                     theirs.put("debridKeys", app.stremiolite.StreamSetup.writeKeys(listOf("torbox" to theirs.optString("torboxKey"))))
                 val debrid = app.stremiolite.StreamSetup.parseKeys(theirs.optString("debridKeys"))
-                val keys = listOf("tmdbKey" to "TMDB", "debridKeys" to app.stremiolite.StreamSetup.names(debrid).joinToString(", "), "mdblistKey" to "MDBList")
+                val keys = listOf("tmdbKey" to "TMDB", "debridKeys" to app.stremiolite.StreamSetup.names(debrid).joinToString(", "), "mdblistKey" to "MDBList", "geminiKey" to "Gemini")
                     .filter { (k, _) -> if (k == "debridKeys") debrid.isNotEmpty() else theirs.optString(k).isNotBlank() }
                 Row("From ${o.name}", if (keys.isEmpty()) "no keys" else keys.joinToString(", ") { it.second } + "  ►", action = {
                     if (keys.isEmpty()) { App.toast("${o.name} has no keys saved"); return@Row }
@@ -242,6 +242,7 @@ object Profiles {
                                 "tmdbKey" -> { Prefs.tmdbKey = theirs.optString(k); Prefs.watchRegion = theirs.optString("watchRegion", "GB") }
                                 "debridKeys" -> Prefs.debridKeys = debrid
                                 "mdblistKey" -> Prefs.mdblistKey = theirs.optString(k)
+                                "geminiKey" -> Prefs.geminiKey = theirs.optString(k)
                             }
                         }
                         Prefs.syncOut()
@@ -257,7 +258,7 @@ object Profiles {
                     App.toast("Copied ${keys.joinToString(", ") { it.second }} from ${o.name} to ${p.name}")
                     App.back()
                 })
-            } + listOf(Row("────────────────────"), Row("TMDB (Where to watch, ages, Coming soon) with its region, and the debrid (TorBox, Real-Debrid…) and MDBList keys used in setup."), Row("Keys ${p.name} doesn't get from them stay as they are.")))
+            } + listOf(Row("────────────────────"), Row("TMDB (Where to watch, ages, Coming soon) with its region, and the debrid, MDBList and Gemini keys used in setup."), Row("Keys ${p.name} doesn't get from them stay as they are.")))
         })
         rows += Row("Kids lock (parent PIN)", (if (KidsGuard.state().isLocked(p.id)) "locked" else "off") + "  ►", opens = { KidsGuard.screen(p) })
         rows += Row("────────────────────")

@@ -302,6 +302,22 @@ object RowSetup {
         k.put("mdblist", key.trim())
     }
 
+    /** Where to get a free Gemini key (Google AI Studio). */
+    const val GEMINI_KEY_PAGE = "https://aistudio.google.com/app/apikey"
+
+    /**
+     * Puts a Gemini key into a configuration and switches AIOMetadata's AI Search on (off when blank).
+     * AI only runs for searches starting with the trigger word ("ai" unless one is set), so ordinary
+     * searches, in Stremonino or Stremio's own apps, don't use your Gemini allowance.
+     */
+    fun setAiKey(config: JSONObject, key: String) {
+        val k = config.optJSONObject("apiKeys") ?: JSONObject().also { config.put("apiKeys", it) }
+        k.put("gemini", key.trim())
+        val search = config.optJSONObject("search") ?: JSONObject().also { config.put("search", it) }
+        search.put("ai_enabled", key.isNotBlank())
+        if (search.optString("ai_trigger_keyword").trim().length < 2) search.put("ai_trigger_keyword", AiSearch.TRIGGER)
+    }
+
     /** Puts the picks' keys into a configuration (blank keys are left blank). */
     fun putKeys(config: JSONObject, p: Picks) {
         val k = config.optJSONObject("apiKeys") ?: JSONObject().also { config.put("apiKeys", it) }

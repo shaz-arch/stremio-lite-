@@ -358,7 +358,7 @@ object Profiles {
             } + listOf(
                 Row("────────────────────"),
                 Row("TMDB (Where to watch, ages, Coming soon) with its region,"),
-                Row("and the debrid (TorBox, Real-Debrid…) and MDBList keys used in setup."),
+                Row("and the debrid, MDBList and Gemini keys used in setup."),
                 Row("Keys ${p.name} doesn't get from them stay as they are."),
             ))
         })

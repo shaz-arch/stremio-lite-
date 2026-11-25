@@ -545,12 +545,42 @@ object Catalogs {
 object Search {
     fun start() {
         if (Account.authKey == null) return
-        App.ask("Search") { q -> if (!q.isNullOrBlank()) App.push(results(q.trim())) }
+        val ai = Prefs.geminiKey.isNotBlank()
+        App.ask(if (ai) "Search (start with \"ai\" to ask AI, e.g. ai 90s heist films)" else "Search") { q ->
+            val t = q?.trim().orEmpty()
+            when {
+                t.isBlank() -> Unit
+                ai && Regex("^ai\\s+", RegexOption.IGNORE_CASE).containsMatchIn(t) -> App.push(aiResults(t.replace(Regex("^ai\\s+", RegexOption.IGNORE_CASE), "")))
+                else -> App.push(results(t))
+            }
+        }
+    }
+
+    /** "Ask AI": AIOMetadata's AI Search with your Gemini key. */
+    private fun aiResults(query: String): Screen {
+        val s = Screen("Ask AI", listOf(Row("\"$query\""), Row("Asking AI… (this can take a few seconds)")))
+        fun show(list: List<Pair<Addon, Meta>>?, error: String?) {
+            val rows = mutableListOf(Row("\"$query\""), Row("────────────────────"))
+            when {
+                error != null -> rows += Row("Couldn't ask: $error")
+                list.isNullOrEmpty() -> rows += Row("AI found nothing for that. Try describing it differently.")
+                else -> list.forEach { (a, m) -> rows += Catalogs.row(a, m) }
+            }
+            s.rows = rows
+            App.refresh()
+        }
+        App.async({ app.stremiolite.AiSearch.ask(Home.all(), query) }) { r ->
+            r.onSuccess { list ->
+                show(list, null)
+                RatingFill.fill(s, list.map { it.second }) { if (App.inStack(s)) show(list, null) }
+            }.onFailure { show(null, it.message ?: Net.describe(it)) }
+        }
+        return s
     }
 
     private fun results(q: String): Screen {
         lateinit var s: Screen
-        val sources = Folders.rowAddons(Home.all()).filter { !it.isLocal }.flatMap { a -> a.catalogs.filter { it.searchable }.map { a to it } }
+        val sources = Folders.rowAddons(Home.all()).filter { !it.isLocal }.flatMap { a -> a.catalogs.filter { it.searchable && !app.stremiolite.AiSearch.isAiCatalog(it) }.map { a to it } }
         val found = LinkedHashMap<String, Pair<Addon, Meta>>()
         val collections = HashSet<String>()
         var answered = 0
@@ -967,7 +997,7 @@ object Settings {
                 Row(info("Stream speed", SpeedCheck.summary()), "►", opens = { SpeedScreen.screen() }),
                 Row("Your add-ons", (Home.all().size.takeIf { it > 0 }?.let { "$it  " } ?: "") + "►", opens = { Addons.screen() }),
                 Row("Where to watch (TMDB key)", (if (Prefs.tmdbKey.isBlank()) "not set" else "set ✓ · ${app.stremiolite.WhereToWatch.regionName(Prefs.watchRegion)}") + "  ►", opens = { Details.whereToWatchSettings() }),
-                Row("Your keys", "TMDB, TorBox, MDBList  ►", opens = { keysScreen() }),
+                Row("Your keys", "TMDB, debrid, MDBList, Gemini  ►", opens = { keysScreen() }),
                 Row("──── Share ────"),
                 Row("Export my setup to another account", "►", opens = { Share.screen() }),
                 Row("Import a setup from another account", "►", opens = { Share.importScreen() }),
@@ -1444,6 +1474,14 @@ fun keysScreen(): Screen {
                 "Your MDBList account: its lists, and your own Watchlist row.",
                 "Your rows keep the key they were made with: after changing it, use 'Put this key in my rows' below.",
             ), { Prefs.mdblistKey }, { Prefs.mdblistKey = it }, after = { listOf(Row("Put this key in my rows", "►", action = { App.push(RowsSetup.useMdblistKey(Prefs.mdblistKey)) })) })
+        }),
+        Row("   Kept on this computer only."),
+        Row("Gemini key", set(Prefs.geminiKey) + "  ►", opens = {
+            RowsSetup.keyScreen("Gemini key", app.stremiolite.RowSetup.GEMINI_KEY_PAGE, listOf(
+                "For asking AI in Search: start a search with \"ai\" and describe what you want.",
+                "Free from Google AI Studio (aistudio.google.com): Get API key.",
+                "Your rows keep the key they were made with: after changing it, use 'Put this key in my rows' below.",
+            ), { Prefs.geminiKey }, { Prefs.geminiKey = it }, after = { listOf(Row("Put this key in my rows", "►", action = { App.push(RowsSetup.useAiKey(Prefs.geminiKey)) })) })
         }),
         Row("   Kept on this computer only."),
     )

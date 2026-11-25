@@ -226,6 +226,15 @@ object Settings {
                 ), { mdblistKey(app) }, { setMdblistKey(app, it) }, after = { listOf(Row("Put this key in my rows", "►", action = { app.push(RowsSetup.useMdblistKey(app, mdblistKey(app))) })) })
             }),
             Row("   Kept on this device only."),
+            Row("Gemini key", set(geminiKey(app)) + "  ►", opens = {
+                RowsSetup.keyScreen(app, "Gemini key", RowSetup.GEMINI_KEY_PAGE, listOf(
+                    "For Ask AI in Search: describe what you want, AI finds the titles.",
+                    "Free from Google AI Studio (aistudio.google.com): Get API key.",
+                    "Your rows keep the key they were made with: after changing it,",
+                    "use 'Put this key in my rows' below. AI only runs when you Ask AI.",
+                ), { geminiKey(app) }, { setGeminiKey(app, it) }, after = { listOf(Row("Put this key in my rows", "►", action = { app.push(RowsSetup.useAiKey(app, geminiKey(app))) })) })
+            }),
+            Row("   Kept on this device only."),
         )
         s = Screen("Your keys", build())
         s.onShow = { s.rows = build(); app.refresh(s) }
@@ -286,16 +295,20 @@ object Settings {
     fun torboxKey(c: Context): String = debridKeys(c).firstOrNull { it.first == "torbox" }?.second ?: ""
     fun setTorboxKey(c: Context, k: String) = setDebridKeys(c, StreamSetup.withKey(debridKeys(c), "torbox", k))
     fun mdblistKey(c: Context): String = prefs(c).getString("mdblistKey", "") ?: ""
+    /** Gemini key for Ask AI (it lives in your rows' config; remembered here, never synced or shared). */
+    fun geminiKey(c: Context): String = prefs(c).getString("geminiKey", "") ?: ""
+    fun setGeminiKey(c: Context, k: String) { prefs(c).edit().putString("geminiKey", k).apply() }
     fun setMdblistKey(c: Context, k: String) { prefs(c).edit().putString("mdblistKey", k).apply() }
 
-    class Keys(val tmdb: String, val region: String, val debrid: List<Pair<String, String>>, val mdblist: String) {
-        val names get() = listOfNotNull(if (tmdb.isNotBlank()) "TMDB" else null) + StreamSetup.names(debrid) + listOfNotNull(if (mdblist.isNotBlank()) "MDBList" else null)
+    class Keys(val tmdb: String, val region: String, val debrid: List<Pair<String, String>>, val mdblist: String, val gemini: String = "") {
+        val names get() = listOfNotNull(if (tmdb.isNotBlank()) "TMDB" else null) + StreamSetup.names(debrid) +
+            listOfNotNull(if (mdblist.isNotBlank()) "MDBList" else null, if (gemini.isNotBlank()) "Gemini" else null)
         val isEmpty get() = names.isEmpty()
     }
 
     fun keysOf(p: android.content.SharedPreferences) = Keys(
         p.getString("tmdbKey", "") ?: "", p.getString("watchRegion", "GB") ?: "GB",
-        debridOf(p), p.getString("mdblistKey", "") ?: "",
+        debridOf(p), p.getString("mdblistKey", "") ?: "", p.getString("geminiKey", "") ?: "",
     )
 
     /** Copies the keys [k] has into a profile's settings (blank ones leave its own); [send] syncs the TMDB key now. */
@@ -304,6 +317,7 @@ object Settings {
         if (k.tmdb.isNotBlank()) e.putString("tmdbKey", k.tmdb).putString("watchRegion", k.region).putBoolean("pendingSync", !send)
         if (k.debrid.isNotEmpty()) e.putString("debridKeys", StreamSetup.writeKeys(k.debrid)).remove("torboxKey")
         if (k.mdblist.isNotBlank()) e.putString("mdblistKey", k.mdblist)
+        if (k.gemini.isNotBlank()) e.putString("geminiKey", k.gemini)
         e.apply()
         if (send && c != null && k.tmdb.isNotBlank()) { WhereToWatch.forget(); syncOut(c) }
     }
@@ -476,7 +490,7 @@ object Settings {
                 Row(info("Stream speed", SpeedCheck.summary(app)), "►", opens = { SpeedScreen.screen(app) }),
                 Row("Your add-ons", (Home.addonCount()?.let { "$it  " } ?: "") + "►", opens = { Home.addonsScreen(app) }),
                 Row("Where to watch (TMDB key)", (if (tmdbKey(app).isBlank()) "not set" else "set ✓ · ${WhereToWatch.regionName(watchRegion(app))}") + "  ►", opens = { whereToWatch(app) }),
-                Row("Your keys", "TMDB, TorBox, MDBList  ►", opens = { keysScreen(app) }),
+                Row("Your keys", "TMDB, debrid, MDBList, Gemini  ►", opens = { keysScreen(app) }),
                 Row("──── Share ────"),
                 Row("Export my setup to another account", "►", opens = { Share.screen(app) }),
                 Row("Import a setup from another account", "►", opens = { Share.importScreen(app) }),
