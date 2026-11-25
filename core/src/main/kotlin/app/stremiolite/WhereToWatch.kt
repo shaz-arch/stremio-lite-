@@ -110,7 +110,9 @@ object WhereToWatch {
         val a = o.optJSONObject("watch/providers")?.optJSONObject("results")?.optJSONObject(region)?.optJSONArray(kind) ?: return emptyList()
         return (0 until a.length()).mapNotNull { a.optJSONObject(it) }
             .sortedBy { it.optInt("display_priority", 999) }
-            .map { it.optString("provider_name").replace(" Amazon Channel", "").replace(" Apple TV Channel", "") }
+            // One name per service: "Netflix basic with Ads" is still Netflix.
+            .map { it.optString("provider_name").replace(" Amazon Channel", "").replace(" Apple TV Channel", "")
+                .replace(Regex("\\s+(basic|standard)?\\s*with ads$", RegexOption.IGNORE_CASE), "").trim() }
             .filter { it.isNotBlank() }.distinct().take(8)
     }
 
