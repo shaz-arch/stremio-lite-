@@ -124,6 +124,19 @@ object RowsSetup {
         return s
     }
 
+    /** Puts [key] into your AIOMetadata rows' config (nothing else changes). */
+    fun useMdblistKey(key: String): Screen = RowPicker.entry { _, l, pw ->
+        val status = Row("Saving the key into your rows…")
+        val s = Screen("MDBList key", listOf(status))
+        RowSetup.setMdblistKey(l.config, key)
+        App.async({ AioRows.save(l, pw) }) { r ->
+            status.label = r.fold({ "Saved: your rows use this key now. Home reloads them." }) { e -> "Couldn't save: " + (if (e is AioRows.Failed) e.message else Net.describe(e)) }
+            if (r.isSuccess) Home.forget()
+            App.refresh()
+        }
+        s
+    }
+
     private fun save(l: AioRows.Loaded, password: String, p: RowSetup.Picks) {
         RowSetup.putKeys(l.config, p)
         RowSetup.apply(l.catalogs, p)

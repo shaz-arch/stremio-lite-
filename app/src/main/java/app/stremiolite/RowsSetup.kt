@@ -128,6 +128,22 @@ object RowsSetup {
         return s
     }
 
+    /**
+     * Puts [key] into your AIOMetadata rows' config (nothing else changes), so MDBList rows and
+     * personal lists like the Watchlist use that account. Asks for the rows' password if needed.
+     */
+    fun useMdblistKey(app: MainActivity, key: String): Screen = RowPicker.entry(app) { _, l, pw ->
+        val status = Row("Saving the key into your rows…")
+        val s = Screen("MDBList key", listOf(status))
+        RowSetup.setMdblistKey(l.config, key)
+        Net.async({ AioRows.save(l, pw) }) { r ->
+            status.label = r.fold({ "Saved: your rows use this key now. Home reloads them." }) { e -> "Couldn't save: " + (if (e is AioRows.Failed) e.message else Net.describe(e)) }
+            if (r.isSuccess) Home.forget()
+            app.refresh(s)
+        }
+        s
+    }
+
     private fun save(app: MainActivity, l: AioRows.Loaded, password: String, p: RowSetup.Picks) {
         RowSetup.putKeys(l.config, p)
         RowSetup.apply(l.catalogs, p)

@@ -296,6 +296,12 @@ object RowSetup {
         return p
     }
 
+    /** Changes only the MDBList key in a configuration (rows, and personal lists like the Watchlist, use it). */
+    fun setMdblistKey(config: JSONObject, key: String) {
+        val k = config.optJSONObject("apiKeys") ?: JSONObject().also { config.put("apiKeys", it) }
+        k.put("mdblist", key.trim())
+    }
+
     /** Puts the picks' keys into a configuration (blank keys are left blank). */
     fun putKeys(config: JSONObject, p: Picks) {
         val k = config.optJSONObject("apiKeys") ?: JSONObject().also { config.put("apiKeys", it) }

@@ -967,6 +967,7 @@ object Settings {
                 Row(info("Stream speed", SpeedCheck.summary()), "►", opens = { HealthScreen.screen() }),
                 Row("Your add-ons", (Home.all().size.takeIf { it > 0 }?.let { "$it  " } ?: "") + "►", opens = { Addons.screen() }),
                 Row("Where to watch (TMDB key)", (if (Prefs.tmdbKey.isBlank()) "not set" else "set ✓ · ${app.stremiolite.WhereToWatch.regionName(Prefs.watchRegion)}") + "  ►", opens = { Details.whereToWatchSettings() }),
+                Row("Your keys", "TMDB, TorBox, MDBList  ►", opens = { keysScreen() }),
                 Row("──── Share ────"),
                 Row("Export my setup to another account", "►", opens = { Share.screen() }),
                 Row("Import a setup from another account", "►", opens = { Share.importScreen() }),
@@ -1424,4 +1425,37 @@ object Follow {
         ids.forEach { rec = app.stremiolite.Following.unfollow(rec, it) }
         rec?.let { Lib.put(it) }
     }
+}
+
+
+/** Settings › Your keys: see, change or remove each key this profile uses. */
+fun keysScreen(): Screen {
+    lateinit var s: Screen
+    fun set(k: String) = if (k.isBlank()) "not set" else "…" + k.takeLast(4)
+    fun build(): List<Row> = listOf(
+        Row("Keys for this profile. Each one is yours: change it if someone here should use their own account."),
+        Row("────────────────────"),
+        Row("TMDB key", set(Prefs.tmdbKey) + "  ►", opens = { Details.whereToWatchSettings() }),
+        Row("   Where to watch, age ratings, Coming soon. Synced, never shared."),
+        Row("TorBox key", set(Prefs.torboxKey) + "  ►", opens = {
+            RowsSetup.keyScreen("TorBox key", app.stremiolite.StreamSetup.TORBOX_KEY_PAGE, listOf(
+                "Your debrid account, used when making your streams.",
+                "Your streams keep the key they were made with: after changing it, use 'Make my streams with this key' above.",
+            ), { Prefs.torboxKey }, { Prefs.torboxKey = it }, top = listOf(Row("Make my streams with this key", "►", opens = { StreamsSetup.screen() }), Row("")))
+        }),
+        Row("   Kept on this computer only."),
+        Row("MDBList key", set(Prefs.mdblistKey) + "  ►", opens = {
+            RowsSetup.keyScreen("MDBList key", app.stremiolite.RowSetup.MDBLIST_KEY_PAGE, listOf(
+                "Your MDBList account: its lists, and your own Watchlist row.",
+                "Your rows keep the key they were made with: after changing it, use 'Put this key in my rows' above.",
+            ), { Prefs.mdblistKey }, { Prefs.mdblistKey = it }, top = listOf(Row("Put this key in my rows", "►", action = {
+                if (Prefs.mdblistKey.isBlank()) App.toast("Enter the key first") else App.push(RowsSetup.useMdblistKey(Prefs.mdblistKey))
+            }), Row("")))
+        }),
+        Row("   Kept on this computer only."),
+    )
+    s = Screen("Your keys", build())
+    s.onShow = { s.rows = build(); App.refresh() }
+    s.pos = 2
+    return s
 }

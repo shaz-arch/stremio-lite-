@@ -206,6 +206,46 @@ object Settings {
     fun setWatchRegion(c: Context, r: String) { prefs(c).edit().putString("watchRegion", r).apply(); syncOut(c) }
 
     /** Settings → Where to watch: your TMDB key and the country. */
+    /** Settings › Your keys: see, change or remove each key this profile uses. */
+    fun keysScreen(app: MainActivity): Screen {
+        lateinit var s: Screen
+        fun set(k: String) = if (k.isBlank()) "not set" else "…" + k.takeLast(4)
+        fun build(): List<Row> = listOf(
+            Row("Keys for this profile. Each one is yours: change it if"),
+            Row("someone here should use their own account."),
+            Row("────────────────────"),
+            Row("TMDB key", set(tmdbKey(app)) + "  ►", opens = { whereToWatch(app) }),
+            Row("   Where to watch, age ratings, Coming soon. Synced, never shared."),
+            Row("TorBox key", set(torboxKey(app)) + "  ►", opens = {
+                RowsSetup.keyScreen(app, "TorBox key", StreamSetup.TORBOX_KEY_PAGE, listOf(
+                    "Your debrid account, used when making your streams.",
+                    "Your streams keep the key they were made with: after changing it,",
+                    "use 'Make my streams with this key' above.",
+                ), { torboxKey(app) }, { setTorboxKey(app, it) }, top = listOf(
+                    Row("Make my streams with this key", "►", opens = { StreamsSetup.screen(app) }), Row(""),
+                ))
+            }),
+            Row("   Kept on this device only."),
+            Row("MDBList key", set(mdblistKey(app)) + "  ►", opens = {
+                RowsSetup.keyScreen(app, "MDBList key", RowSetup.MDBLIST_KEY_PAGE, listOf(
+                    "Your MDBList account: its lists, and your own Watchlist row.",
+                    "Your rows keep the key they were made with: after changing it,",
+                    "use 'Put this key in my rows' above.",
+                ), { mdblistKey(app) }, { setMdblistKey(app, it) }, top = listOf(
+                    Row("Put this key in my rows", "►", action = {
+                        val k = mdblistKey(app)
+                        if (k.isBlank()) app.toast("Enter the key first") else app.push(RowsSetup.useMdblistKey(app, k))
+                    }), Row(""),
+                ))
+            }),
+            Row("   Kept on this device only."),
+        )
+        s = Screen("Your keys", build())
+        s.onShow = { s.rows = build(); app.refresh(s) }
+        s.position = 3
+        return s
+    }
+
     fun whereToWatch(app: MainActivity): Screen {
         lateinit var keys: Screen
         val region = Row("Country", "◄ ${WhereToWatch.regionName(watchRegion(app))} ►")
@@ -438,6 +478,7 @@ object Settings {
                 Row(info("Stream speed", SpeedCheck.summary(app)), "►", opens = { HealthScreen.screen(app) }),
                 Row("Your add-ons", (Home.addonCount()?.let { "$it  " } ?: "") + "►", opens = { Home.addonsScreen(app) }),
                 Row("Where to watch (TMDB key)", (if (tmdbKey(app).isBlank()) "not set" else "set ✓ · ${WhereToWatch.regionName(watchRegion(app))}") + "  ►", opens = { whereToWatch(app) }),
+                Row("Your keys", "TMDB, TorBox, MDBList  ►", opens = { keysScreen(app) }),
                 Row("──── Share ────"),
                 Row("Export my setup to another account", "►", opens = { Share.screen(app) }),
                 Row("Import a setup from another account", "►", opens = { Share.importScreen(app) }),
