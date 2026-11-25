@@ -68,16 +68,14 @@ object Search {
                 app.push(results(app, q))
             }
         }
-        dialog = AlertDialog.Builder(app)
+        val b = AlertDialog.Builder(app)
             .setTitle("Search")
-            .setView(input)
             .setPositiveButton("Search") { _, _ -> go() }
             .setNegativeButton("Cancel", null)
-            .create()
         input.setOnEditorActionListener { _, action, _ ->
             if (action == EditorInfo.IME_ACTION_SEARCH || action == EditorInfo.IME_ACTION_DONE) { go(); true } else false
         }
-        dialog.show()
+        dialog = PhoneTyping.show(app, b, input, "Search Stremonino", submit = { go() })
         input.requestFocus()
     }
 

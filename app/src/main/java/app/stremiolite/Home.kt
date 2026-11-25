@@ -382,14 +382,13 @@ object Home {
             hint = "https://…/manifest.json"
             setSingleLine()
         }
-        android.app.AlertDialog.Builder(app)
+        PhoneTyping.show(app, android.app.AlertDialog.Builder(app)
             .setTitle("Add-on link")
             .setMessage(
                 if (stickRows) "Paste the install link of the config whose rows this app should show. " +
                     "Stremio's own apps won't see it, so your phone keeps its own rows."
                 else "Paste the add-on's install link. If you already have this add-on (e.g. AIOMetadata), it is replaced.",
             )
-            .setView(input)
             .setPositiveButton("Install") { _, _ ->
                 val link = input.text.toString().trim()
                 if (link.isEmpty()) return@setPositiveButton
@@ -404,8 +403,7 @@ object Home {
                     if (r.isSuccess) { forget() }
                 }
             }
-            .setNegativeButton("Cancel", null)
-            .show()
+            .setNegativeButton("Cancel", null), input, "Add-on link")
     }
 
     private fun addonDetails(app: MainActivity, a: Addon): Screen {

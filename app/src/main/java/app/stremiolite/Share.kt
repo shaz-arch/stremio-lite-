@@ -158,17 +158,15 @@ object Share {
 
     fun askPaste(app: MainActivity) {
         val input = android.widget.EditText(app).apply { hint = "$SCHEME://share?d=…"; setSingleLine() }
-        android.app.AlertDialog.Builder(app)
+        PhoneTyping.show(app, android.app.AlertDialog.Builder(app)
             .setTitle("Paste the shared setup")
-            .setView(input)
             .setPositiveButton("Next") { _, _ ->
                 val text = input.text.toString()
                 val start = SCHEMES.map { text.indexOf("$it://") }.filter { it >= 0 }.minOrNull() ?: -1
                 val p = if (start >= 0) decode(text.substring(start).split(Regex("\\s"))[0]) else null
                 if (p == null) app.toast("That doesn't look like a setup link") else app.push(receive(app, p))
             }
-            .setNegativeButton("Cancel", null)
-            .show()
+            .setNegativeButton("Cancel", null), input, "Shared setup link")
     }
 
     private fun urls(a: JSONArray?) = (0 until (a?.length() ?: 0)).map { a!!.optString(it) }.filter { it.startsWith("http") }

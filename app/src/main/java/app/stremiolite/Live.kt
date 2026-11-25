@@ -152,10 +152,9 @@ object Live {
             hint = "https://…/playlist.m3u"
             setSingleLine()
         }
-        android.app.AlertDialog.Builder(app)
+        PhoneTyping.show(app, android.app.AlertDialog.Builder(app)
             .setTitle("Playlist link")
             .setMessage("Paste an M3U playlist link you're entitled to use. It follows your account to your other devices.")
-            .setView(input)
             .setPositiveButton("Add") { _, _ ->
                 val link = LiveTv.cleanLink(input.text.toString())
                 if (link == null) { app.toast("That isn't a link"); return@setPositiveButton }
@@ -169,8 +168,7 @@ object Live {
                     }.onFailure { app.toast("Couldn't add it: ${Net.describe(it)}") }
                 }
             }
-            .setNegativeButton("Cancel", null)
-            .show()
+            .setNegativeButton("Cancel", null), input, "Playlist link")
     }
 
     private fun playlist(app: MainActivity, p: LiveTv.Playlist): Screen {
@@ -469,10 +467,9 @@ object Live {
             setText(Settings.liveGuide(app))
             setSingleLine()
         }
-        android.app.AlertDialog.Builder(app)
+        PhoneTyping.show(app, android.app.AlertDialog.Builder(app)
             .setTitle("TV guide link (XMLTV)")
             .setMessage("Paste an XMLTV guide link (.xml or .xml.gz) you're entitled to use. Playlists with their own guide use theirs first. Leave it empty to remove it.")
-            .setView(input)
             .setPositiveButton("Save") { _, _ ->
                 val text = input.text.toString().trim()
                 val link = if (text.isEmpty()) "" else LiveTv.cleanLink(text)
@@ -482,8 +479,7 @@ object Live {
                 app.toast(if (link.isEmpty()) "TV guide link removed" else "Reading the guide…")
                 done()
             }
-            .setNegativeButton("Cancel", null)
-            .show()
+            .setNegativeButton("Cancel", null), input, "TV guide link")
     }
 
     // ---- choosing what a playlist shows -------------------------------------------------------

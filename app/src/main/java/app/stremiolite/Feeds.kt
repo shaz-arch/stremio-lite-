@@ -114,9 +114,8 @@ object Feeds {
 
     private fun addFeed(app: MainActivity, done: () -> Unit) {
         val input = android.widget.EditText(app).apply { hint = "https://…/feed"; setSingleLine() }
-        android.app.AlertDialog.Builder(app)
+        PhoneTyping.show(app, android.app.AlertDialog.Builder(app)
             .setTitle("News feed link (RSS or Atom)")
-            .setView(input)
             .setPositiveButton("Add") { _, _ ->
                 val link = LiveTv.cleanLink(input.text.toString()) ?: run { app.toast("That isn't a link"); return@setPositiveButton }
                 app.toast("Checking the feed…")
@@ -129,8 +128,7 @@ object Feeds {
                     }.onFailure { app.toast("Couldn't add it: ${News.error(f) ?: Net.describe(it)}") }
                 }
             }
-            .setNegativeButton("Cancel", null)
-            .show()
+            .setNegativeButton("Cancel", null), input, "News feed link")
     }
 
     // ---- Coming soon -------------------------------------------------------------------------

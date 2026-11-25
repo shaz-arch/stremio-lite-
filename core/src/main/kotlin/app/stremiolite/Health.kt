@@ -59,10 +59,10 @@ object Health {
 
         // Streams for the test film, one add-on at a time.
         val streamers = online.filter { it.supports("stream", "movie", TEST_ID) }
-        for (a in streamers) list += safe("Streams: ${StreamPick.shortName(a.name)}") {
-            val found = StreamPick.fetchAll(listOf(a), "movie", TEST_ID)
+        for (a in streamers) list += safe("Streams: ${StreamParse.shortName(a.name)}") {
+            val found = StreamParse.fetchAll(listOf(a), "movie", TEST_ID)
             val ready = found.count { it.cached == true }
-            val fits = found.count { StreamPick.score(it, 142.0) != null }
+            val fits = found.count { Best.score(it, 142.0) != null }
             when {
                 found.isEmpty() -> Outcome(false, "no streams for the test film",
                     "Check your debrid (e.g. TorBox) is still active and its key is right in the add-on's config.")
