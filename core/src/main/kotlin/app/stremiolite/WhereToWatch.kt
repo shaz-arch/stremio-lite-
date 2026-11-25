@@ -24,6 +24,8 @@ object WhereToWatch {
         val rent: List<String>,
         val buy: List<String>,
         val link: String,
+        /** One word or two for lists: "Netflix", "Disney+", "Cinemas", "Digital" ("" if unknown). */
+        val where: String = "",
     ) {
         val nothing get() = released.isEmpty() && included.isEmpty() && free.isEmpty() && rent.isEmpty() && buy.isEmpty()
     }
@@ -92,13 +94,15 @@ object WhereToWatch {
             val tv = type == "series" || type == "tv"
             val tmdb = tmdbId(key, tv, id, imdbUrl) ?: throw IllegalStateException("TMDB doesn't know this title")
             val o = get(key, if (tv) "/tv/$tmdb?append_to_response=watch/providers" else "/movie/$tmdb?append_to_response=release_dates,watch/providers")
+            val included = names(o, region, "flatrate")
             val info = Info(
                 if (tv) aired(o) else released(o, region),
-                names(o, region, "flatrate"),
+                included,
                 (names(o, region, "free") + names(o, region, "ads")).distinct(),
                 names(o, region, "rent"),
                 names(o, region, "buy"),
                 o.optJSONObject("watch/providers")?.optJSONObject("results")?.optJSONObject(region)?.optString("link").orEmpty(),
+                if (tv) showWhere(o) else filmWhere(o, region, included),
             )
             cache[ck] = System.currentTimeMillis() to info
             failed.remove(ck)
@@ -142,6 +146,45 @@ object WhereToWatch {
         if (out.isEmpty()) first(5)?.let { d -> out += "DVD / Blu-ray" to nice(d.optString("release_date")) }
         if (out.isEmpty()) o.optString("release_date").takeIf { it.isNotBlank() }?.let { out += "First released" to nice(it) }
         return out
+    }
+
+    // ---- the short "where" for lists ---------------------------------------------------------
+
+    private val SERVICES = listOf(
+        "Netflix" to "Netflix", "Disney+" to "Disney+", "Disney Plus" to "Disney+", "Prime Video" to "Prime Video",
+        "Amazon" to "Prime Video", "Apple TV" to "Apple TV+", "Apple" to "Apple TV+", "Paramount+" to "Paramount+",
+        "HBO Max" to "Max", "Hulu" to "Hulu", "Peacock" to "Peacock", "Sky" to "Sky",
+        "BBC" to "BBC", "ITV" to "ITVX", "Channel 4" to "Channel 4", "MUBI" to "MUBI", "Shudder" to "Shudder",
+    )
+
+    /** "Netflix", "Disney+"… for a note or network name that names a service, else null. */
+    fun service(text: String?): String? {
+        val t = text?.trim().orEmpty()
+        if (t.isEmpty()) return null
+        return SERVICES.firstOrNull { (k, _) -> Regex("(^|[^A-Za-z])" + Regex.escape(k) + "($|[^A-Za-z])", RegexOption.IGNORE_CASE).containsMatchIn(t) }?.second
+    }
+
+    private fun showWhere(o: JSONObject): String {
+        val net = o.optJSONArray("networks")?.optJSONObject(0)?.optString("name").orEmpty()
+        return service(net) ?: net.take(16)
+    }
+
+    private fun filmWhere(o: JSONObject, region: String, included: List<String>): String {
+        included.firstOrNull()?.let { return service(it) ?: it }
+        val all = o.optJSONObject("release_dates")?.optJSONArray("results")
+        val countries = (0 until (all?.length() ?: 0)).mapNotNull { all!!.optJSONObject(it) }
+        fun dates(c: JSONObject) = c.optJSONArray("release_dates")?.let { a -> (0 until a.length()).mapNotNull { a.optJSONObject(it) } }.orEmpty()
+        val mine = countries.firstOrNull { it.optString("iso_3166_1") == region }?.let { dates(it) }.orEmpty()
+        val everywhere = countries.flatMap { dates(it) }
+        // A service named on a release (yours first, then anywhere): "Netflix", "Disney+".
+        (mine + everywhere).firstNotNullOfOrNull { d -> service(d.optString("note")) }?.let { return it }
+        // Made by a streamer.
+        val makers = o.optJSONArray("production_companies")?.let { a -> (0 until a.length()).mapNotNull { a.optJSONObject(it)?.optString("name") } }.orEmpty()
+        makers.firstOrNull { it.contains("Netflix", true) }?.let { return "Netflix" }
+        makers.firstOrNull { it.startsWith("Apple", true) }?.let { return "Apple TV+" }
+        if (mine.any { it.optInt("type") in listOf(2, 3) } || (mine.isEmpty() && everywhere.any { it.optInt("type") in listOf(2, 3) })) return "Cinemas"
+        if ((mine.ifEmpty { everywhere }).any { it.optInt("type") == 4 }) return "Digital"
+        return ""
     }
 
     /** A series: its network(s) and when it first aired. */

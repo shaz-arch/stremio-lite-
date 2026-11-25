@@ -168,7 +168,7 @@ object Feeds {
                 ComingSoon.groups(list).forEach { (name, group) ->
                     rows += Row("──── $name ────")
                     group.forEach { e ->
-                        rows += Row(e.meta.name, (if (films && Waiting.has(app, e.meta.id)) "◷ " else "") + (if (e.date > 0) ComingSoon.label(e.date) else e.meta.year), opens = { Details.screen(app, e.addon, e.meta) })
+                        rows += Row(e.meta.name, (if (films && Waiting.has(app, e.meta.id)) "◷ " else "") + ComingSoon.detail(e), opens = { Details.screen(app, e.addon, e.meta) })
                     }
                 }
             }
@@ -191,11 +191,16 @@ object Feeds {
                 Net.async({ ComingSoon.entries(addons, chosen, type) }) { r ->
                     entries = r.getOrDefault(emptyList())
                     build()
-                    // Dates one at a time, so the stick stays responsive.
-                    val todo = entries!!.filter { it.date < 0 }
+                    // Dates (and, with a TMDB key, where it'll be shown) one at a time, so the stick stays responsive.
+                    val key = Settings.tmdbKey(app)
+                    val region = Settings.watchRegion(app)
+                    val todo = entries!!.filter { it.date < 0 || (key.isNotBlank() && it.where == null) }
                     fun next(i: Int) {
                         if (i >= todo.size || !app.inStack(s)) return
-                        Net.async({ ComingSoon.lookUp(addons, todo[i]) }) { soon(); next(i + 1) }
+                        Net.async({
+                            ComingSoon.lookUp(addons, todo[i])
+                            if (key.isNotBlank()) ComingSoon.lookWhere(key, region, todo[i])
+                        }) { soon(); next(i + 1) }
                     }
                     next(0)
                 }

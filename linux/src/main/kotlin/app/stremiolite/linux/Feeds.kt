@@ -159,7 +159,7 @@ object Feeds {
                 ComingSoon.groups(list).forEach { (name, group) ->
                     rows += Row("──── $name ────")
                     group.forEach { e ->
-                        rows += Row(e.meta.name, (if (films && Waiting.has(e.meta.id)) "◷ " else "") + (if (e.date > 0) ComingSoon.label(e.date) else e.meta.year), opens = { Details.screen(e.addon, e.meta) })
+                        rows += Row(e.meta.name, (if (films && Waiting.has(e.meta.id)) "◷ " else "") + ComingSoon.detail(e), opens = { Details.screen(e.addon, e.meta) })
                     }
                 }
             }
@@ -182,11 +182,16 @@ object Feeds {
                 App.async({ ComingSoon.entries(addons, chosen, type) }) { r ->
                     entries = r.getOrDefault(emptyList())
                     build()
-                    val todo = ArrayDeque(entries!!.filter { it.date < 0 })
+                    val key = Prefs.tmdbKey
+                    val region = Prefs.watchRegion
+                    val todo = ArrayDeque(entries!!.filter { it.date < 0 || (key.isNotBlank() && it.where == null) })
                     fun next() {
                         if (!App.inStack(s)) return
                         val e = todo.removeFirstOrNull() ?: return
-                        App.async({ ComingSoon.lookUp(addons, e) }) { soon(); next() }
+                        App.async({
+                            ComingSoon.lookUp(addons, e)
+                            if (key.isNotBlank()) ComingSoon.lookWhere(key, region, e)
+                        }) { soon(); next() }
                     }
                     // Linux can look up three at a time.
                     repeat(3) { next() }

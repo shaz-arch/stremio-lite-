@@ -13,7 +13,19 @@ object ComingSoon {
     class Entry(val addon: Addon, val meta: Meta) {
         /** Release date (UTC midnight), 0 when the add-on doesn't say, -1 when not looked up yet. */
         @Volatile var date: Long = -1
+        /** Where it'll be shown ("Netflix", "Cinemas"…), "" if unknown, null if not looked up yet. */
+        @Volatile var where: String? = null
     }
+
+    /** Looks up where [e] will be shown, with your TMDB key (blocking; "" when TMDB can't say). */
+    fun lookWhere(tmdbKey: String, region: String, e: Entry) {
+        if (e.where != null) return
+        e.where = runCatching { WhereToWatch.load(tmdbKey, e.meta.type, e.meta.id, "", region).where }.getOrDefault("")
+    }
+
+    /** The detail for a row: "Fri 27 Nov · Netflix". */
+    fun detail(e: Entry): String = listOf(if (e.date > 0) label(e.date) else e.meta.year, e.where.orEmpty())
+        .filter { it.isNotBlank() }.joinToString(" · ")
 
     private const val KEEP_MS = 6 * 3600_000L
     /** By type ("movie", "series"): when read, which list, what came back. */
