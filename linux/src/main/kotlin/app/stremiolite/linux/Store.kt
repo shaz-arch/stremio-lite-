@@ -108,6 +108,11 @@ object Prefs {
         set(v) { data().put("layout", v); save() }
 
     /** Live TV on Home (on unless turned off). */
+    /** Next watch's view: "status" (default) or "order". */
+    var nextView: String
+        get() = data().optString("nextView", "status")
+        set(v) { data().put("nextView", v); save() }
+
     /** Set up Stremonino's progress on this computer. */
     var setupDone: Set<String>
         get() = data().optJSONArray("setupDone")?.let { a -> (0 until a.length()).map { a.optString(it) }.toSet() } ?: emptySet()

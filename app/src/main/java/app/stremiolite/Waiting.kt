@@ -97,6 +97,15 @@ object Waiting {
 
     private fun save(c: Context, list: List<Entry>) = History.putRemote(c, record(History.rawRemote(c, ID), list))
 
+    /** Next watch films that aren't ready yet: followed quietly (no check now: it just found none). */
+    fun follow(app: MainActivity, films: List<NextWatch.Entry>) {
+        val have = list(app)
+        val add = films.filter { f -> f.type == "movie" && have.none { it.id == f.id } }
+        if (add.isEmpty()) return
+        save(app, have + add.map { Entry(it.id, it.type, it.name, it.year, 0) })
+        askToNotify(app)
+    }
+
     fun add(app: MainActivity, e: Entry) {
         save(app, list(app).filter { it.id != e.id } + e)
         askToNotify(app)

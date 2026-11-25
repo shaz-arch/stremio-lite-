@@ -1122,6 +1122,13 @@ object Waiting {
         Lib.put(item)
     }
 
+    /** Next watch films that aren't ready yet: followed quietly. */
+    fun follow(films: List<app.stremiolite.NextWatch.Entry>) {
+        val have = list()
+        val add = films.filter { f -> f.type == "movie" && have.none { it.id == f.id } }
+        if (add.isNotEmpty()) save(have + add.map { Entry(it.id, it.type, it.name, it.year, 0) })
+    }
+
     fun add(id: String, type: String, name: String, year: String) {
         save(list().filter { it.id != id } + Entry(id, type, name, year, 0))
         App.toast("Added to Waiting for streams (your phone checks it)")

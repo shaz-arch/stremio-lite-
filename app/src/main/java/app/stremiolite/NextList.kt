@@ -43,22 +43,80 @@ object NextList {
         return r
     }
 
-    fun screen(app: MainActivity): Screen {
+    // ---- the list: by status (default) or in your order ------------------------------------------
+
+    private fun byStatus(c: Context) = Profiles.prefsFor(c, "settings").getString("nextView", "status") == "status"
+    private fun setByStatus(c: Context, on: Boolean) { Profiles.prefsFor(c, "settings").edit().putString("nextView", if (on) "status" else "order").apply() }
+
+    private fun viewRow(app: MainActivity) = Row("View", if (byStatus(app)) "◄ By status ►" else "◄ Your order ►", action = {
+        setByStatus(app, !byStatus(app)); app.replaceTop(screen(app))
+    })
+
+    private fun detail(e: NextWatch.Entry): String = NextStatus.of(e.id)?.detail ?: "checking…"
+
+    fun screen(app: MainActivity): Screen = if (byStatus(app)) statusScreen(app) else orderScreen(app)
+
+    /** Grouped: Ready now, Coming soon (soonest first), Waiting for streams; your order inside each. */
+    private fun statusScreen(app: MainActivity): Screen {
+        lateinit var s: Screen
+        fun build() {
+            val list = all(app)
+            val rows = mutableListOf(viewRow(app))
+            if (list.isEmpty()) rows += Row("Nothing lined up. On a film or show, choose 'Add to Next watch'.")
+            NextStatus.grouped(list).forEach { (g, items) ->
+                rows += Row("──── ${g?.heading ?: "Checking…"} ────")
+                items.forEach { e ->
+                    val st = NextStatus.of(e.id)
+                    rows += Row(Marks.title(st?.shape ?: Marks.NEXT, e.name), detail(e) + "  ►", opens = { Details.screenFor(app, e.id, e.type, e.name, e.year) })
+                }
+            }
+            if (list.isNotEmpty()) rows += Row("────────────────────")
+            if (list.isNotEmpty()) rows += Row("Films not ready yet are followed: you'll be told when they are.")
+            s.rows = rows
+            app.refresh(s)
+        }
+        s = Screen("Next watch", emptyList())
+        s.onShow = { build(); fill(app, s) { build() } }
+        return s
+    }
+
+    private fun orderScreen(app: MainActivity): Screen {
         lateinit var r: Reorder<NextWatch.Entry>
         r = Reorder(
             app,
             head = {
-                if (r.items.isEmpty()) listOf(Row("Nothing lined up. On a film or show, choose 'Add to Next watch'."))
-                else listOf(Row("In your order. Starting one moves it to Continue watching."))
+                listOf(viewRow(app)) +
+                    if (r.items.isEmpty()) listOf(Row("Nothing lined up. On a film or show, choose 'Add to Next watch'."))
+                    else listOf(Row("In your order. Starting one moves it to Continue watching."))
             },
             items = all(app).toMutableList(),
-            label = { Marks.title(Marks.NEXT, it.name) },
-            detail = { listOf(it.year, MetaParse.typeLabel(it.type)).filter { s -> s.isNotBlank() }.joinToString("  ") },
+            label = { Marks.title(NextStatus.of(it.id)?.shape ?: Marks.NEXT, it.name) },
+            detail = { detail(it) },
             open = { Details.screenFor(app, it.id, it.type, it.name, it.year) },
             commit = { save(app, it) },
         )
         val s = r.build("Next watch")
-        s.onShow = { r.items = all(app).toMutableList(); r.redraw() }
+        s.onShow = { r.items = all(app).toMutableList(); r.redraw(); fill(app, s) { r.redraw() } }
         return s
+    }
+
+    /**
+     * Checks titles one at a time while the list is open (never while something plays), then
+     * follows films that aren't ready in Waiting for streams so you're told when they are.
+     */
+    private fun fill(app: MainActivity, s: Screen, changed: () -> Unit) {
+        val todo = NextStatus.missing(all(app))
+        if (todo.isEmpty()) return
+        val addons = Home.allAddons()
+        fun next(i: Int) {
+            if (!app.inStack(s)) return
+            if (app.playerOpen) { Net.later(10_000) { next(i) }; return }
+            if (i >= todo.size) {
+                Waiting.follow(app, all(app).filter { NextStatus.of(it.id)?.group?.let { g -> g != NextStatus.Group.READY } == true })
+                return
+            }
+            Net.async({ NextStatus.check(addons, todo[i]) }) { _ -> if (app.inStack(s)) changed(); next(i + 1) }
+        }
+        next(0)
     }
 }
