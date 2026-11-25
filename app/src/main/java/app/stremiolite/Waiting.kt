@@ -246,7 +246,7 @@ object Waiting {
             val marks = History.marks(app)
             val all = list(app)
             // Films you've finished or started (they're in Continue watching) leave the list.
-            val keep = all.filter { it.better || marks[it.id] == null }
+            val keep = all.filter { it.better || (marks[it.id] != Marks.WATCHED && marks[it.id] != Marks.CONTINUE) }
             if (keep.size != all.size) save(app, keep)
             val last = lastCheck(app)
             val rows = mutableListOf(

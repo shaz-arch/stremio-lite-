@@ -85,7 +85,7 @@ object Search {
     private fun row(app: MainActivity, p: Pair<Addon, Meta>): Row {
         val (a, m) = p
         val detail = if (m.id in collections) listOf(m.year, "Collection").filter { it.isNotBlank() }.joinToString("  ") else Catalogs.detail(m)
-        return Row(m.name, detail, opens = { Details.screen(app, a, m) }, play = {
+        return Row(Marks.title(History.marks(app)[m.id], m.name), detail, opens = { Details.screen(app, a, m) }, play = {
             if (m.type == "movie") Streams.prefetch(app, m.type, m.id)
             app.push(Details.screen(app, a, m, autoPlay = true))
         })

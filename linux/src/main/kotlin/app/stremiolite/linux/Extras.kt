@@ -151,7 +151,7 @@ object Profiles {
         lateinit var s: Screen
         fun build() {
             val cur = current()
-            s.rows = all().map { p -> Row(p.name, (if (p.id == cur?.id) "current  " else "") + p.email, action = { switchTo(p.id) }) } +
+            s.rows = all().map { p -> Row(p.name, if (p.id == cur?.id) "current" else "", action = { switchTo(p.id) }) } +
                 listOf(
                     Row("────────────────────"),
                     Row("Add a profile (another Stremio account)", "►", opens = { adding = true; SignIn.screen() }),

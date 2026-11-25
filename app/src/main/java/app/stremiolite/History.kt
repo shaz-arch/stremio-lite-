@@ -116,24 +116,38 @@ object History {
     private val writeLock = Any()
     @Volatile private var writeSeq = 0
 
-    /** "✓" watched film, "►" started or next up, by title id. Rebuilt only after a change. */
+    /** The status shape for each title in lists ([Marks]), by title id. Rebuilt only after a change. */
     private var marks: Map<String, String>? = null
 
     fun marks(c: Context): Map<String, String> {
         ensure(c)
         marks?.let { return it }
-        val m = HashMap<String, String>()
-        log.forEach { if (it.type == "movie") m[it.id] = "✓" }
+        val watched = HashSet<String>()
+        log.forEach { if (it.type == "movie") watched += it.id }
         remote.forEach { (id, raw) ->
-            if (id in m) return@forEach
+            if (id in watched) return@forEach
             val o = runCatching { JSONObject(raw) }.getOrNull() ?: return@forEach
             val st = o.optJSONObject("state") ?: return@forEach
-            if (o.optString("type") == "movie" && (st.optInt("timesWatched") > 0 || st.optInt("flaggedWatched") > 0)) m[id] = "✓"
+            if (o.optString("type") == "movie" && (st.optInt("timesWatched") > 0 || st.optInt("flaggedWatched") > 0)) watched += id
         }
-        items.forEach { if (m[it.id] == null) m[it.id] = "►" }
+        val continuing = items.mapTo(HashSet()) { it.id }
+        val saved = library.mapTo(HashSet()) { it.id }
+        val waits = runCatching { Waiting.list(c) }.getOrDefault(emptyList()).associateBy { it.id }
+        val m = HashMap<String, String>()
+        for (id in watched + continuing + saved + waits.keys) {
+            val w = waits[id]
+            Marks.pick(
+                watched = id in watched, continuing = id in continuing,
+                ready = w != null && w.ready > 0, better = w != null && w.better, waiting = w != null,
+                library = id in saved,
+            )?.let { m[id] = it }
+        }
         marks = m
         return m
     }
+
+    /** A film marked as watched. */
+    fun isWatched(c: Context, id: String) = marks(c)[id] == Marks.WATCHED
 
     private fun save() {
         marks = null

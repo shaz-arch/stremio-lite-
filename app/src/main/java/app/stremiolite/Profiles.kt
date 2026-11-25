@@ -140,7 +140,7 @@ object Profiles {
             val cur = current(app)
             val rows = mutableListOf<Row>()
             all(app).forEach { p ->
-                rows += Row(p.name, (if (p.id == cur?.id) "current  " else "") + p.email, action = { switchTo(app, p.id) })
+                rows += Row(p.name, if (p.id == cur?.id) "current" else "", action = { switchTo(app, p.id) })
             }
             rows += Row("────────────────────")
             rows += Row("Add a profile", "►", opens = { addScreen(app) })

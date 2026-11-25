@@ -322,7 +322,7 @@ object Settings {
             themeRow.detail = "◄ ${Look.theme(app).name} ►"
             sizeRow.detail = "◄ ${Look.size(app).name} ►"
             clockRow.detail = "◄ ${Look.clock(app).name} ►"
-            watchedRow.detail = "◄ ${if (hideWatched(app)) "Hide them" else "Show with ✓"} ►"
+            watchedRow.detail = "◄ ${if (hideWatched(app)) "Hide them" else "Show with ●"} ►"
             playerRow.detail = "◄ ${player(app).name} ►"
             langRow.detail = "◄ ${subtitleLanguage(app).name} ►"
             nextRow.detail = "◄ ${if (autoNext(app)) "On" else "Off"} ►"

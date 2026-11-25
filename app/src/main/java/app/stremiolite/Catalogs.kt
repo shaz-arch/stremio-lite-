@@ -62,11 +62,11 @@ object Catalogs {
         fun rebuild() {
             val marks = History.marks(app)
             val hide = Settings.hideWatched(app)
-            val visible = if (hide) items.filter { marks[it.id] != "✓" } else items
+            val visible = if (hide) items.filter { marks[it.id] != Marks.WATCHED } else items
             shown = visible.size
             val rows = visible.mapTo(ArrayList<Row>(visible.size + 3).apply { add(about) }) { m ->
                 val mark = marks[m.id]
-                Row(if (mark != null) "$mark ${m.name}" else m.name, detail(m), opens = { Details.screen(app, a, m) }, play = {
+                Row(Marks.title(mark, m.name), detail(m), opens = { Details.screen(app, a, m) }, play = {
                     // A film's stream request needs nothing from its details: start it right away.
                     if (m.type == "movie") Streams.prefetch(app, m.type, m.id)
                     app.push(Details.screen(app, a, m, autoPlay = true))

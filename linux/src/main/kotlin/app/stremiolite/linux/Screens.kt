@@ -1,5 +1,6 @@
 package app.stremiolite.linux
 
+import app.stremiolite.Marks
 import app.stremiolite.Addon
 import app.stremiolite.Folders
 import app.stremiolite.Layout
@@ -425,14 +426,21 @@ object Catalogs {
         return "${m.year.take(9).padEnd(9)} ${rating.padEnd(6)} ${kind.padEnd(6)}"
     }
 
-    fun mark(m: Meta): String? = when {
-        m.type == "movie" && Lib.filmWatched(m.id) -> "✓"
-        Lib.info(m.id)?.continuing == true -> "►"
-        else -> null
+    fun mark(m: Meta): String? = mark(m.id, m.type)
+
+    /** The status shape for a title ([Marks]): watched, continuing, its stream, or saved. */
+    fun mark(id: String, type: String): String? {
+        val info = Lib.info(id)
+        val w = Waiting.list().firstOrNull { it.id == id }
+        return Marks.pick(
+            watched = type == "movie" && Lib.filmWatched(id), continuing = info?.continuing == true,
+            ready = w != null && w.ready > 0, better = w != null && w.better, waiting = w != null,
+            library = info?.inLibrary == true,
+        )
     }
 
     fun row(a: Addon?, m: Meta): Row = Row(
-        (mark(m)?.let { "$it " } ?: "") + m.name, detail(m),
+        Marks.title(mark(m), m.name), detail(m),
         opens = { Details.screen(a, m) },
         play = { App.push(Details.screen(a, m, autoPlay = true)) },
     )
@@ -667,7 +675,7 @@ object Details {
             SearchRank.parts(f.videos).forEach { v ->
                 val name = v.title.ifEmpty { v.id }
                 val own = v.id.startsWith("tt") || v.id.startsWith("tmdb:")
-                rows += Row((if (Lib.filmWatched(v.id)) "✓ " else "") + name, v.released.take(4) + "  ►",
+                rows += Row(Marks.title(Catalogs.mark(v.id, "movie"), name), v.released.take(4) + "  ►",
                     opens = { if (own) screenFor(v.id, "movie", name) else episode(f, v) },
                     play = { if (own) App.push(screenFor(v.id, "movie", name, autoPlay = true)) else App.push(episode(f, v)) })
             }
@@ -922,7 +930,7 @@ object Settings {
                 Row("Clock", "◄ ${Look.clock().name} ►", action = {
                     Prefs.clock = (Look.clocks.indexOf(Look.clock()) + 1) % Look.clocks.size; Prefs.syncOut(); build()
                 }),
-                Row("Watched films in lists", "◄ ${if (Prefs.hideWatched) "Hide them" else "Show with ✓"} ►", action = {
+                Row("Watched films in lists", "◄ ${if (Prefs.hideWatched) "Hide them" else "Show with ●"} ►", action = {
                     Prefs.hideWatched = !Prefs.hideWatched; Prefs.syncOut(); build()
                 }),
                 Row("Live TV on Home", "◄ ${if (Prefs.liveTv) "Shown" else "Hidden"} ►", action = {

@@ -197,7 +197,7 @@ object Details {
             })
             rows += fol
         }
-        if (f.type == "movie" && History.marks(app)[f.id] == "✓") rows += Row("Remove from watched", action = {
+        if (f.type == "movie" && History.isWatched(app, f.id)) rows += Row("Remove from watched", action = {
             History.unwatch(app, f.id, f.type, f.id, "", emptyList())
             app.toast("${f.name} is no longer marked as watched")
             app.refreshTop()
@@ -283,7 +283,7 @@ object Details {
             SearchRank.parts(f.videos).forEach { v ->
                 val name = v.title.ifEmpty { v.id }
                 val own = v.id.startsWith("tt") || v.id.startsWith("tmdb:")
-                rows += Row((if (marks[v.id] == "✓") "✓ " else "") + name, v.released.take(4), opens = {
+                rows += Row(Marks.title(marks[v.id], name), v.released.take(4), opens = {
                     if (own) screenFor(app, v.id, "movie", name, v.released.take(4)) ?: Streams.screen(app, "movie", v.id, name)
                     else Streams.screen(app, "movie", v.id, name)
                 }, play = {
