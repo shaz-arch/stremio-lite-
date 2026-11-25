@@ -1,0 +1,105 @@
+package app.stremiolite.linux
+
+import app.stremiolite.KidsLock
+import app.stremiolite.Stremio
+import java.io.File
+
+/** Linux side of [KidsLock]: PIN prompts, the per-profile lock screen, and the guard on Home's way out. */
+object KidsGuard {
+    private fun file() = File(Store.root, "kidslock.json")
+
+    fun state(): KidsLock.State = KidsLock.read(runCatching { file().readText() }.getOrNull())
+
+    private fun save(s: KidsLock.State) {
+        file().writeText(s.json())
+        runCatching { file().setReadable(false, false); file().setReadable(true, true) }
+    }
+
+    fun locked() = state().isLocked(Profiles.current()?.id)
+    fun hides() = state().let { it.isLocked(Profiles.current()?.id) && it.hideExtras }
+
+    /** Runs [then] straight away, or after the parent PIN if this profile is locked. */
+    fun guard(then: () -> Unit) { if (!locked()) then() else askPin("Parent PIN (or type forgot)", then) }
+
+    fun askPin(label: String, then: () -> Unit) {
+        KidsLock.waitSeconds()?.let { App.toast("Too many wrong PINs. Try again in $it seconds."); return }
+        App.ask(label, hidden = true) { v ->
+            when {
+                v == null -> Unit
+                v.trim().equals("forgot", ignoreCase = true) -> forgot()
+                KidsLock.attempt(state(), v.trim()) -> then()
+                else -> App.toast(KidsLock.waitSeconds()?.let { "Wrong PIN. Wait $it seconds before trying again." } ?: "Wrong PIN")
+            }
+        }
+    }
+
+    private fun askNewPin(done: (String) -> Unit) {
+        App.ask("New PIN (4 to 8 digits)", hidden = true) { a ->
+            if (a == null) return@ask
+            if (!KidsLock.validPin(a.trim())) { App.toast("A PIN is 4 to 8 digits"); return@ask }
+            App.ask("Same PIN again", hidden = true) { b ->
+                if (b == null) return@ask
+                if (b.trim() != a.trim()) App.toast("The two PINs didn't match") else done(a.trim())
+            }
+        }
+    }
+
+    /** Signing in with the email and password of any account on this computer clears the lock. */
+    private fun forgot() {
+        App.ask("Email of an account on this computer") { e ->
+            val email = e?.trim().orEmpty()
+            if (email.isEmpty()) return@ask
+            if (Profiles.all().none { it.email.equals(email, ignoreCase = true) }) { App.toast("That account isn't signed in here"); return@ask }
+            App.ask("Its Stremio password", hidden = true) { p ->
+                if (p.isNullOrEmpty()) return@ask
+                App.toast("Checking…")
+                App.async({ Stremio.login(email, p) }) { r ->
+                    r.onSuccess { key ->
+                        App.async({ runCatching { Stremio.logout(key) } }) {}
+                        save(KidsLock.NONE)
+                        App.toast("Kids lock cleared. Set a new PIN in Manage profiles.")
+                        Home.redraw()
+                    }.onFailure { App.toast("Couldn't sign in: ${if (it is Stremio.ApiError) it.message else Net.describe(it)}") }
+                }
+            }
+        }
+    }
+
+    fun screen(p: Profiles.Profile): Screen {
+        lateinit var screen: Screen
+        fun build() {
+            val s = state()
+            val rows = mutableListOf(
+                Row("A locked profile needs the parent PIN to leave it"),
+                Row("(Switch profile, Sign out) and to open Settings."),
+                Row("────────────────────"),
+            )
+            if (!s.hasPin) {
+                rows += Row("Choose a PIN and lock ${p.name}", action = {
+                    askNewPin { pin -> save(s.withPin(pin).lock(p.id)); App.toast("${p.name} is locked"); build() }
+                })
+            } else {
+                rows += if (s.isLocked(p.id)) Row(info(p.name, "locked"), "unlock", action = {
+                    askPin("Parent PIN to unlock ${p.name}") { save(state().unlock(p.id)); App.toast("${p.name} is unlocked"); build() }
+                }) else Row(info(p.name, "not locked"), "lock", action = { save(s.lock(p.id)); App.toast("${p.name} is locked"); build() })
+                rows += Row("In locked profiles, hide Search, Live TV and News", if (s.hideExtras) "on" else "off", action = {
+                    askPin("Parent PIN") { save(state().withHide(!state().hideExtras)); build() }
+                })
+                rows += Row("Change the parent PIN", action = {
+                    askPin("Current PIN") { askNewPin { pin -> save(state().withPin(pin)); App.toast("PIN changed") } }
+                })
+                val others = Profiles.all().filter { s.isLocked(it.id) && it.id != p.id }.map { it.name }
+                if (others.isNotEmpty()) rows += Row("Also locked: " + others.joinToString(", "))
+            }
+            rows += Row("────────────────────")
+            rows += Row("What a locked profile can find depends on its own add-ons and rows,")
+            rows += Row("so give it a kids' rows config. The lock is on this computer only.")
+            screen.rows = rows
+            App.refresh()
+        }
+        screen = Screen("Kids lock", emptyList())
+        build()
+        screen.pos = 3
+        return screen
+    }
+}

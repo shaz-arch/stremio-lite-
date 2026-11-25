@@ -71,6 +71,8 @@ object Player {
         for (intent in attempts) {
             try {
                 activity.startActivityForResult(intent, REQUEST_PLAY)
+                activity.playerOpen = true
+                Sleep.started(startAt)
                 return
             } catch (e: ActivityNotFoundException) {
                 // try the next way
@@ -81,6 +83,8 @@ object Player {
         // "Ask each time", or the chosen player is missing: let Android offer what can play video.
         try {
             activity.startActivityForResult(Intent.createChooser(viewIntent(), "Play with"), REQUEST_PLAY)
+            activity.playerOpen = true
+            Sleep.started(startAt)
         } catch (e: ActivityNotFoundException) {
             activity.toast("No video player found. Install VLC from the Appstore.")
         }

@@ -406,6 +406,7 @@ object Settings {
                 Row("──── About ────"),
                 Row(info("App version", BuildConfig.VERSION_NAME)),
                 updateRow,
+                Row("Is everything working?", "check it all  ►", opens = { HealthScreen.screen(app) }),
                 Row("Device check", "►", opens = { DemoMenus.deviceCheck(app) }),
                 Row("About Stremonino", "►", opens = { DemoMenus.about() }),
             ),

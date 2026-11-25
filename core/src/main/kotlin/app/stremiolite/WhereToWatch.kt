@@ -46,6 +46,9 @@ object WhereToWatch {
     /** Region names for the details page: "GB" → "UK". */
     fun regionName(r: String) = when (r) { "GB" -> "UK"; "US" -> "US"; else -> r }
 
+    /** Throws [KeyRefused] if TMDB turns the key down (for the health check). */
+    fun checkKey(key: String) { get(key, "/configuration") }
+
     private fun get(key: String, path: String): JSONObject {
         val bearer = key.startsWith("eyJ") // a TMDB "read access token" rather than the short API key
         val url = API + path + (if (bearer) "" else (if ('?' in path) "&" else "?") + "api_key=" + URLEncoder.encode(key, "UTF-8"))
