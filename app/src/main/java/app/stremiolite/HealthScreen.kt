@@ -29,7 +29,7 @@ object HealthScreen {
         fun run() {
             val g = ++round
             results = mutableMapOf()
-            checks = Health.checks(Profiles.current(app)?.authKey, Home.loadedAddons(), Settings.tmdbKey(app)) { Net.describe(it) }
+            checks = Health.checks(Profiles.current(app)?.authKey, Home.loadedAddons(), Settings.tmdbKey(app), { Net.describe(it) }) { mbps -> app.runOnUiThread { SpeedCheck.record(app, mbps) } }
             build()
             checks.forEachIndexed { i, c ->
                 Net.async({ c.run() }) { r ->

@@ -131,6 +131,8 @@ object Home {
             History.pull(app) { rebuild() }
             Updates.check { rebuild() }
             Waiting.checkSoon(app) { rebuild() }
+            // How fast streams reach this device, for Play best (a few seconds, every 6 hours at most).
+            Net.later(8_000) { if (app.isTop(screen)) SpeedCheck.maybe(app) }
             // Counts for New episodes and the Calendar: checked quietly once an hour.
             // Saved counts straight away; a fresh check (if the saved one is over an hour old) a little later.
             NewEpisodes.warm(app) {

@@ -250,6 +250,7 @@ object Home {
                 runCatching { Stremio.parseAddons(Store.file("addons.json").readText()) }.onSuccess { addons = it }
                 load()
             }
+            App.later(8_000) { if (App.isTop(s)) SpeedCheck.maybe() }
             Lib.pull { build() }
             Updates.check { build() }
             if (!NewEpisodes.fresh()) App.later(4_000) { if (addons != null) NewEpisodes.load { build() } }
@@ -963,6 +964,7 @@ object Settings {
                 Row("──── Rows & streams ────"),
                 Row("Your rows (AIOMetadata)", "►", opens = { RowsSetup.screen() }),
                 Row("Your streams (AIOStreams)", "►", opens = { StreamsSetup.screen() }),
+                Row(info("Stream speed", SpeedCheck.summary()), "►", opens = { HealthScreen.screen() }),
                 Row("Your add-ons", (Home.all().size.takeIf { it > 0 }?.let { "$it  " } ?: "") + "►", opens = { Addons.screen() }),
                 Row("Where to watch (TMDB key)", (if (Prefs.tmdbKey.isBlank()) "not set" else "set ✓ · ${app.stremiolite.WhereToWatch.regionName(Prefs.watchRegion)}") + "  ►", opens = { Details.whereToWatchSettings() }),
                 Row("──── Share ────"),

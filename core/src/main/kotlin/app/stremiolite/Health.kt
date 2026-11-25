@@ -16,7 +16,7 @@ object Health {
     class Outcome(val ok: Boolean, val text: String, val help: String = "")
     class Check(val name: String, val run: () -> Outcome)
 
-    fun checks(authKey: String?, loaded: List<Addon>?, tmdbKey: String, describe: (Throwable) -> String): List<Check> {
+    fun checks(authKey: String?, loaded: List<Addon>?, tmdbKey: String, describe: (Throwable) -> String, onSpeed: ((Double) -> Unit)? = null): List<Check> {
         val addons = loaded ?: emptyList()
         fun offline(d: String) = listOf("address not found", "timed out", "refused", "unreachable", "network").any { it in d.lowercase() }
         fun safe(name: String, f: () -> Outcome) = Check(name) { try { f() } catch (e: Throwable) { Outcome(false, describe(e)) } }
@@ -72,6 +72,13 @@ object Health {
                 fits == 0 -> Outcome(false, "${found.size} found, none this device plays well", "All 4K, cam or not ready yet.")
                 else -> Outcome(true, "${found.size} found, $ready ready, $fits fit this device")
             }
+        }
+        if (streamers.isNotEmpty()) list += safe("Speed: streams to this device") {
+            val url = SpeedTest.testUrl(streamers) ?: return@safe Outcome(false, "no stream to test with", "See the Streams lines above.")
+            val mbps = SpeedTest.measure(url)
+            onSpeed?.invoke(mbps)
+            if (mbps < 5) Outcome(false, SpeedTest.advice(mbps), "Slow for HD: try 5 GHz Wi-Fi, moving the router, or an Ethernet adapter.")
+            else Outcome(true, SpeedTest.advice(mbps))
         }
         if (online.isNotEmpty() && streamers.isEmpty()) list += Check("Streams") {
             Outcome(false, "no add-on gives streams", "Install a stream add-on such as AIOStreams.")

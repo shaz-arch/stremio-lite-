@@ -35,6 +35,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         Guide.dir = java.io.File(cacheDir, "guides")
         AgeRatings.dir = filesDir
+        SpeedCheck.apply(this)
         narrow = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT
         setContentView(R.layout.activity_main)
         // The wide borders keep text inside a TV's overscan; a phone has no overscan, so use its full width.

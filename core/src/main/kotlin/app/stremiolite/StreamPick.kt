@@ -208,6 +208,13 @@ object Best {
     private const val SWEET_HIGH = 15.0
     private const val HEAVY = 25.0
 
+    /**
+     * What a stream should stay under on this device's connection, from the speed test (null =
+     * not measured). Streams above it are marked down, enough to choose a smaller file of the same
+     * quality, or a lower quality when it's far over; never ruled out.
+     */
+    @Volatile var linkMbps: Double? = null
+
     private val camWords = Regex("""\b(CAM|CAMRIP|HDCAM|TS|HDTS|TELESYNC|TC|TELECINE|SCR|SCREENER|DVDSCR)\b""")
     fun isCam(up: String) = camWords.containsMatchIn(up)
 
@@ -297,6 +304,7 @@ object Best {
                 mbps <= HEAVY -> 20.0 - (mbps - SWEET_HIGH) * 3      // 15-25: fading out
                 else -> -10.0 - (mbps - HEAVY) * 6                    // over 25: likely to buffer
             }
+            linkMbps?.let { limit -> if (mbps > limit) sc -= 30.0 + (mbps - limit) * 8 }   // more than your connection keeps up with
         }
         return sc
     }

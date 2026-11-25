@@ -407,6 +407,7 @@ object Settings {
                 Row("──── Rows & streams ────"),
                 Row("Your rows (AIOMetadata)", "►", opens = { RowsSetup.screen(app) }),
                 Row("Your streams (AIOStreams)", "►", opens = { StreamsSetup.screen(app) }),
+                Row(info("Stream speed", SpeedCheck.summary(app)), "►", opens = { HealthScreen.screen(app) }),
                 Row("Your add-ons", (Home.addonCount()?.let { "$it  " } ?: "") + "►", opens = { Home.addonsScreen(app) }),
                 Row("Where to watch (TMDB key)", (if (tmdbKey(app).isBlank()) "not set" else "set ✓ · ${WhereToWatch.regionName(watchRegion(app))}") + "  ►", opens = { whereToWatch(app) }),
                 Row("──── Share ────"),
