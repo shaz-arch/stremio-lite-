@@ -113,15 +113,16 @@ object Settings {
         // Your playlists follow the account, but never go out with "Share my setup".
         p.getString("playlists", null)?.let { o.put("playlists", it) }
         p.getString("liveFavs", null)?.let { o.put("liveFavs", it) }
-        // Your TMDB key follows your account (never "Share my setup").
+        // Your TMDB and Gemini keys follow your account (never "Share my setup").
         p.getString("tmdbKey", null)?.let { o.put("tmdbKey", it) }
+        p.getString("geminiKey", null)?.takeIf { it.isNotBlank() }?.let { o.put("geminiKey", it) }
         p.getString("watchRegion", null)?.let { o.put("watchRegion", it) }
         p.getString("liveGuide", null)?.let { o.put("liveGuide", it) }
         p.getString("liveFreeHide", null)?.let { o.put("liveFreeHide", it) }
         p.getString("newsFeeds", null)?.let { o.put("newsFeeds", it) }
         p.getString("newsHide", null)?.let { o.put("newsHide", it) }
         // The profile's name, so every device signed in to this account shows the same one.
-        Profiles.current(c)?.name?.takeIf { it.isNotBlank() }?.let { o.put("profileName", it) }
+        Profiles.current(c)?.name?.takeIf { !ProfileName.isAuto(it) }?.let { o.put("profileName", it) }
         o.put("updated", now)
         p.edit().putLong("syncedAt", now).apply()
         item.put("name", o.toString()).put("removed", true).put("temp", false).put("_mtime", Sync.iso(now))
@@ -145,6 +146,12 @@ object Settings {
         }
         val o = runCatching { JSONObject(JSONObject(raw).optString("name")) }.getOrNull() ?: return false
         val updated = o.optLong("updated")
+        // A device that named the profile itself ("Profile 1") always takes the account's name.
+        val cur = Profiles.current(c)?.name ?: ""
+        val accName = o.optString("profileName")
+        if (ProfileName.isAuto(cur) && !ProfileName.isAuto(accName)) Profiles.takeName(c, accName)
+        // The Gemini key, if this device doesn't have one.
+        if (o.optString("geminiKey").isNotBlank() && geminiKey(c).isBlank()) p.edit().putString("geminiKey", o.optString("geminiKey")).apply()
         if (updated <= p.getLong("syncedAt", 0)) {
             // Set up before names were synced: a device that's synced before sends its profile name once.
             if (!o.has("profileName") && p.getLong("syncedAt", 0) > 0) syncOut(c)
@@ -161,12 +168,13 @@ object Settings {
         if (o.has("playlists")) e.putString("playlists", o.optString("playlists"))
         if (o.has("liveFavs")) e.putString("liveFavs", o.optString("liveFavs"))
         if (o.has("tmdbKey")) e.putString("tmdbKey", o.optString("tmdbKey"))
+        if (o.optString("geminiKey").isNotBlank()) e.putString("geminiKey", o.optString("geminiKey"))
         if (o.has("watchRegion")) e.putString("watchRegion", o.optString("watchRegion"))
         if (o.has("liveGuide")) e.putString("liveGuide", o.optString("liveGuide"))
         if (o.has("liveFreeHide")) e.putString("liveFreeHide", o.optString("liveFreeHide"))
         if (o.has("newsFeeds")) e.putString("newsFeeds", o.optString("newsFeeds"))
         if (o.has("newsHide")) e.putString("newsHide", o.optString("newsHide"))
-        if (o.has("profileName")) Profiles.takeName(c, o.optString("profileName"))
+        if (!ProfileName.isAuto(accName)) Profiles.takeName(c, accName)
         e.putStringSet("hiddenRows", hidden)
         e.putLong("syncedAt", updated).apply()
         if (hidden != remoteHidden) syncOut(c)
@@ -337,7 +345,7 @@ object Settings {
     fun mdblistKey(c: Context): String = prefs(c).getString("mdblistKey", "") ?: ""
     /** Gemini key for Ask AI (it lives in your rows' config; remembered here, never synced or shared). */
     fun geminiKey(c: Context): String = prefs(c).getString("geminiKey", "") ?: ""
-    fun setGeminiKey(c: Context, k: String) { prefs(c).edit().putString("geminiKey", k).apply() }
+    fun setGeminiKey(c: Context, k: String) { prefs(c).edit().putString("geminiKey", k).apply(); syncOut(c) }
     fun setMdblistKey(c: Context, k: String) { prefs(c).edit().putString("mdblistKey", k).apply() }
 
     class Keys(val tmdb: String, val region: String, val debrid: List<Pair<String, String>>, val mdblist: String, val gemini: String = "") {

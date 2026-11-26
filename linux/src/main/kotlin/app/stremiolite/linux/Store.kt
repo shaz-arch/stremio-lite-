@@ -221,7 +221,7 @@ object Prefs {
         set(v) { data().put("mdblistKey", v); save() }
     var geminiKey: String
         get() = data().optString("geminiKey", "")
-        set(v) { data().put("geminiKey", v); save() }
+        set(v) { data().put("geminiKey", v); save(); syncOut() }
 
     var tmdbKey: String
         get() = data().optString("tmdbKey", "")
@@ -302,9 +302,9 @@ object Prefs {
     private const val SYNC_ID = "stremiolite:settings"
 
     /** Shared settings this build knows; one this computer has never had is always taken from the account. */
-    private val SHARED = listOf("theme", "subLang", "autoNext", "clock", "hideWatched", "layout", "autoFollow", "liveTv", "playlists", "liveFavs", "liveGuide", "liveFreeHide", "newsOn", "comingOn", "newsFeeds", "newsHide", "tmdbKey", "watchRegion")
+    private val SHARED = listOf("theme", "subLang", "autoNext", "clock", "hideWatched", "layout", "autoFollow", "liveTv", "playlists", "liveFavs", "liveGuide", "liveFreeHide", "newsOn", "comingOn", "newsFeeds", "newsHide", "tmdbKey", "watchRegion", "geminiKey")
     /** Synced with your own devices, but never sent to someone else with "Share my setup". */
-    private val NOT_SHARED = setOf("playlists", "liveFavs", "liveGuide", "tmdbKey")
+    private val NOT_SHARED = setOf("playlists", "liveFavs", "liveGuide", "tmdbKey", "geminiKey")
     /** The look: shared by default, or kept to this computer ("lookLocal", which itself never syncs). */
     private val LOOK = setOf("theme", "clock")
 
@@ -332,8 +332,12 @@ object Prefs {
             if (!shares(k) || !o.has(k) || (!newer && d.has(k))) continue
             if (d.opt(k) != o.opt(k)) { d.put(k, o.opt(k)); changed = true }
         }
+        // The Gemini key, if this computer doesn't have one.
+        if (d.optString("geminiKey").isBlank() && o.optString("geminiKey").isNotBlank()) { d.put("geminiKey", o.optString("geminiKey")); changed = true }
         if (newer) o.optJSONArray("hiddenRows")?.let { d.put("hiddenRows", it); changed = true }
-        if (newer) o.optString("profileName").takeIf { it.isNotBlank() }?.let { Profiles.takeName(it) }
+        val accName = o.optString("profileName")
+        // Take the account's name when it's newer, or always if this computer named the profile itself ("Profile 1").
+        if (!app.stremiolite.ProfileName.isAuto(accName) && (newer || app.stremiolite.ProfileName.isAuto(Profiles.current()?.name ?: ""))) Profiles.takeName(accName)
         if (newer) d.put("syncedAt", updated)
         save()
         // Set up before names were synced: a computer that's synced before sends its profile name once.
@@ -348,9 +352,9 @@ object Prefs {
         val o = raw?.let { runCatching { JSONObject(it.optString("name")) }.getOrNull() } ?: JSONObject()
         // Only settings chosen on this computer (or already taken from the account): never a default.
         val d = data()
-        SHARED.forEach { k -> if (d.has(k) && shares(k)) o.put(k, d.opt(k)) }
+        SHARED.forEach { k -> if (d.has(k) && shares(k) && !(k == "geminiKey" && d.optString(k).isBlank())) o.put(k, d.opt(k)) }
         // The profile's name, so every device signed in to this account shows the same one.
-        Profiles.current()?.name?.takeIf { it.isNotBlank() }?.let { o.put("profileName", it) }
+        Profiles.current()?.name?.takeIf { !app.stremiolite.ProfileName.isAuto(it) }?.let { o.put("profileName", it) }
         o.put("hiddenRows", JSONArray(hiddenRows.toList())).put("updated", now)
         syncedAt = now
         val item = raw ?: Sync.newItem(SYNC_ID, "other", "{}")
