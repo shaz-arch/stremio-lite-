@@ -220,6 +220,7 @@ object Home {
             rows += Row("Watched", Watched.list().size.let { if (it == 0) "" else "$it  ►" }, opens = { watchedScreen() })
             rows += Row("Calendar", NewEpisodes.weekCount()?.let { if (it == 0) "nothing this week  ►" else "$it this week  ►" } ?: "", opens = { NewEpisodes.calendar() })
             DriveUi.homeRow()?.let { rows += it }
+            MyFiles.homeRow()?.let { rows += it }
             if (Prefs.liveTv && !KidsGuard.hides()) rows += Row("Live TV", Live.homeDetail(), opens = { Live.screen() })
             rows += ForYouUi.homeRows()
             if (list != null) {
@@ -1048,6 +1049,7 @@ object Settings {
                     Prefs.skipIntros = !Prefs.skipIntros; build()
                 }),
                 DriveUi.settingsRow(),
+                MyFiles.settingsRow(),
                 Row("Play what's sent to the TV", "◄ ${if (Prefs.receiveSends) "On: this computer too" else "Off"} ►", action = {
                     Prefs.receiveSends = !Prefs.receiveSends; build()
                 }),

@@ -94,6 +94,27 @@ object Prefs {
     var receiveSends: Boolean
         get() = data().optBoolean("receiveSends", false)
         set(v) { data().put("receiveSends", v); save() }
+    /** My files: your own folders (this computer only). */
+    var myFolders: List<String>
+        get() = data().optJSONArray("myFolders")?.let { a -> (0 until a.length()).map { a.optString(it) }.filter { it.isNotEmpty() } }.orEmpty()
+        set(v) { data().put("myFolders", org.json.JSONArray(v)); save() }
+    /** Where you got to in each of your own files (ms), and the ones watched to the end. */
+    fun fileResume(path: String): Long = data().optJSONObject("fileResume")?.optLong(path, 0L) ?: 0L
+    fun fileWatched(path: String): Boolean = data().optJSONObject("fileWatched")?.optBoolean(path, false) ?: false
+    fun setFileProgress(path: String, pos: Long, watched: Boolean) {
+        val r = data().optJSONObject("fileResume") ?: org.json.JSONObject().also { data().put("fileResume", it) }
+        val w = data().optJSONObject("fileWatched") ?: org.json.JSONObject().also { data().put("fileWatched", it) }
+        if (watched || pos <= 0) r.remove(path) else r.put(path, pos)
+        if (watched) w.put(path, true)
+        save()
+    }
+    var shareFiles: Boolean
+        get() = data().optBoolean("shareFiles", false)
+        set(v) { data().put("shareFiles", v); save() }
+    var shareKey: String
+        get() = data().optString("shareKey", "").ifEmpty { java.util.UUID.randomUUID().toString().replace("-", "").take(20).also { data().put("shareKey", it); save() } }
+        set(v) { data().put("shareKey", v); save() }
+
     /** Google Drive sign-in on this computer (never synced). */
     var gdriveRefresh: String
         get() = data().optString("gdriveRefresh", "")

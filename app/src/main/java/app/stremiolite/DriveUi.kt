@@ -141,3 +141,44 @@ object DriveUi {
         return s
     }
 }
+
+/** "Files on <computer>": the films a Linux Stremonino shares on your home Wi-Fi (My files). */
+object SharedFiles {
+    private fun share(c: Context) = LocalFiles.Record.parse(History.rawRemote(c, LocalFiles.Record.ID))
+        ?.takeIf { System.currentTimeMillis() - it.at < 3 * 86_400_000L }
+
+    fun homeRow(app: MainActivity): Row? {
+        val s = share(app) ?: return null
+        return Row("Files on ${s.name}", "►", opens = { screen(app, s) })
+    }
+
+    private fun screen(app: MainActivity, share: LocalFiles.Record.Share): Screen {
+        val status = Row("Asking ${share.name}…")
+        lateinit var s: Screen
+        s = Screen("Files on ${share.name}", listOf(status))
+        var started = false
+        s.onShow = {
+            if (!started) {
+                started = true
+                Net.async({ LocalFiles.fetch(share) }) { r ->
+                    r.onSuccess { list ->
+                        val rows = mutableListOf<Row>()
+                        if (list.isEmpty()) rows += Row("No videos shared yet. On the computer: My files › Folders and sharing.")
+                        list.groupBy { it.folder }.toSortedMap(String.CASE_INSENSITIVE_ORDER).forEach { (folder, files) ->
+                            if (folder.isNotEmpty()) rows += Row("──── $folder ────")
+                            files.forEach { f ->
+                                val go = { Player.play(app, LocalFiles.playUrl(share, f), f.name.substringBeforeLast('.')) }
+                                rows += Row(f.name.substringBeforeLast('.'), LocalFiles.size(f.size) + "  ►", action = { go() }, play = { go() })
+                            }
+                        }
+                        s.rows = rows
+                    }.onFailure {
+                        s.rows = listOf(Row("Couldn't reach ${share.name}."), Row("Is it switched on, with Stremonino open, on the same Wi-Fi as this device?"))
+                    }
+                    if (app.isTop(s)) app.refresh(s)
+                }
+            }
+        }
+        return s
+    }
+}

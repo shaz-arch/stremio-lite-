@@ -13,6 +13,7 @@ fun main(args: Array<String>) {
     app.stremiolite.AgeRatings.dir = Store.root
     SpeedCheck.apply()
     TvRemote.start()
+    MyFiles.Share.keepUp()
     App.run(
         when {
             Profiles.all().size > 1 -> Profiles.chooser()
