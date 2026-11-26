@@ -293,14 +293,26 @@ object Player {
     class Result(val pos: Long, val dur: Long, val failed: Boolean, val why: String, val launched: Long = 0)
 
     @Volatile private var current: Process? = null
+    @Volatile private var control: SocketChannel? = null
+    @Volatile var title: String = ""
+        private set
+
+    /** Sends mpv a command (e.g. "cycle", "pause"); false if mpv isn't playing. */
+    fun command(vararg args: Any): Boolean {
+        val c = control ?: return false
+        val json = org.json.JSONObject().put("command", org.json.JSONArray(args.toList())).toString() + "\n"
+        return runCatching { synchronized(c) { c.write(ByteBuffer.wrap(json.toByteArray())) }; true }.getOrDefault(false)
+    }
 
     /** A player is open (background look-ups wait). */
     val playing get() = current?.isAlive == true
 
     /** Closes the player if one is open (the sleep timer); true if there was one. */
-    fun stop(): Boolean {
+    fun stop(note: String = "Sleep timer: stopping"): Boolean {
         val p = current?.takeIf { it.isAlive } ?: return false
-        p.destroy()   // mpv quits cleanly on SIGTERM; the position it reported so far is kept
+        // mpv: say why on screen, then quit cleanly; other players: stop the process.
+        if (command("show-text", note, 3000)) Thread { Thread.sleep(1500); command("quit"); Thread.sleep(3000); if (p.isAlive) p.destroy() }.start()
+        else p.destroy()   // mpv quits cleanly on SIGTERM; the position it reported so far is kept
         return true
     }
 
@@ -326,6 +338,7 @@ object Player {
             return
         }
         current = proc
+        this.title = title
         Sleep.started(startAt, launched)
         val posMs = java.util.concurrent.atomic.AtomicLong(0)
         val durMs = java.util.concurrent.atomic.AtomicLong(0)
@@ -342,8 +355,9 @@ object Player {
                     Thread.sleep(200)
                 }
                 val c = ch ?: return@Thread
+                control = c
                 runCatching {
-                    fun send(s: String) { c.write(ByteBuffer.wrap((s + "\n").toByteArray())) }
+                    fun send(s: String) { synchronized(c) { c.write(ByteBuffer.wrap((s + "\n").toByteArray())) } }
                     send("""{"command":["observe_property",1,"time-pos"]}""")
                     send("""{"command":["observe_property",2,"duration"]}""")
                     Channels.newReader(c, "UTF-8").buffered().useLines { lines ->
@@ -358,6 +372,7 @@ object Player {
                         }
                     }
                 }
+                if (control === c) control = null
                 runCatching { c.close() }
             }.apply { isDaemon = true }.start()
         }

@@ -12,6 +12,7 @@ fun main(args: Array<String>) {
     app.stremiolite.Guide.dir = java.io.File(Store.dir, "guides")
     app.stremiolite.AgeRatings.dir = Store.root
     SpeedCheck.apply()
+    TvRemote.start()
     App.run(
         when {
             Profiles.all().size > 1 -> Profiles.chooser()

@@ -16,6 +16,8 @@ object Settings {
         PlayerChoice("VLC", Player.VLC),
         PlayerChoice("Just Player", Player.JUST_PLAYER),
         PlayerChoice("Ask each time", null),
+        // Added later, so earlier choices keep their place.
+        PlayerChoice("Kodi", "org.xbmc.kodi"),
     )
 
     /** Each profile has its own settings. */

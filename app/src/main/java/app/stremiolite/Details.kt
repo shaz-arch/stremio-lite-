@@ -180,6 +180,15 @@ object Details {
             app.refreshTop()
         })
         rows += BasketList.row(app, f)
+        Trailers.row(app, f)?.let { rows += it }
+        TvRemote.sendRow(app, f)?.let { rows += it }
+        // The next dated thing (a coming episode, or the film's release) into the phone's calendar.
+        val nextEp = if (f.type == "series") Releases.upcoming(f, 3650).firstOrNull() else null
+        when {
+            nextEp != null -> CalendarExport.row(app, "${f.name} ${epLabel(nextEp)}", nextEp.released, "Stremonino: ${f.name}")
+            f.type == "movie" && f.releasedDay > Releases.day() -> CalendarExport.row(app, "${f.name} out", f.releasedDay, "Stremonino: ${f.name}")
+            else -> null
+        }?.let { rows += it }
         rows += lib
         NextList.row(app, f)?.let { rows += it }
         if (f.type == "series") {
@@ -342,7 +351,6 @@ object Details {
         DetailExtras.facts(f, DetailExtras.today()).forEach { (k, v) -> rows += Row(info(k, v)) }
         DetailExtras.history(History.infos(app).firstOrNull { it.id == f.id }).forEach { (k, v) -> rows += Row(info(k, v)) }
         if (f.imdbUrl.isNotBlank()) rows += LinkOut.row(app, "IMDb page", "IMDb: ${f.name}", f.imdbUrl)
-        if (f.trailerUrl.isNotBlank()) rows += LinkOut.row(app, "Trailer", "Trailer: ${f.name}", f.trailerUrl)
         rows += watchRows(app, f)
         if (f.description.isNotBlank()) {
             rows += Row("────────────────────")
@@ -427,6 +435,8 @@ object Details {
         val label = epLabel(v)
         fun build(): List<Row> {
             val rows = playRows(app, f, v, "${f.name} $label").toMutableList()
+            TvRemote.sendRow(app, f, v)?.let { rows += it }
+            if (upcoming(v.released)) CalendarExport.row(app, "${f.name} $label", v.released, "Stremonino: ${f.name}")?.let { rows += it }
             rows += Row("────────────────────")
             rows += Row(info("Episode", "$seasonName, episode ${v.episode}"))
             if (v.released.isNotBlank()) rows += Row(info("Released", v.released + if (upcoming(v.released)) " (upcoming)" else ""))

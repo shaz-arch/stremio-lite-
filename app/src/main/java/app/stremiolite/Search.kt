@@ -98,6 +98,13 @@ object Search {
         return s
     }
 
+    /** Words heard by voice search: straight to the results. */
+    fun spoken(app: MainActivity, q: String) {
+        lastQuery = q
+        remember(app, q)
+        app.push(results(app, q))
+    }
+
     /** Opens the TV keyboard, then the results screen. */
     fun start(app: MainActivity) {
         val input = EditText(app).apply {
@@ -122,6 +129,7 @@ object Search {
             .setTitle("Search")
             .setPositiveButton("Search") { _, _ -> go() }
             .setNegativeButton("Cancel", null)
+        if (Voice.available(app)) b.setNeutralButton("Speak") { _, _ -> Voice.listen(app) }
         input.setOnEditorActionListener { _, action, _ ->
             if (action == EditorInfo.IME_ACTION_SEARCH || action == EditorInfo.IME_ACTION_DONE) { go(); true } else false
         }

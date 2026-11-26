@@ -116,6 +116,7 @@ class MainActivity : Activity() {
     @Suppress("DEPRECATION")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == Voice.REQUEST) { Voice.heard(data)?.let { Search.spoken(this, it) }; return }
         if (requestCode != Player.REQUEST_PLAY) return
         playerOpen = false
         val (watch, launched) = History.takePending(this)
@@ -166,6 +167,7 @@ class MainActivity : Activity() {
     override fun onPause() {
         super.onPause()
         History.flush()
+        TvRemote.stop()
         clockTick?.let { clockHandler.removeCallbacks(it) }
     }
 
@@ -174,6 +176,7 @@ class MainActivity : Activity() {
         updateClock()
         // Coming back to the app (it may have been running in the background for days).
         Updates.check { Home.redraw() }
+        TvRemote.listen(this)
     }
 
     private val clockHandler = android.os.Handler(android.os.Looper.getMainLooper())

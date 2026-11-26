@@ -210,6 +210,7 @@ object Home {
             rows += Row("──── Watching ────")
             val searchRow = Row("Search", "/  ►", opens = null, action = { Search.start() })
             if (!KidsGuard.hides()) rows += searchRow
+            NowPlaying.row()?.let { rows += it }
             rows += Row("Basket", BasketList.summary(), opens = { BasketList.screen() })
             rows += Row("Next watch", NextList.summary(), opens = { NextList.screen() })
             rows += Row("Ready", Ready.summary(), opens = { Ready.screen() })
@@ -757,7 +758,6 @@ object Details {
         DetailExtras.facts(f, DetailExtras.today()).forEach { (k, v) -> rows += Row(info(k, v)) }
         DetailExtras.history(Lib.info(f.id)).forEach { (k, v) -> rows += Row(info(k, v)) }
         if (f.imdbUrl.isNotBlank()) rows += Row("IMDb page", "opens browser  ►", action = { WebLink.open(f.imdbUrl) })
-        if (f.trailerUrl.isNotBlank()) rows += Row("Trailer", "opens browser  ►", action = { WebLink.open(f.trailerUrl) })
         rows += watchRows(f)
         if (f.description.isNotBlank()) {
             rows += Row("────────────────────")
@@ -778,6 +778,8 @@ object Details {
             App.toast(if (added) "Added to favourites" + (if (f.type == "series") ": following new episodes" else "") else "Removed from favourites")
         })
         rows += BasketList.row(f)
+        Trailers.row(f)?.let { rows += it }
+        TvRemote.sendRow(f)?.let { rows += it }
         rows += lib
         NextList.row(f)?.let { rows += it }
         if (f.type == "series") {
@@ -958,6 +960,7 @@ object Details {
             val rows = mutableListOf<Row>()
             if (upcoming(v)) rows += Row("Not out yet: ${v.released}")
             rows += playRows(f, v)
+            TvRemote.sendRow(f, v)?.let { rows += it }
             rows += Row("────────────────────")
             if (v.title.isNotBlank()) rows += Row(v.title)
             if (v.released.isNotBlank()) rows += Row(info("Released", v.released))
@@ -1007,6 +1010,9 @@ object Settings {
                 }),
                 Row("Follow shows I start watching", "◄ ${if (Prefs.autoFollow) "On" else "Off: I choose"} ►", action = {
                     Prefs.autoFollow = !Prefs.autoFollow; Prefs.syncOut(); build()
+                }),
+                Row("Play what's sent to the TV", "◄ ${if (Prefs.receiveSends) "On: this computer too" else "Off"} ►", action = {
+                    Prefs.receiveSends = !Prefs.receiveSends; build()
                 }),
                 Row("──── Look ────"),
                 Row("Theme, text size and clock", "◄ ${if (Prefs.lookLocal) "This computer only" else "Same on all devices"} ►", action = {
@@ -1508,6 +1514,11 @@ object NewEpisodes {
                 else -> "Next 30 days · $followed shows followed" + (films?.map { it.film.id }?.distinct()?.size?.takeIf { it > 0 }?.let { " · $it films" } ?: "")
             }
             val rows = mutableListOf(status)
+            if (n > 0) rows += Row("Save these dates as a calendar file (.ics)", "►", action = {
+                val CF = app.stremiolite.CalendarFile
+                CalendarSave.save(eps.map { CF.Item(it.ep.released, "${it.show.name} ${MetaParse.epLabel(it.ep)}", it.ep.title) } +
+                    films.orEmpty().map { CF.Item(it.day, "${it.film.name} (${it.what})", "Film") })
+            })
             days.forEach { day ->
                 rows += Row("──── ${R.dayName(day)} ────")
                 eps.filter { it.ep.released == day }.sortedWith(compareBy<Found> { it.show.name }.thenBy { it.ep.season }.thenBy { it.ep.episode })

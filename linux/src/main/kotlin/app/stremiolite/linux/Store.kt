@@ -87,6 +87,13 @@ object Prefs {
     var autoFollow: Boolean
         get() = data().optBoolean("autoFollow", false)
         set(v) { data().put("autoFollow", v); save() }
+    /** Play what's sent with "Send to TV" (this computer only; off: only the TV plays it). */
+    var receiveSends: Boolean
+        get() = data().optBoolean("receiveSends", false)
+        set(v) { data().put("receiveSends", v); save() }
+    var sentHandled: Long
+        get() = data().optLong("sentHandled", 0L)
+        set(v) { data().put("sentHandled", v); save() }
     var clock: Int
         get() = data().optInt("clock", 0)
         set(v) { data().put("clock", v); save() }
