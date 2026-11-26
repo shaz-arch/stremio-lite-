@@ -61,7 +61,7 @@ object Details {
                 // Back from the player or an episode: redraw so resume points and marks are current.
                 quick.rows = rows(app, f)
                 app.refresh(quick)
-                lookUpWatch(app, f, quick)
+                lookUpWatch(app, f, quick); lookUpSimilar(app, f, quick)
             } else if (!started) {
                 started = true
                 Net.async({ fetch(from, item.type, item.id) }) { r ->
@@ -69,7 +69,7 @@ object Details {
                         full = loaded
                         if (loaded.videos.isNotEmpty()) History.applyAccountWatched(app, loaded.id, stremioOrder(loaded))
                         quick.rows = rows(app, loaded)
-                        lookUpWatch(app, loaded, quick)
+                        lookUpWatch(app, loaded, quick); lookUpSimilar(app, loaded, quick)
                         val target = mainVideo(app, loaded)
                         if (autoPlay && target != null && app.isTop(quick)) {
                             app.refresh(quick)
@@ -358,7 +358,34 @@ object Details {
         }
         rows += Row("────────────────────")
         rows += Row(info("Details from", f.source))
+        rows += moreLikeThis(app, f)
         return rows
+    }
+
+    /** "More like this" at the bottom of a title's page (TMDB's recommendations; needs the key). */
+    private fun moreLikeThis(app: MainActivity, f: Full): List<Row> {
+        if ((f.type != "movie" && f.type != "series") || Settings.tmdbKey(app).isBlank()) return emptyList()
+        val head = Row("──── More like this ────")
+        val list = ForYou.knownSimilar(f.id) ?: return listOf(head, Row("Finding similar titles…"))
+        val marks = History.marks(app)
+        val allowed = list.filter { KidsGuard.allows(app, it.id) }
+        if (allowed.isEmpty()) return listOf(head, Row("Nothing similar found."))
+        return listOf(head) + allowed.map { p ->
+            lateinit var r: Row
+            r = Row(Marks.title(marks[p.id], p.name) + if (p.year.isNotEmpty()) " (${p.year})" else "", Catalogs.typeLabel(p.type).removeSuffix("s") + "  ►",
+                opens = { screenFor(app, p.id, p.type, p.name, p.year) ?: Screen(p.name, listOf(Row("Your add-ons are still loading."))) },
+                play = { BasketList.toggle(app, p.id, p.type, p.name, p.year); r.label = Marks.title(History.marks(app)[p.id], p.name) + if (p.year.isNotEmpty()) " (${p.year})" else ""; app.refreshTop() })
+            r
+        }
+    }
+
+    private fun lookUpSimilar(app: MainActivity, f: Full, screen: Screen) {
+        val key = Settings.tmdbKey(app)
+        if (key.isBlank() || (f.type != "movie" && f.type != "series") || ForYou.knownSimilar(f.id) != null) return
+        Net.async({ ForYou.findSimilar(key, f.type, f.id, f.name) }) {
+            // Keeps your place: only the rows change.
+            if (app.inStack(screen)) { screen.rows = rows(app, f); if (app.isTop(screen)) app.refresh(screen) }
+        }
     }
 
     /** Where to watch: how it was first released and where it's on now (needs your TMDB key). */

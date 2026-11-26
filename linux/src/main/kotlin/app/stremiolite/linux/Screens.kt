@@ -768,7 +768,27 @@ object Details {
         }
         rows += Row("────────────────────")
         rows += Row(info("Details from", f.source.substringBefore('|').trim()))
+        rows += moreLikeThis(f)
         return rows
+    }
+
+    /** "More like this" at the bottom of a title's page (TMDB's recommendations; needs the key). */
+    private fun moreLikeThis(f: Full): List<Row> {
+        if ((f.type != "movie" && f.type != "series") || Prefs.tmdbKey.isBlank()) return emptyList()
+        val head = Row("──── More like this ────")
+        val list = app.stremiolite.ForYou.knownSimilar(f.id) ?: return listOf(head, Row("Finding similar titles…"))
+        val allowed = list.filter { KidsGuard.allows(it.id) }
+        if (allowed.isEmpty()) return listOf(head, Row("Nothing similar found."))
+        return listOf(head) + allowed.map { p ->
+            Row(Marks.title(Catalogs.mark(p.id, p.type), p.name) + if (p.year.isNotEmpty()) " (${p.year})" else "", MetaParse.typeLabel(p.type) + "  ►",
+                opens = { screenFor(p.id, p.type, p.name) }, play = { BasketList.toggle(p.id, p.type, p.name, p.year) })
+        }
+    }
+
+    private fun lookUpSimilar(f: Full, s: Screen) {
+        val key = Prefs.tmdbKey
+        if (key.isBlank() || (f.type != "movie" && f.type != "series") || app.stremiolite.ForYou.knownSimilar(f.id) != null) return
+        App.async({ app.stremiolite.ForYou.findSimilar(key, f.type, f.id, f.name) }) { if (App.inStack(s)) { s.rows = rows(f); if (App.isTop(s)) App.refresh() } }
     }
 
     private fun libraryRows(f: Full): List<Row> {
@@ -865,14 +885,14 @@ object Details {
             // Picks up where you got to on another device (resume point, watched marks).
             Lib.pull(force = System.currentTimeMillis() - Lib.lastPull > 15_000) { full?.let { f -> if (App.isTop(s)) { s.rows = rows(f); App.refresh() } } }
             val f = full
-            if (f != null) { s.rows = rows(f); App.refresh(); lookUpWatch(f, s) }
+            if (f != null) { s.rows = rows(f); App.refresh(); lookUpWatch(f, s); lookUpSimilar(f, s) }
             else if (!started) {
                 started = true
                 App.async({ fetch(from, item.type, item.id) }) { r ->
                     r.onSuccess { loaded ->
                         full = loaded
                         s.rows = rows(loaded)
-                        lookUpWatch(loaded, s)
+                        lookUpWatch(loaded, s); lookUpSimilar(loaded, s)
                         if (autoPlay && App.isTop(s)) {
                             val v = mainVideo(loaded)
                             val w = watchFor(loaded, v)

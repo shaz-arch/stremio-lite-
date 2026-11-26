@@ -71,6 +71,21 @@ object ForYou {
         return Result(top, because, favs, System.currentTimeMillis())
     }
 
+    // ---- "More like this" on a title's page ----------------------------------------------------
+
+    private val similar = ConcurrentHashMap<String, Pair<Long, List<Pick>>>()
+
+    /** What's already been found for [id] (kept a day), or null. */
+    fun knownSimilar(id: String): List<Pick>? = similar[id]?.takeIf { System.currentTimeMillis() - it.first < KEEP_MS }?.second
+
+    /** Blocking: titles like [id] (TMDB's recommendations), up to [max]. */
+    fun findSimilar(key: String, type: String, id: String, name: String, max: Int = 15): List<Pick> {
+        knownSimilar(id)?.let { return it }
+        val list = recs(key, Seed(id, type, name)).take(max).map { pick(key, it) }.filter { it.id != id }
+        similar[id] = System.currentTimeMillis() to list
+        return list
+    }
+
     // ---- kept on the device, so Home has them without asking TMDB every time -------------------
 
     private fun pj(p: Pick) = JSONObject().put("id", p.id).put("type", p.type).put("name", p.name).put("year", p.year)
