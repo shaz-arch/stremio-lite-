@@ -94,6 +94,10 @@ object Prefs {
     var receiveSends: Boolean
         get() = data().optBoolean("receiveSends", false)
         set(v) { data().put("receiveSends", v); save() }
+    /** Google Drive sign-in on this computer (never synced). */
+    var gdriveRefresh: String
+        get() = data().optString("gdriveRefresh", "")
+        set(v) { data().put("gdriveRefresh", v); save() }
     var forYou: String
         get() = data().optString("forYou", "")
         set(v) { data().put("forYou", v); save() }

@@ -103,6 +103,7 @@ class MainActivity : Activity() {
             }
         )
         Share.open(this, intent?.data)
+        DriveUi.back(this, intent?.data)
     }
 
     /** A "Share my setup" link opened while the app was already running. */
@@ -110,6 +111,7 @@ class MainActivity : Activity() {
         super.onNewIntent(intent)
         setIntent(intent)
         Share.open(this, intent.data)
+        DriveUi.back(this, intent.data)
     }
 
     /** The player has closed: file how far it got (VLC: extra_position/extra_duration; MX-style: position/duration). */

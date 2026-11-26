@@ -24,6 +24,15 @@ jobs:
         run: |
           test -n "$SIGNING_KEY" || { echo "Add the SIGNING_KEY and SIGNING_PASSWORD secrets"; exit 1; }
           echo "$SIGNING_KEY" | base64 -d > "$RUNNER_TEMP/release.jks"
+      - name: Google Drive sign-in secrets from secrets
+        env:
+          GOOGLE_TV_SECRET: ${{ secrets.GOOGLE_TV_SECRET }}
+          GOOGLE_DESKTOP_SECRET: ${{ secrets.GOOGLE_DESKTOP_SECRET }}
+        run: |
+          mkdir -p core/src/main/resources
+          printf 'tv=%s\ndesktop=%s\n' "$GOOGLE_TV_SECRET" "$GOOGLE_DESKTOP_SECRET" > core/src/main/resources/stremonino-google.properties
+          test -n "$GOOGLE_TV_SECRET" || echo "::warning::GOOGLE_TV_SECRET is not set: the Fire Stick can't sign in to Google Drive"
+          test -n "$GOOGLE_DESKTOP_SECRET" || echo "::warning::GOOGLE_DESKTOP_SECRET is not set: Linux can't sign in to Google Drive"
       - name: Build release APK
         env:
           SIGNING_KEY_FILE: ${{ runner.temp }}/release.jks
