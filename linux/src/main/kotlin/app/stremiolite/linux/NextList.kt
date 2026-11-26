@@ -112,7 +112,7 @@ object NextList {
             if (n > 0) {
                 rows += Row("────────────────────")
                 rows += Row("On the way", "$n  ►", opens = {
-                    Screen("On the way", listOf(Row("Not playable yet: each shows as ready here once a stream plays. To be told, choose "Tell me when a stream is available" on its page.")) + coming.flatMap { (g, items) ->
+                    Screen("On the way", listOf(Row("Not playable yet: each shows as ready here once a stream plays. To be told, choose 'Tell me when a stream is available' on its page.")) + coming.flatMap { (g, items) ->
                         listOf(Row("──── ${g?.heading ?: "Checking…"} ────")) + items.map { row(it) }
                     })
                 })
