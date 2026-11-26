@@ -770,6 +770,7 @@ object Details {
 
     private fun libraryRows(f: Full): List<Row> {
         val rows = mutableListOf<Row>()
+        rows += Ready.rowsFor(f)
         lateinit var lib: Row
         lib = Row(if (Lib.inLibrary(f.id)) "♡ Remove from favourites" else "Add to favourites", action = {
             val added = Lib.toggleLibrary(f.id, f.type, f.name)
@@ -1249,7 +1250,7 @@ object Waiting {
         val label = app.stremiolite.ReadyNotice.label(new.map { it.name }) ?: return null
         return Row(label, "►", action = {
             Prefs.readySeen = System.currentTimeMillis()
-            App.push(if (new.size == 1) Details.screenFor(new[0].id, new[0].type, new[0].name) else screen())
+            App.push(if (new.size == 1) Details.screenFor(new[0].id, new[0].type, new[0].name) else Ready.screen())
         })
     }
 
@@ -1550,7 +1551,7 @@ object NewEpisodes {
         val label = app.stremiolite.ReadyNotice.episodesLabel(new.map { it.show.name to MetaParse.epLabel(it.ep) }) ?: return null
         return Row(label, "►", action = {
             markSeen()
-            App.push(if (new.size == 1) Details.screenFor(new[0].show.id, "series", new[0].show.name) else screen())
+            App.push(if (new.size == 1) Details.screenFor(new[0].show.id, "series", new[0].show.name) else Ready.screen())
         })
     }
 

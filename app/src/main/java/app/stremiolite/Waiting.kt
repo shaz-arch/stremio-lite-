@@ -169,7 +169,7 @@ object Waiting {
         val label = ReadyNotice.label(new.map { it.name }) ?: return null
         return Row(label, "►", action = {
             markSeen(app)
-            app.push(if (new.size == 1) entry(app, new[0]) else screen(app))
+            app.push(if (new.size == 1) Details.screenFor(app, new[0].id, new[0].type, new[0].name, new[0].year) ?: Ready.screen(app) else Ready.screen(app))
         })
     }
 
@@ -407,7 +407,7 @@ object Waiting {
             val plain = keep.filter { !it.better && it.ready == 0L && notOut.none { n -> n.id == it.id } }
             rows += Row("──── Films: waiting for a stream ────")
             if (plain.isEmpty() && notOut.isEmpty()) rows += Row("None. On a film, choose 'Tell me when a stream is available'.")
-            plain.sortedBy { it.name }.forEach { e -> rows += Row(filmLabel(e), "no stream yet  ►", opens = { entry(app, e) }) }
+            plain.sortedBy { it.name }.forEach { e -> rows += Row(filmLabel(e), "no stream yet  ►", opens = { Details.screenFor(app, e.id, e.type, e.name, e.year) ?: entry(app, e) }) }
             notOut.sortedBy { it.name }.forEach { f ->
                 rows += Row(Marks.title(Marks.WAITING, f.name) + if (f.year.isNotEmpty()) " (${f.year})" else "", f.note.ifBlank { "not out yet" } + "  ►",
                     opens = { Details.screenFor(app, f.id, "movie", f.name, f.year) ?: Screen(f.name, listOf(Row("Your add-ons are still loading."))) })
@@ -415,7 +415,7 @@ object Waiting {
             val upgrades = keep.filter { it.better && it.ready == 0L }
             rows += Row("──── Films: waiting for a better version ────")
             if (upgrades.isEmpty()) rows += Row("None. After playing a film, choose 'Tell me when a better version appears'.")
-            upgrades.sortedBy { it.name }.forEach { e -> rows += Row(filmLabel(e), "have: ${e.have}  ►", opens = { entry(app, e) }) }
+            upgrades.sortedBy { it.name }.forEach { e -> rows += Row(filmLabel(e), "have: ${e.have}  ►", opens = { Details.screenFor(app, e.id, e.type, e.name, e.year) ?: entry(app, e) }) }
             // Shows you follow: waiting for a new season, or for the next episode of this one.
             val shows = shownShows(app).filter { !Following.ended(it) }
             // Each show sits where you follow it: for new seasons, or for every new episode.

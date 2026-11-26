@@ -26,7 +26,8 @@ object NextList {
     }
 
     private fun open(app: MainActivity, e: NextWatch.Entry) {
-        if (e.isEpisode) openEpisode(app, e) else Details.screenFor(app, e.id, e.type, e.name, e.year)?.let { app.push(it) }
+        val id = if (e.isEpisode) e.show else e.id
+        Details.screenFor(app, id, e.type, e.name.substringBefore(" · "), if (e.isEpisode) "" else e.year)?.let { app.push(it) }
     }
 
     /** Your Next watch, without anything you've since started (those drop out on every device). */
@@ -136,7 +137,7 @@ object NextList {
             items = all(app).toMutableList(),
             label = { Marks.title(statusOf(app)(it.id)?.shape ?: Marks.NEXT, it.name) },
             detail = { detail(statusOf(app)(it.id)) },
-            open = { if (it.isEpisode) { openEpisode(app, it); null } else Details.screenFor(app, it.id, it.type, it.name, it.year) },
+            open = { if (it.isEpisode) Details.screenFor(app, it.show, "series", it.name.substringBefore(" · "), "") else Details.screenFor(app, it.id, it.type, it.name, it.year) },
             commit = { save(app, it) },
         )
         val s = r.build("Next watch")

@@ -100,14 +100,14 @@ object Ready {
             rows += Row("──── Films ────")
             films.forEach { e ->
                 rows += Row(Marks.title(Marks.READY, e.name) + if (e.year.isNotEmpty()) " (${e.year})" else "", (if (e.better) "better: ${e.found}" else "stream found") + "  ►",
-                    opens = { filmScreen(e) }, play = { App.push(Details.screenFor(e.id, e.type, e.name, autoPlay = true)) })
+                    opens = { Details.screenFor(e.id, e.type, e.name) }, play = { App.push(Details.screenFor(e.id, e.type, e.name, autoPlay = true)) })
             }
         }
         if (eps.isNotEmpty()) {
             rows += Row("──── Episodes ────")
             eps.forEach { x ->
                 rows += Row(Marks.title(Marks.READY, x.show.name), (if (Releases.opensSeason(x.ep)) "new season · " else "") + MetaParse.epLabel(x.ep) + "  ►",
-                    opens = { episodeScreen(x) }, play = { App.push(playEpisode(x)) })
+                    opens = { Details.screenFor(x.show.id, "series", x.show.name) }, play = { App.push(playEpisode(x)) })
             }
         }
         val s = Screen("Ready", rows)
@@ -117,6 +117,35 @@ object Ready {
             if (missing.isNotEmpty() && !askedShows.containsAll(missing)) { askedShows = askedShows + missing; NewEpisodes.load(force = true) { if (App.top()?.title == "Ready") App.replaceTop(screen()) } }
         }
         return s
+    }
+
+    /** On a title's page, when something of it is in Ready: play it, line it up, or dismiss it. */
+    fun rowsFor(f: Full): List<Row> {
+        val rows = mutableListOf<Row>()
+        films().firstOrNull { it.id == f.id }?.let { e ->
+            rows += Row("◆ Ready: " + if (e.better) "better version found (${e.found})" else "a stream is available now")
+            lateinit var add: Row
+            add = Row("Add to Next watch", action = {
+                NextList.add(NextWatch.Entry(e.id, e.type, e.name, e.year)); Waiting.remove(e.id)
+                add.label = "In Next watch ✓"; App.toast("${e.name} is in Next watch"); App.refresh()
+            })
+            lateinit var gone: Row
+            gone = Row("Dismiss from Ready", action = { Waiting.remove(e.id); gone.label = "Dismissed ✓"; App.refresh() })
+            rows += add; rows += gone
+        }
+        episodes().filter { it.show.id == f.id }.forEach { x ->
+            val label = MetaParse.epLabel(x.ep)
+            rows += Row("◆ Ready: $label" + if (x.ep.title.isNotBlank()) " · ${x.ep.title}" else "", "play  ►", action = { App.push(playEpisode(x)) })
+            lateinit var add: Row
+            add = Row("Add $label to Next watch", action = {
+                NextList.add(NextWatch.Entry(x.ep.id, "series", "${x.show.name} · $label", "", x.show.id)); add.label = "$label is in Next watch ✓"; App.refresh()
+            })
+            lateinit var gone: Row
+            gone = Row("Dismiss $label from Ready", action = { dismiss(x.ep.id); gone.label = "Dismissed ✓"; App.refresh() })
+            rows += add; rows += gone
+        }
+        if (rows.isNotEmpty()) rows += Row("────────────────────")
+        return rows
     }
 
     private fun filmScreen(e: Waiting.Entry) = Screen(e.name, listOf(

@@ -99,7 +99,7 @@ object NextList {
             val status = statusOf()
             fun row(e: NextWatch.Entry): Row {
                 val st = status(e.id)
-                return Row(Marks.title(st?.shape ?: Marks.NEXT, e.name), detail(st) + "  ►", action = { if (e.isEpisode) openEpisode(e) else App.push(Details.screenFor(e.id, e.type, e.name)) },
+                return Row(Marks.title(st?.shape ?: Marks.NEXT, e.name), detail(st) + "  ►", action = { if (e.isEpisode) App.push(Details.screenFor(e.show, "series", e.name.substringBefore(" · "))) else App.push(Details.screenFor(e.id, e.type, e.name)) },
                     play = { if (e.isEpisode) openEpisode(e, play = true) else App.push(Details.screenFor(e.id, e.type, e.name, autoPlay = true)) })
             }
             // Only what plays now; the rest is on its way (in Waiting or Following) and comes in by itself.
@@ -136,7 +136,7 @@ object NextList {
             items = all().toMutableList(),
             label = { Marks.title(statusOf()(it.id)?.shape ?: Marks.NEXT, it.name) },
             detail = { detail(statusOf()(it.id)) },
-            open = { if (it.isEpisode) { openEpisode(it); null } else Details.screenFor(it.id, it.type, it.name) },
+            open = { if (it.isEpisode) Details.screenFor(it.show, "series", it.name.substringBefore(" · ")) else Details.screenFor(it.id, it.type, it.name) },
             commit = { save(it) },
         )
         val s = r.build("Next watch")

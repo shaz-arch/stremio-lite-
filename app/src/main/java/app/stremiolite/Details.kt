@@ -171,6 +171,7 @@ object Details {
 
     private fun libraryRows(app: MainActivity, f: Full): List<Row> {
         val rows = mutableListOf<Row>()
+        rows += Ready.rowsFor(app, f)
         lateinit var lib: Row
         lib = Row(if (History.inLibrary(app, f.id)) "♡ Remove from favourites" else "Add to favourites", action = {
             val added = History.toggleLibrary(app, History.Saved(f.id, f.type, f.name, f.year))

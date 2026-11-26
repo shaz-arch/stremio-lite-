@@ -180,7 +180,8 @@ object NewEpisodes {
     private fun epRow(app: MainActivity, f: Found, detail: String) = Row(
         f.show.name,
         listOf(Details.epLabel(f.ep), detail, f.ep.title).filter { it.isNotBlank() }.joinToString(" · "),
-        opens = { Details.episodeScreen(app, f.show, f.ep) },
+        // Opens the show's own page (follow, basket, Next watch); Play plays the episode.
+        opens = { Details.screenFor(app, f.show.id, "series", f.show.name, "") ?: Details.episodeScreen(app, f.show, f.ep) },
         play = { app.push(Details.playEpisode(app, f.show, f.ep)) },
     )
 
@@ -231,7 +232,7 @@ object NewEpisodes {
         val label = ReadyNotice.episodesLabel(new.map { it.show.name to epLabel(it.ep) }) ?: return null
         return Row(label, "►", action = {
             markSeen(app)
-            app.push(if (new.size == 1) Details.episodeScreen(app, new[0].show, new[0].ep) else screen(app))
+            app.push(if (new.size == 1) Details.screenFor(app, new[0].show.id, "series", new[0].show.name, "") ?: screen(app) else Ready.screen(app))
         })
     }
 
