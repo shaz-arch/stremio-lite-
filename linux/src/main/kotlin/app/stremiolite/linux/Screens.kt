@@ -221,6 +221,7 @@ object Home {
             rows += Row("Calendar", NewEpisodes.weekCount()?.let { if (it == 0) "nothing this week  ►" else "$it this week  ►" } ?: "", opens = { NewEpisodes.calendar() })
             DriveUi.homeRow()?.let { rows += it }
             MyFiles.homeRow()?.let { rows += it }
+            PhoneFiles.homeRow()?.let { rows += it }
             if (Prefs.liveTv && !KidsGuard.hides()) rows += Row("Live TV", Live.homeDetail(), opens = { Live.screen() })
             rows += ForYouUi.homeRows()
             if (list != null) {

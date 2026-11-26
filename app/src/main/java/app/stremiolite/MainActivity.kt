@@ -179,6 +179,7 @@ class MainActivity : Activity() {
         // Coming back to the app (it may have been running in the background for days).
         Updates.check { Home.redraw() }
         TvRemote.listen(this)
+        PhoneShare.resume(this)
     }
 
     private val clockHandler = android.os.Handler(android.os.Looper.getMainLooper())

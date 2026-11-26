@@ -65,14 +65,16 @@ object LocalFiles {
     /** Where the share is, kept on the account so the TV finds it: address, a random key, the computer's name. */
     object Record {
         const val ID = "stremiolite:myfiles"
+        /** A phone sharing its own videos (kept apart from a computer's share). */
+        const val PHONE_ID = "stremiolite:phonefiles"
         class Share(val url: String, val name: String, val at: Long)
         fun parse(raw: String?): Share? {
             val o = raw?.let { runCatching { JSONObject(JSONObject(it).optString("name")) }.getOrNull() } ?: return null
             if (o.optString("url").isEmpty()) return null
             return Share(o.optString("url"), o.optString("pc"), o.optLong("at"))
         }
-        fun record(base: String?, s: Share?): JSONObject {
-            val item = base?.let { runCatching { JSONObject(it) }.getOrNull() } ?: Sync.newItem(ID, "other", "{}")
+        fun record(base: String?, s: Share?, id: String = ID): JSONObject {
+            val item = base?.let { runCatching { JSONObject(it) }.getOrNull() } ?: Sync.newItem(id, "other", "{}")
             val body = if (s == null) JSONObject() else JSONObject().put("url", s.url).put("pc", s.name).put("at", s.at)
             return item.put("name", body.toString()).put("removed", true).put("temp", false).put("_mtime", Sync.iso(System.currentTimeMillis()))
         }

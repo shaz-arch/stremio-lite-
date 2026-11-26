@@ -132,7 +132,7 @@ object Home {
                 Row("Continue watching", if (cw.isEmpty()) "nothing yet" else "${cw.size}  ►", opens = { continueScreen(app) }),
                 Row("Watched", History.watched(app).size.let { if (it == 0) "" else "$it  ►" }, opens = { watchedScreen(app) }),
                 Row("Calendar", NewEpisodes.weekCount()?.let { if (it == 0) "nothing this week  ►" else "$it this week  ►" } ?: "", opens = { NewEpisodes.calendar(app) }),
-            ) + listOfNotNull(DriveUi.homeRow(app), SharedFiles.homeRow(app)) + (if (Settings.liveTv(app) && !KidsGuard.hides(app)) listOf(Row("Live TV", Live.homeDetail(app), opens = { Live.screen(app) })) else emptyList())
+            ) + listOfNotNull(DriveUi.homeRow(app)) + SharedFiles.homeRows(app) + (if (Settings.liveTv(app) && !KidsGuard.hides(app)) listOf(Row("Live TV", Live.homeDetail(app), opens = { Live.screen(app) })) else emptyList())
                 + ForYouUi.homeRows(app) + listOf(
                 Row("──── Browse ────"),
             ))

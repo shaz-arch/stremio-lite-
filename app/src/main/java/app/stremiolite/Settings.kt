@@ -544,7 +544,7 @@ object Settings {
             "Settings",
             listOf(
                 Row("Set up Stremonino", "step by step  ►", opens = { SetupWizard.screen(app) }),
-                Row("──── Playback ────"), playerRow, langRow, subsAddonRow(app), nextRow, skipRow, followRow, ntfyRow, DriveUi.settingsRow(app),
+                Row("──── Playback ────"), playerRow, langRow, subsAddonRow(app), nextRow, skipRow, followRow, ntfyRow, DriveUi.settingsRow(app), *listOfNotNull(PhoneShare.row(app)).toTypedArray(),
                 Row("──── Look ────"),
                 lookRow, themeRow, sizeRow, clockRow, watchedRow, liveRow, newsRow, comingRow,
                 Row("──── Index ────"),

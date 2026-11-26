@@ -232,13 +232,14 @@ object DriveUi {
 
 /** "Files on <computer>": the films a Linux Stremonino shares on your home Wi-Fi (My files). */
 object SharedFiles {
-    private fun share(c: Context) = LocalFiles.Record.parse(History.rawRemote(c, LocalFiles.Record.ID))
+    private fun share(c: Context, id: String) = LocalFiles.Record.parse(History.rawRemote(c, id))
         ?.takeIf { System.currentTimeMillis() - it.at < 3 * 86_400_000L }
 
-    fun homeRow(app: MainActivity): Row? {
-        val s = share(app) ?: return null
-        return Row("Files on ${s.name}", "►", opens = { screen(app, s) })
-    }
+    /** The computer's share, and a phone's (not on the phone that's sharing). */
+    fun homeRows(app: MainActivity): List<Row> = listOfNotNull(
+        share(app, LocalFiles.Record.ID),
+        share(app, LocalFiles.Record.PHONE_ID)?.takeIf { !PhoneShare.on(app) },
+    ).map { s -> Row("Files on ${s.name}", "►", opens = { screen(app, s) }) }
 
     private fun screen(app: MainActivity, share: LocalFiles.Record.Share): Screen {
         val status = Row("Asking ${share.name}…")
@@ -317,5 +318,63 @@ object Cast {
             status.label = if (found.isEmpty() && last == null) "No TVs answered. Is the TV on, on the same Wi-Fi, with DLNA or screen sharing switched on?" else "Pick a TV:"
             done()
         }
+    }
+}
+
+/** "Share this phone's videos": the phone's own videos on the stick (and computer) over Wi-Fi, while Stremonino is open. */
+object PhoneShare {
+    private fun prefs(c: Context) = Profiles.prefsFor(c, "settings")
+    fun on(c: Context) = prefs(c).getBoolean("sharePhone", false)
+    private var server: LocalFiles.Server? = null
+    private val perm get() = if (android.os.Build.VERSION.SDK_INT >= 33) "android.permission.READ_MEDIA_VIDEO" else "android.permission.READ_EXTERNAL_STORAGE"
+
+    private fun key(c: Context) = prefs(c).getString("shareKey", "").orEmpty().ifEmpty {
+        java.util.UUID.randomUUID().toString().replace("-", "").take(20).also { prefs(c).edit().putString("shareKey", it).apply() }
+    }
+
+    /** Where phones keep videos: camera, Movies, Downloads, Pictures, WhatsApp. */
+    private fun roots(): List<java.io.File> {
+        val E = android.os.Environment::class.java.let { android.os.Environment::getExternalStoragePublicDirectory }
+        val pub = listOf(android.os.Environment.DIRECTORY_DCIM, android.os.Environment.DIRECTORY_MOVIES, android.os.Environment.DIRECTORY_DOWNLOADS, android.os.Environment.DIRECTORY_PICTURES).map { E(it) }
+        val sd = android.os.Environment.getExternalStorageDirectory()
+        return (pub + listOf(java.io.File(sd, "Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video"), java.io.File(sd, "WhatsApp/Media/WhatsApp Video"))).filter { it.isDirectory }
+    }
+
+    private fun allowed(app: MainActivity) = android.os.Build.VERSION.SDK_INT < 23 || app.checkSelfPermission(perm) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+    fun row(app: MainActivity): Row? {
+        if (!app.isPhone) return null
+        lateinit var r: Row
+        r = Row("Share this phone's videos", "◄ ${if (on(app)) "On" else "Off"} ►", action = {
+            val now = !on(app)
+            prefs(app).edit().putBoolean("sharePhone", now).apply()
+            if (now) {
+                if (!allowed(app)) { app.requestPermissions(arrayOf(perm), 11); app.toast("Allow Stremonino to read your videos, then switch this on again") ; prefs(app).edit().putBoolean("sharePhone", false).apply() }
+                else start(app, announce = true)
+            } else stop(app)
+            r.detail = "◄ ${if (on(app)) "On" else "Off"} ►"; app.refreshTop()
+        })
+        return r
+    }
+
+    /** Called when the app comes to the front (sharing only runs while it's open). */
+    fun resume(app: MainActivity) { if (app.isPhone && on(app) && allowed(app)) start(app) }
+
+    private fun start(app: MainActivity, announce: Boolean = false) {
+        val roots = roots()
+        val srv = server ?: LocalFiles.Server({ roots }, key(app)).also { server = it }
+        Net.async({ val ip = LocalFiles.lanAddress() ?: throw Exception("no Wi-Fi"); ip to srv.start() }) { r ->
+            r.onSuccess { (ip, port) ->
+                val name = android.os.Build.MODEL ?: "phone"
+                val base = History.rawRemote(app, LocalFiles.Record.PHONE_ID)
+                History.putRemote(app, LocalFiles.Record.record(base, LocalFiles.Record.Share("http://$ip:$port/${key(app)}", name, System.currentTimeMillis()), LocalFiles.Record.PHONE_ID))
+                if (announce) app.toast("Sharing this phone's videos: the stick shows 'Files on $name' while Stremonino is open here")
+            }.onFailure { if (announce) app.toast("Couldn't share: ${it.message}. Is the phone on Wi-Fi?") }
+        }
+    }
+
+    private fun stop(app: MainActivity) {
+        server?.stop(); server = null
+        History.putRemote(app, LocalFiles.Record.record(History.rawRemote(app, LocalFiles.Record.PHONE_ID), null, LocalFiles.Record.PHONE_ID))
     }
 }

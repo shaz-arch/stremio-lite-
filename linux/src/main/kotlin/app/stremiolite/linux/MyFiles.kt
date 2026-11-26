@@ -142,3 +142,30 @@ object Cast {
         return s
     }
 }
+
+/** "Files on <phone>": a phone sharing its videos (Share this phone's videos), played in mpv. */
+object PhoneFiles {
+    private fun share() = LocalFiles.Record.parse(Lib.raw(LocalFiles.Record.PHONE_ID)?.toString())?.takeIf { System.currentTimeMillis() - it.at < 3 * 86_400_000L }
+
+    fun homeRow(): Row? { val s = share() ?: return null; return Row("Files on ${s.name}", "►", opens = { screen(s) }) }
+
+    private fun screen(sh: LocalFiles.Record.Share): Screen {
+        val s = Screen("Files on ${sh.name}", listOf(Row("Asking ${sh.name}…")))
+        App.async({ LocalFiles.fetch(sh) }) { r ->
+            r.onSuccess { list ->
+                val rows = mutableListOf<Row>()
+                if (list.isEmpty()) rows += Row("No videos found on ${sh.name}.")
+                list.groupBy { it.folder }.toSortedMap(String.CASE_INSENSITIVE_ORDER).forEach { (folder, files) ->
+                    if (folder.isNotEmpty()) rows += Row("──── $folder ────")
+                    files.forEach { f ->
+                        val go = { Player.play(LocalFiles.playUrl(sh, f), f.name.substringBeforeLast('.'), null, 0) { } }
+                        rows += Row(f.name.substringBeforeLast('.'), LocalFiles.size(f.size) + "  ►", action = { go() }, play = { go() })
+                    }
+                }
+                s.rows = rows
+            }.onFailure { s.rows = listOf(Row("Couldn't reach ${sh.name}."), Row("Is Stremonino open on it, with the screen on, on the same Wi-Fi?")) }
+            App.refresh()
+        }
+        return s
+    }
+}
