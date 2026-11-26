@@ -252,7 +252,7 @@ object NewEpisodes {
         val label = ReadyNotice.episodesLabel(new.map { it.show.name to epLabel(it.ep) }) ?: return null
         return Row(label, "►", action = {
             markSeen(app)
-            app.push(if (new.size == 1) Details.screenFor(app, new[0].show.id, "series", new[0].show.name, "") ?: screen(app) else Ready.screen(app))
+            app.push(if (new.size == 1) Details.screenFor(app, new[0].show.id, "series", new[0].show.name, "") ?: Ready.screen(app) else Ready.screen(app))
         })
     }
 
