@@ -62,7 +62,9 @@ object Catalogs {
         fun rebuild() {
             val marks = History.marks(app)
             val hide = Settings.hideWatched(app)
-            val visible = if (hide) items.filter { marks[it.id] != Marks.WATCHED } else items
+            val aged = KidsGuard.ageLimited(app)
+            val visible = (if (hide) items.filter { marks[it.id] != Marks.WATCHED } else items)
+                .let { l -> if (aged) l.filter { KidsGuard.allows(app, it.id) } else l }
             shown = visible.size
             val rows = visible.mapTo(ArrayList<Row>(visible.size + 3).apply { add(about) }) { m ->
                 val mark = marks[m.id]

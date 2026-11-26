@@ -12,16 +12,25 @@ import java.security.SecureRandom
  * A forgotten PIN is cleared by signing in with the locked profile's own Stremio password.
  */
 object KidsLock {
-    class State(val salt: String, val hash: String, val locked: Set<String>, val hideExtras: Boolean) {
+    /** [maxAge]: the oldest age rating a locked profile may see and play (0 = no limit). */
+    class State(val salt: String, val hash: String, val locked: Set<String>, val hideExtras: Boolean, val maxAge: Int = 0) {
         val hasPin get() = hash.isNotEmpty()
         fun isLocked(profileId: String?) = hasPin && profileId != null && profileId in locked
         fun matches(pin: String) = hasPin && hashOf(pin, salt) == hash
-        fun lock(id: String) = State(salt, hash, locked + id, hideExtras)
-        fun unlock(id: String) = State(salt, hash, locked - id, hideExtras)
-        fun withHide(on: Boolean) = State(salt, hash, locked, on)
-        fun withPin(pin: String): State { val s = newSalt(); return State(s, hashOf(pin, s), locked, hideExtras) }
+        fun lock(id: String) = State(salt, hash, locked + id, hideExtras, maxAge)
+        fun unlock(id: String) = State(salt, hash, locked - id, hideExtras, maxAge)
+        fun withHide(on: Boolean) = State(salt, hash, locked, on, maxAge)
+        fun withAge(age: Int) = State(salt, hash, locked, hideExtras, age)
+        fun withPin(pin: String): State { val s = newSalt(); return State(s, hashOf(pin, s), locked, hideExtras, maxAge) }
         fun json(): String = JSONObject().put("salt", salt).put("hash", hash)
-            .put("locked", JSONArray(locked.toList())).put("hide", hideExtras).toString()
+            .put("locked", JSONArray(locked.toList())).put("hide", hideExtras).put("maxAge", maxAge).toString()
+
+        /** Whether [profileId] may see and play a title rated [rating] ("" or null: not known yet). */
+        fun allows(profileId: String?, rating: String?): Boolean {
+            if (!isLocked(profileId) || maxAge <= 0) return true
+            val age = ageOf(rating ?: return false) ?: return false
+            return age <= maxAge
+        }
     }
 
     val NONE = State("", "", emptySet(), true)
@@ -29,7 +38,35 @@ object KidsLock {
     fun read(raw: String?): State {
         val o = raw?.let { runCatching { JSONObject(it) }.getOrNull() } ?: return NONE
         val ids = o.optJSONArray("locked")?.let { a -> (0 until a.length()).map { a.optString(it) }.filter { it.isNotEmpty() }.toSet() } ?: emptySet()
-        return State(o.optString("salt"), o.optString("hash"), ids, o.optBoolean("hide", true))
+        return State(o.optString("salt"), o.optString("hash"), ids, o.optBoolean("hide", true), o.optInt("maxAge", 0))
+    }
+
+    /** The age-limit choices, in order (0 = off). */
+    val AGES = listOf(0, 7, 12, 15)
+
+    fun ageLabel(age: Int) = when (age) {
+        0 -> "no limit"
+        7 -> "up to 7 (U, PG, TV-Y7)"
+        12 -> "up to 12 (12A, PG-13)"
+        15 -> "up to 15"
+        else -> "up to $age"
+    }
+
+    /** The minimum age for a rating ("12A", "US PG-13", "TV-MA", "16"), or null if it can't be told. */
+    fun ageOf(rating: String): Int? {
+        val r = rating.trim().uppercase().removePrefix("US ").trim()
+        if (r.isEmpty()) return null
+        return when (r) {
+            "U", "G", "TV-Y", "TV-G", "ALL", "A" -> 0
+            "PG", "TV-PG" -> 8
+            "TV-Y7", "TV-Y7-FV" -> 7
+            "12A" -> 12
+            "PG-13" -> 13
+            "TV-14" -> 14
+            "R", "TV-MA" -> 17
+            "NC-17", "R18", "X" -> 18
+            else -> Regex("\\d{1,2}").find(r)?.value?.toIntOrNull()
+        }
     }
 
     /** 4 to 8 digits. */

@@ -159,6 +159,12 @@ object Stremio {
         setAddons(authKey, out)
     }
 
+    /** OpenSubtitles' own free Stremio add-on (no key needed). */
+    const val OPENSUBTITLES = "https://opensubtitles-v3.strem.io/manifest.json"
+
+    /** Add-ons that give subtitles. */
+    fun subtitleAddons(addons: List<Addon>) = addons.filter { it.supports("subtitles", "movie", "tt0111161") || it.supports("subtitles", "series", "tt0903747:1:1") }
+
     fun installAddon(authKey: String, link: String, stickRows: Boolean = false, detailsOnly: Boolean = false): String {
         val url = link.trim().replace(Regex("^stremio://", RegexOption.IGNORE_CASE), "https://")
             .let { if (it.endsWith("/manifest.json")) it else it.trimEnd('/') + "/manifest.json" }

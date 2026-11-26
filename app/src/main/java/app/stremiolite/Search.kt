@@ -188,7 +188,7 @@ object Search {
                     }
                 }
             }
-            val g = SearchRank.group(all, query, { it.second }) { it.second.id in collections }
+            val g = SearchRank.group(all.filter { KidsGuard.allows(app, it.second.id) }, query, { it.second }) { it.second.id in collections }
             if (g.best.isNotEmpty()) {
                 rows += Row("──── Best matches ────")
                 g.best.forEach { rows += row(app, it) }

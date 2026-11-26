@@ -23,6 +23,25 @@ object Settings {
     /** Each profile has its own settings. */
     private fun prefs(c: Context) = Profiles.prefsFor(c, PREFS)
 
+    /** Where subtitles come from; with none, one press adds OpenSubtitles' free add-on. */
+    private fun subsAddonRow(app: MainActivity): Row {
+        lateinit var r: Row
+        fun detail(): String {
+            val names = Stremio.subtitleAddons(Home.allAddons()).map { it.name.substringBefore('|').trim() }
+            return if (names.isEmpty()) "none: add OpenSubtitles (free)  ►" else names.joinToString(", ")
+        }
+        r = Row("Subtitles from", detail(), action = {
+            if (Stremio.subtitleAddons(Home.allAddons()).isNotEmpty()) { app.toast("Subtitles come from: " + detail()); return@Row }
+            val key = Account.authKey(app) ?: run { app.toast("Sign in first"); return@Row }
+            app.toast("Adding OpenSubtitles…")
+            Net.async({ Stremio.installAddon(key, Stremio.OPENSUBTITLES) }) { res ->
+                if (res.isFailure) { app.toast("Couldn't add it: " + (res.exceptionOrNull()?.message ?: "")); return@async }
+                Home.refreshAddons(app) { r.detail = detail(); app.refreshTop(); app.toast("OpenSubtitles added: subtitles in your language are picked when you play") }
+            }
+        })
+        return r
+    }
+
     fun player(c: Context): PlayerChoice =
         players.getOrElse(prefs(c).getInt("player", 0)) { players[0] }
 
@@ -502,7 +521,7 @@ object Settings {
             "Settings",
             listOf(
                 Row("Set up Stremonino", "step by step  ►", opens = { SetupWizard.screen(app) }),
-                Row("──── Playback ────"), playerRow, langRow, nextRow, followRow,
+                Row("──── Playback ────"), playerRow, langRow, subsAddonRow(app), nextRow, followRow,
                 Row("──── Look ────"),
                 lookRow, themeRow, sizeRow, clockRow, watchedRow, liveRow, newsRow, comingRow,
                 Row("──── Index ────"),

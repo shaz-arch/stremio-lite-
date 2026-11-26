@@ -19,6 +19,12 @@ object KidsGuard {
     /** The profile in use is locked. */
     fun locked(c: Context) = state(c).isLocked(Profiles.current(c)?.id)
 
+    /** A locked profile with an age limit: titles over it (or not rated yet) are left out and won't play. */
+    fun ageLimited(c: Context) = state(c).let { it.isLocked(Profiles.current(c)?.id) && it.maxAge > 0 }
+
+    /** This profile may see and play [id] (always, unless locked with an age limit). */
+    fun allows(c: Context, id: String) = state(c).allows(Profiles.current(c)?.id, AgeRatings.of(id.substringBefore(':')))
+
     /** Search, Live TV and News are hidden right now. */
     fun hides(c: Context) = state(c).let { it.isLocked(Profiles.current(c)?.id) && it.hideExtras }
 
@@ -125,6 +131,15 @@ object KidsGuard {
                 rows += Row("In locked profiles, hide Search, Live TV and News", if (s.hideExtras) "on" else "off", action = {
                     askPin(app, "Parent PIN") { save(app, state(app).withHide(!state(app).hideExtras)); screen.rows = build(); app.refresh(screen) }
                 })
+                rows += Row("Age limit in locked profiles", KidsLock.ageLabel(s.maxAge) + "  ►", action = {
+                    if (Settings.tmdbKey(app).isBlank()) { app.toast("The age limit needs a TMDB key (Settings) for the ratings"); return@Row }
+                    askPin(app, "Parent PIN") {
+                        val now = state(app).maxAge
+                        val next = KidsLock.AGES[(KidsLock.AGES.indexOf(now).coerceAtLeast(0) + 1) % KidsLock.AGES.size]
+                        save(app, state(app).withAge(next)); app.toast("Age limit: " + KidsLock.ageLabel(next)); screen.rows = build(); app.refresh(screen)
+                    }
+                })
+                if (s.maxAge > 0) rows += Row("Titles over the limit, or not rated yet, are left out of lists and won't play.")
                 rows += Row("Change the parent PIN", action = {
                     askPin(app, "Current PIN") { askNewPin(app) { pin -> save(app, state(app).withPin(pin)); app.toast("PIN changed") } }
                 })

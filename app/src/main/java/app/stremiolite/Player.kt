@@ -34,6 +34,11 @@ object Player {
         watch: History.Watch? = null,
         startAt: Long = 0,
     ) {
+        // A locked profile's age limit: nothing over it (or not rated yet) plays.
+        if (watch != null && !KidsGuard.allows(activity, watch.id)) {
+            activity.toast("Not allowed on this profile (" + (AgeRatings.of(watch.id)?.ifBlank { null } ?: "not rated yet") + ")")
+            return
+        }
         val uri = Uri.parse(url)
         val choice = force ?: Settings.player(activity).pkg
         fun viewIntent() = Intent(Intent.ACTION_VIEW).apply {

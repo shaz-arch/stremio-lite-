@@ -16,6 +16,8 @@ object KidsGuard {
     }
 
     fun locked() = state().isLocked(Profiles.current()?.id)
+    fun ageLimited() = state().let { it.isLocked(Profiles.current()?.id) && it.maxAge > 0 }
+    fun allows(id: String) = state().allows(Profiles.current()?.id, app.stremiolite.AgeRatings.of(id.substringBefore(':')))
     fun hides() = state().let { it.isLocked(Profiles.current()?.id) && it.hideExtras }
 
     /** Runs [then] straight away, or after the parent PIN if this profile is locked. */
@@ -85,6 +87,15 @@ object KidsGuard {
                 rows += Row("In locked profiles, hide Search, Live TV and News", if (s.hideExtras) "on" else "off", action = {
                     askPin("Parent PIN") { save(state().withHide(!state().hideExtras)); build() }
                 })
+                rows += Row("Age limit in locked profiles", app.stremiolite.KidsLock.ageLabel(s.maxAge) + "  ►", action = {
+                    if (Prefs.tmdbKey.isBlank()) App.toast("The age limit needs a TMDB key (Settings) for the ratings")
+                    else askPin("Parent PIN") {
+                        val K = app.stremiolite.KidsLock
+                        val next = K.AGES[(K.AGES.indexOf(state().maxAge).coerceAtLeast(0) + 1) % K.AGES.size]
+                        save(state().withAge(next)); App.toast("Age limit: " + K.ageLabel(next)); build()
+                    }
+                })
+                if (s.maxAge > 0) rows += Row("Titles over the limit, or not rated yet, are left out of lists and won't play.")
                 rows += Row("Change the parent PIN", action = {
                     askPin("Current PIN") { askNewPin { pin -> save(state().withPin(pin)); App.toast("PIN changed") } }
                 })

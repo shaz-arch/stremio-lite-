@@ -490,7 +490,8 @@ object Catalogs {
         val about = Row("About this row", "►", opens = { aboutRow(a, c) })
 
         // "Watched films in lists: Hide them" leaves out films marked watched.
-        fun visible(): List<Meta> = if (Prefs.hideWatched) items.filter { !(it.type == "movie" && Lib.filmWatched(it.id)) } else items
+        fun visible(): List<Meta> = (if (Prefs.hideWatched) items.filter { !(it.type == "movie" && Lib.filmWatched(it.id)) } else items)
+            .let { l -> if (KidsGuard.ageLimited()) l.filter { KidsGuard.allows(it.id) } else l }
 
         fun rebuild() {
             val shown = visible()
@@ -617,7 +618,7 @@ object Search {
                 channels.take(5).forEach { rows += Live.searchRow(it) }
                 if (channels.size > 5) rows += Row("All matching channels", "${channels.size}  ►", opens = { Screen("Channels: $q", channels.map { Live.searchRow(it) }) })
             }
-            val g = SearchRank.group(found.values.toList(), q, { it.second }) { it.second.id in collections }
+            val g = SearchRank.group(found.values.toList().filter { KidsGuard.allows(it.second.id) }, q, { it.second }) { it.second.id in collections }
             if (g.best.isNotEmpty()) {
                 rows += Row("──── Best matches ────")
                 g.best.forEach { rows += row(it) }
@@ -1002,6 +1003,16 @@ object Settings {
                 }),
                 Row("Player options", Prefs.playerArgs.ifEmpty { "none" }, action = {
                     App.ask("Extra options (e.g. --fs --volume=80)", Prefs.playerArgs) { v -> if (v != null) { Prefs.playerArgs = v.trim(); build() } }
+                }),
+                Row("Subtitles from", Stremio.subtitleAddons(Home.all()).map { it.name.substringBefore('|').trim() }.ifEmpty { null }?.joinToString(", ") ?: "none: add OpenSubtitles (free)  ►", action = {
+                    if (Stremio.subtitleAddons(Home.all()).isNotEmpty()) App.toast("Subtitles come from your subtitle add-ons")
+                    else {
+                        val key = Account.authKey
+                        if (key == null) App.toast("Sign in first")
+                        else { App.toast("Adding OpenSubtitles…"); App.async({ Stremio.installAddon(key, Stremio.OPENSUBTITLES) }) { r ->
+                            if (r.isFailure) App.toast("Couldn't add it") else Home.refresh { App.toast("OpenSubtitles added"); build() }
+                        } }
+                    }
                 }),
                 Row("Subtitle language", "◄ ${Prefs.language().name} ►", action = {
                     Prefs.subLang = (Prefs.subLang + 1) % app.stremiolite.Languages.all.size; Prefs.syncOut(); build()

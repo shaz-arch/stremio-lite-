@@ -78,6 +78,8 @@ object Play {
 
     /** Play best: wait for the answers (and a subtitle in your language), pick the winner, play it. */
     fun best(type: String, id: String, title: String, w: Watch?, startAt: Long): Screen {
+        val owner = w?.id ?: id
+        if (!KidsGuard.allows(owner)) return Screen(title, listOf(Row("Not allowed on this profile (" + (app.stremiolite.AgeRatings.of(owner.substringBefore(':'))?.ifBlank { null } ?: "not rated yet") + ").")))
         val status = Row("")
         val pickRow = Row("")
         lateinit var s: Screen
