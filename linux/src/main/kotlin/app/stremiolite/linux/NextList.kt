@@ -95,7 +95,7 @@ object NextList {
         fun build() {
             val list = all()
             val rows = mutableListOf(viewRow())
-            if (list.isEmpty()) rows += Row("Nothing lined up. On a film or show, choose 'Add to Next watch'.")
+            if (list.isEmpty()) rows += Row("Empty.")
             val status = statusOf()
             fun row(e: NextWatch.Entry): Row {
                 val st = status(e.id)
@@ -112,7 +112,7 @@ object NextList {
             if (n > 0) {
                 rows += Row("────────────────────")
                 rows += Row("On the way", "$n  ►", opens = {
-                    Screen("On the way", listOf(Row("Not playable yet: each shows as ready here once a stream plays. To be told, choose 'Tell me when a stream is available' on its page.")) + coming.flatMap { (g, items) ->
+                    Screen("On the way", coming.flatMap { (g, items) ->
                         listOf(Row("──── ${g?.heading ?: "Checking…"} ────")) + items.map { row(it) }
                     })
                 })
@@ -130,8 +130,7 @@ object NextList {
         r = Reorder(
             head = {
                 listOf(viewRow()) +
-                    if (r.items.isEmpty()) listOf(Row("Nothing lined up. On a film or show, choose 'Add to Next watch'."))
-                    else listOf(Row("In your order. Starting one moves it to Continue watching."))
+                    if (r.items.isEmpty()) listOf(Row("Empty.")) else emptyList()
             },
             items = all().toMutableList(),
             label = { Marks.title(statusOf()(it.id)?.shape ?: Marks.NEXT, it.name) },

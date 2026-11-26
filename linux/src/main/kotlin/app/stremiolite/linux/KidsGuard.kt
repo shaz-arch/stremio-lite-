@@ -71,11 +71,7 @@ object KidsGuard {
         lateinit var screen: Screen
         fun build() {
             val s = state()
-            val rows = mutableListOf(
-                Row("A locked profile needs the parent PIN to leave it"),
-                Row("(Switch profile, Sign out) and to open Settings."),
-                Row("────────────────────"),
-            )
+            val rows = mutableListOf<Row>()
             if (!s.hasPin) {
                 rows += Row("Choose a PIN and lock ${p.name}", action = {
                     askNewPin { pin -> save(s.withPin(pin).lock(p.id)); App.toast("${p.name} is locked"); build() }
@@ -95,16 +91,12 @@ object KidsGuard {
                         save(state().withAge(next)); App.toast("Age limit: " + K.ageLabel(next)); build()
                     }
                 })
-                if (s.maxAge > 0) rows += Row("Titles over the limit, or not rated yet, are left out of lists and won't play.")
                 rows += Row("Change the parent PIN", action = {
                     askPin("Current PIN") { askNewPin { pin -> save(state().withPin(pin)); App.toast("PIN changed") } }
                 })
                 val others = Profiles.all().filter { s.isLocked(it.id) && it.id != p.id }.map { it.name }
                 if (others.isNotEmpty()) rows += Row("Also locked: " + others.joinToString(", "))
             }
-            rows += Row("────────────────────")
-            rows += Row("What a locked profile can find depends on its own add-ons and rows,")
-            rows += Row("so give it a kids' rows config. The lock is on this computer only.")
             screen.rows = rows
             App.refresh()
         }

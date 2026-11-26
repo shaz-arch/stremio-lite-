@@ -44,9 +44,9 @@ object BasketList {
         lateinit var s: Screen
         fun build(): List<Row> {
             val list = all(app)
-            if (list.isEmpty()) return listOf(Row("Empty. While browsing, choose 'Add to basket' on anything you like the look of."))
+            if (list.isEmpty()) return listOf(Row("Empty."))
             val marks = History.marks(app)
-            val rows = mutableListOf(Row("Open one to choose: Next watch, Favourites, or tell me when it's ready. It stays here until you take it out."))
+            val rows = mutableListOf<Row>()
             list.forEach { e ->
                 rows += Row(Marks.title(marks[e.id], e.name) + if (e.year.isNotEmpty()) " (${e.year})" else "",
                     Catalogs.typeLabel(e.type).removeSuffix("s") + "  ►",

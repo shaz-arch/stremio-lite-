@@ -25,7 +25,7 @@ object Live {
                 if (favs.size > 1) rows += Row("Arrange favourites", "►", opens = { arrange(app) })
             }
             if (recent.isEmpty() && favs.isEmpty()) {
-                rows += Row("Channels you play or favourite show up here.")
+                rows += Row("Empty.")
             }
             rows += Row("──── Playlists ────")
             rows += Row("Free channels", "news, Welsh, shopping  ►", opens = { freeChannels(app) })
@@ -504,7 +504,7 @@ object Live {
                 val k = LiveTv.groupKey(g)
                 s.rows = listOf(
                     Row("Show this group", "◄ ${if (k in hidden()) "No" else "Yes"} ►", action = { toggle(k); build() }),
-                    Row("──── Channels: OK shows or hides one ────"),
+                    Row("──── Channels ────"),
                 ) + channelRows(g.channels) { build() }
                 app.refresh(s)
             }
@@ -516,7 +516,7 @@ object Live {
         lateinit var s: Screen
         fun build() {
             val h = hidden()
-            val rows = mutableListOf(Row("Hidden ones stay in the playlist: show them again any time."))
+            val rows = mutableListOf<Row>()
             val radio = LiveTv.radio(groups)
             if (radio.isNotEmpty()) {
                 val keys = radio.map { LiveTv.channelKey(it) }.toSet()
@@ -524,7 +524,7 @@ object Live {
                 rows += Row("Radio stations (${radio.size})", "◄ ${if (all) "Hidden" else "Shown"} ►", action = { setHidden(if (all) h - keys else h + keys); build() })
             }
             if (groups.size == 1) {
-                rows += Row("──── Channels: OK shows or hides one ────")
+                rows += Row("──── Channels ────")
                 rows += channelRows(groups[0].channels) { build() }
             } else {
                 rows += Row("──── Groups ────")

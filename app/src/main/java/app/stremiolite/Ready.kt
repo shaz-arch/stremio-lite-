@@ -62,7 +62,7 @@ object Ready {
         val films = films(app)
         val eps = episodes(app)
         val rows = mutableListOf<Row>()
-        if (films.isEmpty() && eps.isEmpty()) rows += Row("Nothing ready yet. Films you're waiting on and new episodes of shows you follow come here.")
+        if (films.isEmpty() && eps.isEmpty()) rows += Row("Empty.")
         if (films.isNotEmpty()) {
             rows += Row("──── Films ────")
             films.forEach { e ->

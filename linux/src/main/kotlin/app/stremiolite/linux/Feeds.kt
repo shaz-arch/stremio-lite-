@@ -92,7 +92,7 @@ object Feeds {
         lateinit var s: Screen
         fun build() {
             val off = Prefs.newsHidden
-            val rows = mutableListOf(Row("──── Starter feeds: Enter switches one on or off ────"))
+            val rows = mutableListOf(Row("──── Starter feeds ────"))
             starter.forEach { f ->
                 val state = if (f.url in off) "off" else News.error(f)?.let { "on · not answering" } ?: News.count(f)?.let { "on · $it stories" } ?: "on"
                 rows += Row(f.name, state, action = {

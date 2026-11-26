@@ -353,7 +353,7 @@ object Home {
         val day = java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.UK)
         fun build() {
             val list = Watched.list()
-            s.rows = if (list.isEmpty()) listOf(Row("Nothing finished yet. Films and episodes you watch to the end appear here."))
+            s.rows = if (list.isEmpty()) listOf(Row("Empty."))
             else list.map { e ->
                 val detail = listOf(e.label, if (e.time > 0) day.format(java.util.Date(e.time)) else "").filter { it.isNotBlank() }.joinToString("   ")
                 Row(e.name, "$detail  ►", opens = { watchedEntry(e) })
@@ -552,10 +552,6 @@ object Catalogs {
             Row(info("Row ID", r.id)),
             Row(info("Source", r.source)),
             Row(info("Type", r.type)),
-            Row(""),
-            Row("The source is a guess from the row's ID."),
-            Row("To change what's in it, edit the row in"),
-            Row("${r.addon}'s settings (Settings › Your add-ons)."),
         ))
     }
 }
@@ -1115,7 +1111,6 @@ object Settings {
             val pairs = Folders.rowAddons(Home.all()).filter { !it.isLocal }.flatMap { a -> a.catalogs.filter { Folders.openable(it) }.map { a to it } }
             val hidden = Prefs.hiddenRows
             val rows = mutableListOf(
-                Row("Enter switches a row between shown and hidden (shared with your other devices)"),
                 Row("Show all rows", action = { Prefs.hiddenRows = emptySet(); Prefs.syncOut(); build(); Home.redraw() }),
                 Row("────────────────────"),
             )
@@ -1295,7 +1290,7 @@ object Waiting {
         val notOut = Follow.films()
         val plain = now.filter { !it.better && it.ready == 0L && notOut.none { n -> n.id == it.id } }
         rows += Row("──── Films: waiting for a stream ────")
-        if (plain.isEmpty() && notOut.isEmpty()) rows += Row("None. On a film, choose 'Tell me when a stream is available'.")
+        if (plain.isEmpty() && notOut.isEmpty()) rows += Row("None.")
         plain.sortedBy { it.name }.forEach { e -> rows += Row(filmLabel(e), "no stream yet  ►", opens = { Details.screenFor(e.id, e.type, e.name) }) }
         notOut.sortedBy { it.name }.forEach { f ->
             rows += Row(Marks.title(Marks.WAITING, f.name) + if (f.year.isNotEmpty()) " (${f.year})" else "", f.note.ifBlank { "not out yet" } + "  ►",
@@ -1303,7 +1298,7 @@ object Waiting {
         }
         val upgrades = now.filter { it.better && it.ready == 0L }
         rows += Row("──── Films: waiting for a better version ────")
-        if (upgrades.isEmpty()) rows += Row("None. After playing a film, choose 'Tell me when a better version appears'.")
+        if (upgrades.isEmpty()) rows += Row("None.")
         upgrades.sortedBy { it.name }.forEach { e -> rows += Row(filmLabel(e), "have: ${e.have}  ►", opens = { Details.screenFor(e.id, e.type, e.name) }) }
         val shows = shownShows().filter { !F.ended(it) }
         val rec = Follow.raw()
@@ -1313,7 +1308,7 @@ object Waiting {
         val unknown = following().filter { (id, _) -> NewEpisodes.shows().none { it.id == id } }
         rows += Row("──── Shows: waiting for a new season ────")
         if (loadingShows) rows += Row("Checking the shows you follow…")
-        else if (season.isEmpty() && unknown.isEmpty()) rows += Row("None. On a show, choose 'Tell me about new episodes and seasons'.")
+        else if (season.isEmpty() && unknown.isEmpty()) rows += Row("None.")
         season.sortedBy { it.name }.forEach { rows += showRow(it) }
         if (!loadingShows) unknown.sortedBy { it.second }.forEach { (id, name) ->
             rows += Row(Marks.title(Marks.FOLLOWING, name), "couldn't load its dates yet  ►", opens = { Details.screenFor(id, "series", name) })
@@ -1615,20 +1610,16 @@ fun keysScreen(): Screen {
     lateinit var s: Screen
     fun set(k: String) = if (k.isBlank()) "not set" else "…" + k.takeLast(4)
     fun build(): List<Row> = listOf(
-        Row("Keys for this profile. Each one is yours: change it if someone here should use their own account."),
         Row("Check all my keys", "►", opens = { KeysCheck.screen() }),
         Row("────────────────────"),
         Row("TMDB key", set(Prefs.tmdbKey) + "  ►", opens = { Details.whereToWatchSettings() }),
-        Row("   Where to watch, age ratings, Coming soon. Synced, never shared."),
         Row("Debrid keys", Prefs.debridKeys.let { if (it.isEmpty()) "not set" else app.stremiolite.StreamSetup.names(it).joinToString(", ") } + "  ►", opens = { StreamsSetup.screen(keysOnly = true) }),
-        Row("   Kept on this computer only."),
         Row("MDBList key", set(Prefs.mdblistKey) + "  ►", opens = {
             RowsSetup.keyScreen("MDBList key", app.stremiolite.RowSetup.MDBLIST_KEY_PAGE, listOf(
                 "Your MDBList account: its lists, and your own Watchlist row.",
                 "Your rows keep the key they were made with: after changing it, use 'Put this key in my rows' below.",
             ), { Prefs.mdblistKey }, { Prefs.mdblistKey = it; if (it.isNotBlank()) KeysCheck.quick("MDBList key") { app.stremiolite.KeyCheck.mdblist(it) } }, after = { listOf(Row("Put this key in my rows", "►", action = { App.push(RowsSetup.useMdblistKey(Prefs.mdblistKey)) })) })
         }),
-        Row("   Kept on this computer only."),
         Row("Gemini key", set(Prefs.geminiKey) + "  ►", opens = {
             RowsSetup.keyScreen("Gemini key", app.stremiolite.RowSetup.GEMINI_KEY_PAGE, listOf(
                 "For asking AI in Search: start a search with \"ai\" and describe what you want.",
@@ -1636,7 +1627,6 @@ fun keysScreen(): Screen {
                 "Your rows keep the key they were made with: after changing it, use 'Put this key in my rows' below.",
             ), { Prefs.geminiKey }, { Prefs.geminiKey = it; if (it.isNotBlank()) KeysCheck.quick("Gemini key") { app.stremiolite.KeyCheck.gemini(it) } }, after = { listOf(Row("Put this key in my rows", "►", action = { App.push(RowsSetup.useAiKey(Prefs.geminiKey)) }), Row("Check my AI setup", "►", opens = { AiCheck.screen() })) })
         }),
-        Row("   Kept on this computer only."),
     )
     s = Screen("Your keys", build())
     s.onShow = { s.rows = build(); App.refresh() }

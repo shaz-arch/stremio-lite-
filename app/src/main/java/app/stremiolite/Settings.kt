@@ -253,14 +253,10 @@ object Settings {
         lateinit var s: Screen
         fun set(k: String) = if (k.isBlank()) "not set" else "…" + k.takeLast(4)
         fun build(): List<Row> = listOf(
-            Row("Keys for this profile. Each one is yours: change it if"),
-            Row("someone here should use their own account."),
             Row("Check all my keys", "►", opens = { KeysCheck.screen(app) }),
             Row("────────────────────"),
             Row("TMDB key", set(tmdbKey(app)) + "  ►", opens = { whereToWatch(app) }),
-            Row("   Where to watch, age ratings, Coming soon. Synced, never shared."),
             Row("Debrid keys", debridKeys(app).let { if (it.isEmpty()) "not set" else StreamSetup.names(it).joinToString(", ") } + "  ►", opens = { StreamsSetup.screen(app, keysOnly = true) }),
-            Row("   Kept on this device only."),
             Row("MDBList key", set(mdblistKey(app)) + "  ►", opens = {
                 RowsSetup.keyScreen(app, "MDBList key", RowSetup.MDBLIST_KEY_PAGE, listOf(
                     "Your MDBList account: its lists, and your own Watchlist row.",
@@ -268,7 +264,6 @@ object Settings {
                     "use 'Put this key in my rows' below.",
                 ), { mdblistKey(app) }, { setMdblistKey(app, it); if (it.isNotBlank()) KeysCheck.quick(app, "MDBList key") { KeyCheck.mdblist(it) } }, after = { listOf(Row("Put this key in my rows", "►", action = { app.push(RowsSetup.useMdblistKey(app, mdblistKey(app))) })) })
             }),
-            Row("   Kept on this device only."),
             Row("Gemini key", set(geminiKey(app)) + "  ►", opens = {
                 RowsSetup.keyScreen(app, "Gemini key", RowSetup.GEMINI_KEY_PAGE, listOf(
                     "For Ask AI in Search: describe what you want, AI finds the titles.",
@@ -280,7 +275,6 @@ object Settings {
                     Row("Check my AI setup", "►", opens = { AiCheck.screen(app) }),
                 ) })
             }),
-            Row("   Kept on this device only."),
         )
         s = Screen("Your keys", build())
         s.onShow = { s.rows = build(); app.refresh(s) }
@@ -408,7 +402,6 @@ object Settings {
             if (pairs.isEmpty()) return listOf(Row("Your rows are still loading. Go back and try again in a moment."))
             val hidden = hiddenRows(app)
             val rows = mutableListOf(
-                Row("OK switches a row between shown and hidden"),
                 Row("Show all rows", action = { prefs(app).edit().remove("hiddenRows").apply(); syncOut(app); screen.rows = build(); app.refresh(screen) }),
                 Row("────────────────────"),
             )

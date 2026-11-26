@@ -113,11 +113,7 @@ object KidsGuard {
         lateinit var screen: Screen
         fun build(): List<Row> {
             val s = state(app)
-            val rows = mutableListOf(
-                Row("A locked profile needs the parent PIN to leave it"),
-                Row("(Switch profile, Sign out) and to open Settings."),
-                Row("────────────────────"),
-            )
+            val rows = mutableListOf<Row>()
             if (!s.hasPin) {
                 rows += Row("Choose a PIN and lock ${p.name}", action = {
                     askNewPin(app) { pin -> save(app, s.withPin(pin).lock(p.id)); app.toast("${p.name} is locked"); screen.rows = build(); app.refresh(screen) }
@@ -139,16 +135,12 @@ object KidsGuard {
                         save(app, state(app).withAge(next)); app.toast("Age limit: " + KidsLock.ageLabel(next)); screen.rows = build(); app.refresh(screen)
                     }
                 })
-                if (s.maxAge > 0) rows += Row("Titles over the limit, or not rated yet, are left out of lists and won't play.")
                 rows += Row("Change the parent PIN", action = {
                     askPin(app, "Current PIN") { askNewPin(app) { pin -> save(app, state(app).withPin(pin)); app.toast("PIN changed") } }
                 })
                 val others = Profiles.all(app).filter { s.isLocked(it.id) && it.id != p.id }.map { it.name }
                 if (others.isNotEmpty()) rows += Row("Also locked: " + others.joinToString(", "))
             }
-            rows += Row("────────────────────")
-            rows += Row("What a locked profile can find depends on its own add-ons and rows,")
-            rows += Row("so give it a kids' rows config. The lock is on this device only.")
             return rows
         }
         screen = Screen("Kids lock", build())

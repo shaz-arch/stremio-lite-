@@ -39,8 +39,7 @@ object BasketList {
     fun screen(): Screen {
         val list = all()
         val rows = mutableListOf<Row>()
-        if (list.isEmpty()) rows += Row("Empty. While browsing, choose 'Add to basket' on anything you like the look of.")
-        else rows += Row("Open one to choose: Next watch, Favourites, or tell me when it's ready. It stays here until you take it out.")
+        if (list.isEmpty()) rows += Row("Empty.")
         list.forEach { e ->
             rows += Row(Marks.title(Catalogs.mark(e.id, e.type), e.name) + if (e.year.isNotEmpty()) " (${e.year})" else "",
                 MetaParse.typeLabel(e.type) + "  ►", opens = { Details.screenFor(e.id, e.type, e.name) },
@@ -95,7 +94,7 @@ object Ready {
         Prefs.readySeen = System.currentTimeMillis(); NewEpisodes.markSeen()
         val films = films(); val eps = episodes()
         val rows = mutableListOf<Row>()
-        if (films.isEmpty() && eps.isEmpty()) rows += Row("Nothing ready yet. Films you're waiting on and new episodes of shows you follow come here.")
+        if (films.isEmpty() && eps.isEmpty()) rows += Row("Empty.")
         if (films.isNotEmpty()) {
             rows += Row("──── Films ────")
             films.forEach { e ->

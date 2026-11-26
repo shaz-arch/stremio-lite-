@@ -16,8 +16,6 @@ object GamesScreen {
                 Row("Noughts & crosses (easy)", "►", opens = { game(app, PlayNoughts(stats(app), hard = false)) }),
                 Row("Noughts & crosses (hard)", "►", opens = { game(app, PlayNoughts(stats(app), hard = true)) }),
                 Row("Film quiz", best("quiz") { "best $it/10  " } + "►", opens = { quiz(app) }),
-                Row(""),
-                Row("Scores are kept for this profile on this device."),
             )
             app.refresh(s)
         }

@@ -136,10 +136,6 @@ object Catalogs {
                 Row(info("Row ID", r.id)),
                 Row(info("Source", r.source)),
                 Row(info("Type", r.type)),
-                Row(""),
-                Row("The source is a guess from the row's ID."),
-                Row("To change what's in it, edit the row in"),
-                Row("${r.addon}'s settings (Settings › Your add-ons)."),
             ),
         )
     }

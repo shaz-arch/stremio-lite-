@@ -161,7 +161,7 @@ object DriveUi {
                     }
                     shown.filter { o.groupOf(it.id) == null }.forEach { rows += videoRow(app, it) }
                     if (files.isNotEmpty() && shown.isEmpty()) rows += Row("Every video has been removed from Stremonino.")
-                    if (files.isEmpty()) rows += Row("No videos picked yet." + if (app.isPhone) " Use 'Pick more videos' below." else " Pick some on your phone.")
+                    if (files.isEmpty()) rows += Row("None picked yet.")
                     val h = files.count { it.id in o.hidden }
                     if (h > 0) rows += Row("Removed videos", "$h  ►", opens = { screen(app, hidden = true) })
                 }
@@ -363,7 +363,7 @@ object PhoneShare {
 
     private fun foldersScreen(app: MainActivity): Screen {
         lateinit var s: Screen
-        fun build(): List<Row> = listOf(Row("Only these are shared. Tick what you want the TV to see.")) + candidates().map { (name, dir) ->
+        fun build(): List<Row> = candidates().map { (name, dir) ->
             val on = name in chosen(app)
             Row((if (on) "✓ " else "   ") + name, dir.path.substringAfter("/0/"), action = {
                 prefs(app).edit().putStringSet("shareFolders", if (on) chosen(app) - name else chosen(app) + name).apply()

@@ -116,7 +116,7 @@ object RowPicker {
             saveRow = Row("Save to AIOMetadata", "", action = { save(app, l, password) { saved = true } })
             rows += saveRow
             rows += Row("Put the rows in order", "►", opens = { order(app, l) })
-            rows += Row("OK: off → on → on home → off.  ⌂ = on the home screen")
+            rows += Row("⌂ = on the home screen")
             AioRows.items(l).groupBy { AioRows.folder(it) }.forEach { (folder, items) ->
                 rows += Row("──── $folder ────")
                 items.forEach { item ->
@@ -145,7 +145,7 @@ object RowPicker {
     private fun order(app: MainActivity, l: AioRows.Loaded): Screen {
         fun on() = AioRows.items(l).filter { it.state != AioRows.State.OFF }.toMutableList()
         val r = Reorder(app,
-            head = { listOf(Row("⌂ = on Stremio's home screen. Save on the last screen.")) },
+            head = { listOf(Row("⌂ = on the home screen")) },
             items = on(),
             label = { mark(it.state) + it.name },
             detail = { it.typeLabel },

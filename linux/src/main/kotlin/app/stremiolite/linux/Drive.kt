@@ -86,7 +86,7 @@ object DriveUi {
                         if (n > 0) rows += Row("▸ $g", "$n  ►", opens = { screen(group = g) })
                     }
                     shown.filter { o.groupOf(it.id) == null }.forEach { rows += row(it) }
-                    if (files.isEmpty()) rows += Row("No videos picked yet. Use 'Pick more videos' below.")
+                    if (files.isEmpty()) rows += Row("None picked yet.")
                     val h = files.count { it.id in o.hidden }
                     if (h > 0) rows += Row("Removed videos", "$h  ►", opens = { screen(hidden = true) })
                 }

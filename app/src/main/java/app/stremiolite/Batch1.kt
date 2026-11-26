@@ -176,7 +176,7 @@ object ForYouUi {
         if (r.top.isNotEmpty()) rows += Row("Top picks for you", "${r.top.size}  ►", opens = { list(app, "Top picks for you", r.top, refreshRow = true) })
         r.because.forEach { (s, l) -> rows += Row("Because you watched ${s.name}", "${l.size}  ►", opens = { list(app, "Because you watched ${s.name}", l) }) }
         if (r.favourites.isNotEmpty()) rows += Row("More like your favourites", "${r.favourites.size}  ►", opens = { list(app, "More like your favourites", r.favourites) })
-        if (rows.size == 1) rows += Row("Watch a few things and suggestions appear here.")
+        if (rows.size == 1) rows += Row("Nothing yet.")
         return rows
     }
 

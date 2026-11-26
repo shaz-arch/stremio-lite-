@@ -27,7 +27,7 @@ object Live {
                 favs.forEach { c -> rows += channelRow(c, c.group, favs) }
                 if (favs.size > 1) rows += Row("Arrange favourites", "►", opens = { arrange() })
             }
-            if (recent.isEmpty() && favs.isEmpty()) rows += Row("Channels you play or favourite show up here.")
+            if (recent.isEmpty() && favs.isEmpty()) rows += Row("Empty.")
             rows += Row("──── Playlists ────")
             rows += Row("Free channels", "news, Welsh, shopping  ►", opens = { freeChannels() })
             Prefs.playlists.forEach { p -> rows += Row(p.name, "►", opens = { playlist(p) }) }
@@ -470,7 +470,7 @@ object Live {
                 val k = LiveTv.groupKey(g)
                 s.rows = listOf(
                     Row("Show this group", "◄ ${if (k in hidden()) "No" else "Yes"} ►", action = { toggle(k); build() }),
-                    Row("──── Channels: Enter shows or hides one ────"),
+                    Row("──── Channels ────"),
                 ) + channelRows(g.channels) { build() }
                 App.refresh()
             }
@@ -482,7 +482,7 @@ object Live {
         lateinit var s: Screen
         fun build() {
             val h = hidden()
-            val rows = mutableListOf(Row("Hidden ones stay in the playlist: show them again any time."))
+            val rows = mutableListOf<Row>()
             val radio = LiveTv.radio(groups)
             if (radio.isNotEmpty()) {
                 val keys = radio.map { LiveTv.channelKey(it) }.toSet()
@@ -490,7 +490,7 @@ object Live {
                 rows += Row("Radio stations (${radio.size})", "◄ ${if (all) "Hidden" else "Shown"} ►", action = { setHidden(if (all) h - keys else h + keys); build() })
             }
             if (groups.size == 1) {
-                rows += Row("──── Channels: Enter shows or hides one ────")
+                rows += Row("──── Channels ────")
                 rows += channelRows(groups[0].channels) { build() }
             } else {
                 rows += Row("──── Groups ────")

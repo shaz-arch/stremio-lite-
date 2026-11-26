@@ -386,7 +386,7 @@ object Waiting {
             val notOut = Follow.films(app)
             val plain = keep.filter { !it.better && it.ready == 0L && notOut.none { n -> n.id == it.id } }
             rows += Row("──── Films: waiting for a stream ────")
-            if (plain.isEmpty() && notOut.isEmpty()) rows += Row("None. On a film, choose 'Tell me when a stream is available'.")
+            if (plain.isEmpty() && notOut.isEmpty()) rows += Row("None.")
             plain.sortedBy { it.name }.forEach { e -> rows += Row(filmLabel(e), "no stream yet  ►", opens = { Details.screenFor(app, e.id, e.type, e.name, e.year) ?: Screen(e.name, listOf(Row("Your add-ons are still loading. Try again in a moment."))) }) }
             notOut.sortedBy { it.name }.forEach { f ->
                 rows += Row(Marks.title(Marks.WAITING, f.name) + if (f.year.isNotEmpty()) " (${f.year})" else "", f.note.ifBlank { "not out yet" } + "  ►",
@@ -394,7 +394,7 @@ object Waiting {
             }
             val upgrades = keep.filter { it.better && it.ready == 0L }
             rows += Row("──── Films: waiting for a better version ────")
-            if (upgrades.isEmpty()) rows += Row("None. After playing a film, choose 'Tell me when a better version appears'.")
+            if (upgrades.isEmpty()) rows += Row("None.")
             upgrades.sortedBy { it.name }.forEach { e -> rows += Row(filmLabel(e), "have: ${e.have}  ►", opens = { Details.screenFor(app, e.id, e.type, e.name, e.year) ?: Screen(e.name, listOf(Row("Your add-ons are still loading. Try again in a moment."))) }) }
             // Shows you follow: waiting for a new season, or for the next episode of this one.
             val shows = shownShows(app).filter { !Following.ended(it) }
@@ -408,7 +408,7 @@ object Waiting {
             val unknown = following(app).filter { (id, _) -> NewEpisodes.shows().none { it.id == id } }
             rows += Row("──── Shows: waiting for a new season ────")
             if (loadingShows) rows += Row("Checking the shows you follow…")
-            else if (season.isEmpty() && unknown.isEmpty()) rows += Row("None. On a show, choose 'Tell me about new episodes and seasons'.")
+            else if (season.isEmpty() && unknown.isEmpty()) rows += Row("None.")
             season.sortedBy { it.name }.forEach { rows += showRow(it) }
             if (!loadingShows) unknown.sortedBy { it.second }.forEach { (id, name) ->
                 rows += Row(Marks.title(Marks.FOLLOWING, name), "couldn't load its dates yet  ►",

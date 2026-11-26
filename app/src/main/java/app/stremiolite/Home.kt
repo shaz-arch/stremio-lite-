@@ -242,7 +242,7 @@ object Home {
         lateinit var screen: Screen
         fun build(): List<Row> {
             val list = History.continueWatching(app)
-            if (list.isEmpty()) return listOf(Row("Nothing here yet. Films and episodes you start will appear here."))
+            if (list.isEmpty()) return listOf(Row("Empty."))
             val clear = listOf(
                 Row("────────────────────"),
                 Row("Clear Continue watching", "►", opens = {
@@ -330,7 +330,7 @@ object Home {
         val day = java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.UK)
         fun build(): List<Row> {
             val list = History.watched(app)
-            if (list.isEmpty()) return listOf(Row("Nothing finished yet. Films and episodes you watch to the end appear here."))
+            if (list.isEmpty()) return listOf(Row("Empty."))
             return list.map { f ->
                 val detail = listOf(f.label.substringBefore(' ').takeIf { it.startsWith("S") } ?: f.label, if (f.time > 0) day.format(java.util.Date(f.time)) else "")
                     .filter { it.isNotBlank() }.joinToString("   ")

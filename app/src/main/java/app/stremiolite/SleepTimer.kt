@@ -12,8 +12,7 @@ object SleepTimer {
 
     fun screen(app: MainActivity): Screen {
         val rows = mutableListOf(
-            Row("Stops the player and doesn't start the next episode."),
-            Row("Set it here, then play as normal. Now: ${Sleep.summary()}"),
+            Row("Now: ${Sleep.summary()}"),
             Row("────────────────────"),
         )
         for (m in Sleep.CHOICES + Sleep.END_OF_THIS) rows += Row(Sleep.label(m), action = {
