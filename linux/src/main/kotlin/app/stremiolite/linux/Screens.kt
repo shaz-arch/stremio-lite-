@@ -1588,24 +1588,39 @@ object NewEpisodes {
         return s
     }
 
+    private fun calendarFilms(): List<app.stremiolite.FilmDates.Film> {
+        val F = app.stremiolite.FilmDates
+        return (Waiting.list().filter { it.type == "movie" }.map { F.Film(it.id, it.name, it.year) } +
+            Follow.films().map { F.Film(it.id, it.name, it.year) } +
+            NextList.all().filter { it.type == "movie" }.map { F.Film(it.id, it.name, it.year) } +
+            BasketList.all().filter { it.type == "movie" }.map { F.Film(it.id, it.name, it.year) }).distinctBy { it.id }
+    }
+
+    /** Episodes of shows you follow and dates of films you care about, next 30 days, by day. */
     fun calendar(): Screen {
         val status = Row("Finding the shows you follow…")
         lateinit var s: Screen
+        var films: List<app.stremiolite.FilmDates.Event>? = null
         fun build() {
             val R = app.stremiolite.Releases
-            val list = fulls.flatMap { sh -> R.upcoming(sh).map { Found(sh, it) } }
-                .sortedWith(compareBy<Found> { it.ep.released }.thenBy { it.show.name }.thenBy { it.ep.season }.thenBy { it.ep.episode })
+            val eps = fulls.flatMap { sh -> R.upcoming(sh).map { Found(sh, it) } }
+            val days = (eps.map { it.ep.released } + films.orEmpty().map { it.day }).distinct().sorted()
+            val n = eps.size + films.orEmpty().size
             status.label = when {
                 loading -> "Checking $followed shows… $checked done"
-                followed == 0 -> "Start watching a show, or on a show choose 'Tell me about new episodes and seasons', to see what's coming."
-                list.isEmpty() -> "Nothing dated in the next 30 days ($followed shows followed)."
-                else -> "Next 30 days · $followed shows followed"
+                n == 0 && films == null -> "Finding film dates…"
+                n == 0 -> "Nothing dated in the next 30 days. Shows you follow and films you're waiting on, lining up or have in the basket show here."
+                else -> "Next 30 days · $followed shows followed" + (films?.map { it.film.id }?.distinct()?.size?.takeIf { it > 0 }?.let { " · $it films" } ?: "")
             }
             val rows = mutableListOf(status)
-            var lastDay = ""
-            list.forEach { f ->
-                if (f.ep.released != lastDay) { lastDay = f.ep.released; rows += Row("──── ${R.dayName(lastDay)} ────") }
-                rows += epRow(f, if (R.opensSeason(f.ep)) "new season" else "")
+            days.forEach { day ->
+                rows += Row("──── ${R.dayName(day)} ────")
+                eps.filter { it.ep.released == day }.sortedWith(compareBy<Found> { it.show.name }.thenBy { it.ep.season }.thenBy { it.ep.episode })
+                    .forEach { f -> rows += epRow(f, if (R.opensSeason(f.ep)) "new season" else "") }
+                films.orEmpty().filter { it.day == day }.forEach { e ->
+                    rows += Row(Marks.title(Catalogs.mark(e.film.id, "movie"), e.film.name) + if (e.film.year.isNotEmpty()) " (${e.film.year})" else "",
+                        "film · ${e.what}  ►", opens = { Details.screenFor(e.film.id, "movie", e.film.name) })
+                }
             }
             s.rows = rows
             App.refresh()
@@ -1613,7 +1628,12 @@ object NewEpisodes {
         s = Screen("Calendar", listOf(status))
         var started = false
         s.onShow = {
-            if (!started) { started = true; load(onProgress = { if (App.isTop(s)) build() }) { build() } }
+            if (!started) {
+                started = true
+                load(onProgress = { if (App.isTop(s)) build() }) { build() }
+                val want = calendarFilms(); val addons = Home.all(); val key = Prefs.tmdbKey; val region = Prefs.watchRegion
+                App.async({ app.stremiolite.FilmDates.events(addons, key, region, want) }) { r -> films = r.getOrDefault(emptyList()); if (App.isTop(s)) build() }
+            }
             build()
         }
         return s

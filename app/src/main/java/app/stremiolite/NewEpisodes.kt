@@ -278,26 +278,38 @@ object NewEpisodes {
     }
 
     /** Episodes due in the next 30 days for the shows you follow, by day. */
+    /** Films for the Calendar: ones you're waiting on, lined up in Next watch, or have in the basket. */
+    private fun calendarFilms(app: MainActivity): List<FilmDates.Film> =
+        (Waiting.list(app).filter { it.type == "movie" }.map { FilmDates.Film(it.id, it.name, it.year) } +
+            Follow.films(app).map { FilmDates.Film(it.id, it.name, it.year) } +
+            NextList.all(app).filter { it.type == "movie" }.map { FilmDates.Film(it.id, it.name, it.year) } +
+            BasketList.all(app).filter { it.type == "movie" }.map { FilmDates.Film(it.id, it.name, it.year) }).distinctBy { it.id }
+
     fun calendar(app: MainActivity): Screen {
         val status = Row("")
         lateinit var screen: Screen
+        var films: List<FilmDates.Event>? = null
         fun build() {
             val rows = mutableListOf(status)
-            val list = fulls.flatMap { sh -> Releases.upcoming(sh).map { Found(sh, it) } }
-                .sortedWith(compareBy<Found> { it.ep.released }.thenBy { it.show.name }.thenBy { it.ep.season }.thenBy { it.ep.episode })
+            val eps = fulls.flatMap { sh -> Releases.upcoming(sh).map { Found(sh, it) } }
+            // Episodes and films together, by day.
+            val days = (eps.map { it.ep.released } + films.orEmpty().map { it.day }).distinct().sorted()
+            val n = eps.size + films.orEmpty().size
             status.label = when {
                 loading -> "Checking $followedCount shows… $checked done"
-                followedCount == 0 -> "Start watching a show, or on a show choose 'Tell me about new episodes and seasons', to see what's coming."
-                list.isEmpty() -> "Nothing dated in the next 30 days ($followedCount shows followed)."
-                else -> "Next 30 days · $followedCount shows followed"
+                n == 0 && films == null -> "Finding film dates…"
+                n == 0 -> "Nothing dated in the next 30 days. Shows you follow and films you're waiting on, lining up or have in the basket show here."
+                else -> "Next 30 days · $followedCount shows followed" + (films?.map { it.film.id }?.distinct()?.size?.takeIf { it > 0 }?.let { " · $it films" } ?: "")
             }
-            var lastDay = ""
-            list.forEach { f ->
-                if (f.ep.released != lastDay) {
-                    lastDay = f.ep.released
-                    rows += Row("──── ${Releases.dayName(lastDay)} ────")
+            val marks = History.marks(app)
+            days.forEach { day ->
+                rows += Row("──── ${Releases.dayName(day)} ────")
+                eps.filter { it.ep.released == day }.sortedWith(compareBy<Found> { it.show.name }.thenBy { it.ep.season }.thenBy { it.ep.episode })
+                    .forEach { f -> rows += epRow(app, f, if (Releases.opensSeason(f.ep)) "new season" else "") }
+                films.orEmpty().filter { it.day == day }.forEach { e ->
+                    rows += Row(Marks.title(marks[e.film.id], e.film.name) + if (e.film.year.isNotEmpty()) " (${e.film.year})" else "", "film · ${e.what}  ►",
+                        opens = { Details.screenFor(app, e.film.id, "movie", e.film.name, e.film.year) ?: Screen(e.film.name, listOf(Row("Your add-ons are still loading."))) })
                 }
-                rows += epRow(app, f, if (Releases.opensSeason(f.ep)) "new season" else "")
             }
             screen.rows = rows
             app.refresh(screen)
@@ -309,6 +321,9 @@ object NewEpisodes {
                 started = true
                 status.label = "Finding the shows you follow…"
                 load(app, progress = { if (app.isTop(screen)) build() }) { build() }
+                val want = calendarFilms(app); val addons = Home.allAddons()
+                val key = Settings.tmdbKey(app); val region = Settings.watchRegion(app)
+                Net.async({ FilmDates.events(addons, key, region, want) }) { r -> films = r.getOrDefault(emptyList()); if (app.isTop(screen)) build() }
             }
             build()
         }
