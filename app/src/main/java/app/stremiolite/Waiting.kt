@@ -299,6 +299,7 @@ object Waiting {
         val n = b.setSmallIcon(R.mipmap.ic_launcher).setContentTitle(title).setContentText(text)
             .setContentIntent(open).setAutoCancel(true).build()
         runCatching { nm.notify(JOB_ID, n) }
+        Ntfy.send(c, text, title)
     }
 
     class Job : JobService() {

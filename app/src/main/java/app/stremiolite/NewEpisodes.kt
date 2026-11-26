@@ -366,5 +366,6 @@ object NewEpisodes {
             .setStyle(Notification.BigTextStyle().bigText(alerts.joinToString("\n") { it.text }))
             .setContentIntent(open).setAutoCancel(true).build()
         runCatching { nm.notify(NOTIFY_ID, n) }
+        Ntfy.send(c, text, title)
     }
 }

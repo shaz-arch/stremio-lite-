@@ -199,3 +199,14 @@ object ForYouUi {
         return s
     }
 }
+
+/** Alerts copied to an ntfy.sh topic, so a laptop or someone else's phone gets them too. */
+object Ntfy {
+    fun send(c: Context, text: String, title: String = "Stremonino") {
+        val topic = Settings.ntfyTopic(c)
+        if (topic.isEmpty()) return
+        Thread {
+            runCatching { Http.sendJson("https://ntfy.sh/", "POST", org.json.JSONObject().put("topic", topic).put("title", title).put("message", text).toString(), 10_000) }
+        }.start()
+    }
+}

@@ -51,6 +51,7 @@ object Streams {
         early[key] = Fetch(type, id)
         while (early.size > 3) early.remove(early.keys.first())
         Subtitles.prefetch(app, type, id)
+        if (type == "series" && ':' in id && Settings.skipIntros(app)) Net.async({ Skips.find(id) }) { }
     }
 
     /**
@@ -238,6 +239,7 @@ object Streams {
      * [runtime] is the title's running time text ("1h 52m", "45min"), used to work out bitrates.
      */
     fun playBest(app: MainActivity, type: String, id: String, title: String, runtime: String, watch: History.Watch? = null, startAt: Long = 0): Screen {
+        if (type == "series" && ':' in id && Settings.skipIntros(app) && Skips.known(id) == null) Net.async({ Skips.find(id) }) { }
         val status = Row("")
         val pickRow = Row("")
         lateinit var screen: Screen

@@ -39,6 +39,13 @@ object Player {
             activity.toast("Not allowed on this profile (" + (AgeRatings.of(watch.id)?.ifBlank { null } ?: "not rated yet") + ")")
             return
         }
+        // Skip intros: an episode played from the start begins after an opening recap or intro.
+        var startAt = startAt
+        if (startAt == 0L && watch != null && ':' in watch.videoId && Settings.skipIntros(activity)) {
+            Skips.known(watch.videoId)?.let { Skips.startAfterOpening(it) }?.takeIf { it > 0 }?.let {
+                startAt = it; activity.toast("Starting after the intro (" + (it / 1000) + "s in)")
+            }
+        }
         val uri = Uri.parse(url)
         val choice = force ?: Settings.player(activity).pkg
         fun viewIntent() = Intent(Intent.ACTION_VIEW).apply {

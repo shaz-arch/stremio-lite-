@@ -174,6 +174,9 @@ object Settings {
 
     /** Lists show watched films with a ✓, or leave them out. */
     fun hideWatched(c: Context) = prefs(c).getBoolean("hideWatched", false)
+    fun skipIntros(c: Context) = prefs(c).getBoolean("skipIntros", true)
+    /** An ntfy.sh topic that alerts also go to (this device only), or "". */
+    fun ntfyTopic(c: Context) = prefs(c).getString("ntfyTopic", "").orEmpty()
 
     /** Follow a show for new episodes as soon as you start watching it (off: you choose which). */
     fun autoFollow(c: Context) = prefs(c).getBoolean("autoFollow", false)
@@ -430,6 +433,8 @@ object Settings {
         lateinit var screen: Screen
         lateinit var playerRow: Row
         lateinit var langRow: Row
+        lateinit var skipRow: Row
+        lateinit var ntfyRow: Row
         lateinit var nextRow: Row
         lateinit var followRow: Row
         lateinit var themeRow: Row
@@ -451,6 +456,8 @@ object Settings {
             langRow.detail = "◄ ${subtitleLanguage(app).name} ►"
             nextRow.detail = "◄ ${if (autoNext(app)) "On" else "Off"} ►"
             followRow.detail = "◄ ${if (autoFollow(app)) "On" else "Off: I choose"} ►"
+            skipRow.detail = "◄ ${if (skipIntros(app)) "On" else "Off"} ►"
+            ntfyRow.detail = ntfyTopic(app).ifEmpty { "off" } + "  ►"
             liveRow.detail = "◄ ${if (liveTv(app)) "Shown" else "Hidden"} ►"
             newsRow.detail = "◄ ${if (newsOn(app)) "Shown" else "Hidden"} ►"
             comingRow.detail = "◄ ${if (comingOn(app)) "Shown" else "Hidden"} ►"
@@ -500,6 +507,21 @@ object Settings {
             Home.redraw()
             show()
         })
+        skipRow = Row("Skip intros (start after them)", action = {
+            prefs(app).edit().putBoolean("skipIntros", !skipIntros(app)).apply(); show()
+        })
+        ntfyRow = Row("Alerts also to ntfy", action = {
+            val input = android.widget.EditText(app).apply { setText(ntfyTopic(app)); setSingleLine(); hint = "a topic name only you know" }
+            android.app.AlertDialog.Builder(app).setTitle("ntfy topic (empty: off)")
+                .setMessage("Ready and new-episode alerts from this phone also go to ntfy.sh/<topic>. Subscribe to the same topic in the ntfy app or website on any device. Pick a long, unguessable name: anyone who knows it can read the alerts.")
+                .setView(input)
+                .setPositiveButton("Save") { _, _ ->
+                    val t = input.text.toString().trim().filter { it.isLetterOrDigit() || it == '-' || it == '_' }
+                    prefs(app).edit().putString("ntfyTopic", t).apply(); show()
+                    if (t.isNotEmpty()) Ntfy.send(app, "Stremonino alerts will arrive here")
+                }
+                .setNegativeButton("Cancel", null).show()
+        })
         nextRow = Row("Auto-play next episode", action = {
             prefs(app).edit().putBoolean("autoNext", !autoNext(app)).apply()
             syncOut(app)
@@ -521,7 +543,7 @@ object Settings {
             "Settings",
             listOf(
                 Row("Set up Stremonino", "step by step  ►", opens = { SetupWizard.screen(app) }),
-                Row("──── Playback ────"), playerRow, langRow, subsAddonRow(app), nextRow, followRow,
+                Row("──── Playback ────"), playerRow, langRow, subsAddonRow(app), nextRow, skipRow, followRow, ntfyRow,
                 Row("──── Look ────"),
                 lookRow, themeRow, sizeRow, clockRow, watchedRow, liveRow, newsRow, comingRow,
                 Row("──── Index ────"),

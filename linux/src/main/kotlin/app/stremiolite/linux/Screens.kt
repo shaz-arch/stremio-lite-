@@ -1043,6 +1043,9 @@ object Settings {
                 Row("Follow shows I start watching", "◄ ${if (Prefs.autoFollow) "On" else "Off: I choose"} ►", action = {
                     Prefs.autoFollow = !Prefs.autoFollow; Prefs.syncOut(); build()
                 }),
+                Row("Skip intros and recaps (mpv)", "◄ ${if (Prefs.skipIntros) "On" else "Off"} ►", action = {
+                    Prefs.skipIntros = !Prefs.skipIntros; build()
+                }),
                 Row("Play what's sent to the TV", "◄ ${if (Prefs.receiveSends) "On: this computer too" else "Off"} ►", action = {
                     Prefs.receiveSends = !Prefs.receiveSends; build()
                 }),

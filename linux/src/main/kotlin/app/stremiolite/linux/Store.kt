@@ -88,6 +88,9 @@ object Prefs {
         get() = data().optBoolean("autoFollow", false)
         set(v) { data().put("autoFollow", v); save() }
     /** Play what's sent with "Send to TV" (this computer only; off: only the TV plays it). */
+    var skipIntros: Boolean
+        get() = data().optBoolean("skipIntros", true)
+        set(v) { data().put("skipIntros", v); save() }
     var receiveSends: Boolean
         get() = data().optBoolean("receiveSends", false)
         set(v) { data().put("receiveSends", v); save() }

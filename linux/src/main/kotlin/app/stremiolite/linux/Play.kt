@@ -79,6 +79,7 @@ object Play {
     /** Play best: wait for the answers (and a subtitle in your language), pick the winner, play it. */
     fun best(type: String, id: String, title: String, w: Watch?, startAt: Long): Screen {
         val owner = w?.id ?: id
+        if (type == "series" && ':' in id && Prefs.skipIntros) App.async({ app.stremiolite.Skips.find(id) }) { }
         if (!KidsGuard.allows(owner)) return Screen(title, listOf(Row("Not allowed on this profile (" + (app.stremiolite.AgeRatings.of(owner.substringBefore(':'))?.ifBlank { null } ?: "not rated yet") + ").")))
         val status = Row("")
         val pickRow = Row("")
@@ -134,7 +135,7 @@ object Play {
             status.label = "Playing in ${Prefs.player}… (this screen waits until it closes)"
             s.rows = rows()
             App.refresh()
-            Player.play(st.url, title, fetch.chosenSub(), startAt) { result ->
+            Player.play(st.url, title, fetch.chosenSub(), startAt, video = id) { result ->
                 playing = false
                 if (result.failed && tried.size < 4) {
                     val next = Best.pick(fetch.found.filter { it !in tried }, minutes, prefer)
@@ -220,7 +221,7 @@ object Play {
                     App.toast("Checking the stream…")
                     App.async({ app.stremiolite.StreamCheck.broken(st.url) }) { ok ->
                         if (ok.getOrDefault(false)) App.toast("That release has no playable video. Pick another.")
-                        else Player.play(st.url, title, fetch.chosenSub(), startAt) { r ->
+                        else Player.play(st.url, title, fetch.chosenSub(), startAt, video = id) { r ->
                             if (r.failed) App.toast("That stream didn't play (${r.why})")
                             else if (w != null) After.played(w, r)
                         }
@@ -318,7 +319,7 @@ object Player {
         return true
     }
 
-    fun play(url: String, title: String, sub: Sub?, startAt: Long, done: (Result) -> Unit) {
+    fun play(url: String, title: String, sub: Sub?, startAt: Long, video: String = "", done: (Result) -> Unit) {
         val cmd = Prefs.player
         val isMpv = File(cmd).name.startsWith("mpv")
         val sock = File(System.getProperty("java.io.tmpdir"), "stremonino-mpv-${ProcessHandle.current().pid()}.sock")
@@ -360,6 +361,22 @@ object Player {
                 control = c
                 runCatching {
                     fun send(s: String) { synchronized(c) { c.write(ByteBuffer.wrap((s + "\n").toByteArray())) } }
+                    // Skip intros: the episode's recap and intro times (TheIntroDB / IntroDB), skipped as they play.
+                    val segs = if (video.isNotEmpty() && Prefs.skipIntros) runCatching { app.stremiolite.Skips.find(video) }.getOrDefault(emptyList()) else emptyList()
+                    val skipped = HashSet<Long>()
+                    var creditsTold = false
+                    val credits = app.stremiolite.Skips.creditsAt(segs)
+                    fun at(pos: Long) {
+                        app.stremiolite.Skips.skipAt(segs, pos)?.takeIf { it.start !in skipped }?.let { seg ->
+                            skipped += seg.start
+                            send("""{"command":["seek",${seg.end / 1000.0},"absolute"]}""")
+                            send("""{"command":["show-text","Skipped the ${seg.kind}",2000]}""")
+                        }
+                        if (credits != null && !creditsTold && pos >= credits) {
+                            creditsTold = true
+                            send("""{"command":["show-text","Credits: close mpv (q) for the next episode",4000]}""")
+                        }
+                    }
                     send("""{"command":["observe_property",1,"time-pos"]}""")
                     send("""{"command":["observe_property",2,"duration"]}""")
                     Channels.newReader(c, "UTF-8").buffered().useLines { lines ->
@@ -367,7 +384,7 @@ object Player {
                             val o = runCatching { JSONObject(line) }.getOrNull() ?: return@forEach
                             if (o.optString("event") == "property-change") {
                                 when (o.optString("name")) {
-                                    "time-pos" -> o.optDouble("data").takeIf { !it.isNaN() }?.let { posMs.set((it * 1000).toLong()) }
+                                    "time-pos" -> o.optDouble("data").takeIf { !it.isNaN() }?.let { posMs.set((it * 1000).toLong()); if (segs.isNotEmpty()) at(posMs.get()) }
                                     "duration" -> o.optDouble("data").takeIf { !it.isNaN() }?.let { durMs.set((it * 1000).toLong()) }
                                 }
                             }
