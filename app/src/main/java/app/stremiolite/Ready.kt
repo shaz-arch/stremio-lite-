@@ -28,9 +28,10 @@ object Ready {
         val followed = Waiting.following(c).map { it.first }.toSet()
         val next = NextList.ids(c)
         val gone = gone(c)
+        val news = NewEpisodes.isNews(c)
         return NewEpisodes.shows().filter { it.id in followed }
             .flatMap { sh -> Releases.recent(sh, Releases.day(EPISODE_DAYS)).map { Episode(sh, it) } }
-            .filter { it.ep.id !in gone && it.ep.id !in next && History.progress(c, it.ep.id) == null }
+            .filter { it.ep.id !in gone && it.ep.id !in next && History.progress(c, it.ep.id) == null && news(it.show, it.ep) }
             .sortedWith(compareByDescending<Episode> { it.ep.released }.thenBy { it.show.name }.thenBy { it.ep.season }.thenBy { it.ep.episode })
     }
 

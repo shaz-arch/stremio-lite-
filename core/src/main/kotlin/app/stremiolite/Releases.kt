@@ -39,6 +39,22 @@ object Releases {
         }.getOrDefault(date)
     }
 
+    /**
+     * Whether [ep] is news to you, not just the next one while you work through a show. A season's
+     * first episode always is. Any other only if you'd caught up when it came out: every earlier
+     * episode of its season watched, and nothing watched since the day after it aired
+     * ([lastWatched], the show's latest watch time). So S2E10 isn't "new" while you're on S2E9.
+     */
+    fun isNews(show: Full, ep: Video, watched: Set<String>, lastWatched: Long): Boolean {
+        if (ep.episode <= 1) return true
+        val earlier = show.videos.filter { it.season == ep.season && it.episode in 1 until ep.episode }
+        if (earlier.any { it.id !in watched }) return false
+        val aired = runCatching {
+            SimpleDateFormat("yyyy-MM-dd", Locale.UK).apply { timeZone = TimeZone.getTimeZone("UTC") }.parse(ep.released)!!.time
+        }.getOrNull() ?: return true
+        return lastWatched <= aired + 86_400_000L
+    }
+
     /** The first episode of a season after the first. */
     fun opensSeason(v: Video) = v.season > 1 && v.episode == 1
 

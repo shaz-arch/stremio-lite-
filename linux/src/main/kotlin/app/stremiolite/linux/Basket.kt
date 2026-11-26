@@ -81,7 +81,8 @@ object Ready {
         val gone = gone()
         return NewEpisodes.shows().filter { it.id in followed }.flatMap { sh ->
             val done = Lib.watchedEpisodes(sh.id, MetaParse.stremioOrder(sh))
-            Releases.recent(sh, Releases.day(EPISODE_DAYS)).filter { it.id !in done && Lib.resumeAt(sh.id, it.id) <= 0L }.map { Episode(sh, it) }
+            val last = Lib.info(sh.id)?.lastWatched ?: 0L
+            Releases.recent(sh, Releases.day(EPISODE_DAYS)).filter { it.id !in done && Lib.resumeAt(sh.id, it.id) <= 0L && Releases.isNews(sh, it, done, last) }.map { Episode(sh, it) }
         }.filter { it.ep.id !in gone && it.ep.id !in next }
             .sortedWith(compareByDescending<Episode> { it.ep.released }.thenBy { it.show.name }.thenBy { it.ep.season }.thenBy { it.ep.episode })
     }

@@ -188,9 +188,20 @@ object NewEpisodes {
     /** Episodes out in the last few days, not watched and not yet seen here, newest first. */
     private fun unseen(c: Context): List<Found> {
         val seen = ReadyNotice.readSeen(seenPrefs(c).getString("epSeen", null))
+        val news = isNews(c)
         return fulls.flatMap { sh -> Releases.recent(sh).map { Found(sh, it) } }
-            .filter { it.ep.id !in seen && History.progress(c, it.ep.id)?.done != true }
+            .filter { it.ep.id !in seen && History.progress(c, it.ep.id)?.done != true && news(it.show, it.ep) }
             .sortedWith(compareByDescending<Found> { it.ep.released }.thenBy { it.show.name }.thenBy { it.ep.episode })
+    }
+
+    /** Whether an episode is news to you ([Releases.isNews]): not just the next one while you catch up. */
+    fun isNews(c: Context): (Full, Video) -> Boolean {
+        val infos = History.infos(c).associateBy { it.id }
+        val cache = HashMap<String, Pair<Set<String>, Long>>()
+        return { sh, ep ->
+            val (w, last) = cache.getOrPut(sh.id) { Waiting.watchedOf(c, sh, infos) to (infos[sh.id]?.lastWatched ?: 0L) }
+            Releases.isNews(sh, ep, w, last)
+        }
     }
 
     /** You've looked: the line goes until another episode comes out. */

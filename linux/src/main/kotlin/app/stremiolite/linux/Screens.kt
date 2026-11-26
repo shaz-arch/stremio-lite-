@@ -1504,7 +1504,9 @@ object NewEpisodes {
         val seen = app.stremiolite.ReadyNotice.readSeen(Prefs.episodesSeen)
         return fulls.flatMap { sh ->
             val done = Lib.watchedEpisodes(sh.id, MetaParse.stremioOrder(sh))
-            app.stremiolite.Releases.recent(sh).filter { it.id !in seen && it.id !in done }.map { Found(sh, it) }
+            val last = Lib.info(sh.id)?.lastWatched ?: 0L
+            // Only news: not the next episode while you're catching up ([Releases.isNews]).
+            app.stremiolite.Releases.recent(sh).filter { it.id !in seen && it.id !in done && app.stremiolite.Releases.isNews(sh, it, done, last) }.map { Found(sh, it) }
         }.sortedWith(compareByDescending<Found> { it.ep.released }.thenBy { it.show.name }.thenBy { it.ep.episode })
     }
 

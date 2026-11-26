@@ -137,7 +137,7 @@ object Waiting {
     fun following(c: Context) = NewEpisodes.followedNow(c)
 
     /** Episodes of [show] you've watched, from the account plus this device. */
-    private fun watchedOf(c: Context, show: Full, infos: Map<String, LibraryItems.Info>): Set<String> {
+    fun watchedOf(c: Context, show: Full, infos: Map<String, LibraryItems.Info>): Set<String> {
         val order = MetaParse.stremioOrder(show)
         return (infos[show.id]?.let { Sync.decodeWatched(it.watchedField, order) } ?: emptySet()) +
             show.videos.filter { History.progress(c, it.id)?.done == true }.map { it.id }
