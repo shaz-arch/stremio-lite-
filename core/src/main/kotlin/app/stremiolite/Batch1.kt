@@ -57,7 +57,7 @@ object CalendarFile {
     class Item(val day: String, val title: String, val note: String)
 
     private fun stamp(ms: Long) = SimpleDateFormat("yyyyMMdd'T'HHmmss'Z'", Locale.UK).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date(ms))
-    private fun esc(s: String) = s.replace("\\", "\\\\").replace(";", "\;").replace(",", "\\,").replace("\n", "\\n")
+    private fun esc(s: String) = s.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
 
     /** All-day events, one per item. */
     fun ics(items: List<Item>): String {
