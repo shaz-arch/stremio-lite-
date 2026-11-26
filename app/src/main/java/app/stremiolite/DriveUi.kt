@@ -241,6 +241,13 @@ object SharedFiles {
         share(app, LocalFiles.Record.PHONE_ID)?.takeIf { !PhoneShare.on(app) },
     ).map { s -> Row("Files on ${s.name}", "►", opens = { screen(app, s) }) }
 
+    private fun fileRow(app: MainActivity, share: LocalFiles.Record.Share, f: LocalFiles.Shared): Row {
+        val go = { Player.play(app, LocalFiles.playUrl(share, f), f.name.substringBeforeLast('.')) }
+        val date = if (f.modified > 0) java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.UK).format(java.util.Date(f.modified)) + " · " else ""
+        return Row(f.name.substringBeforeLast('.'), date + LocalFiles.size(f.size) + "  ►", action = { go() }, play = { go() })
+    }
+
+    /** Recently added first, then one line per folder (opened to see its videos, newest first). */
     private fun screen(app: MainActivity, share: LocalFiles.Record.Share): Screen {
         val status = Row("Asking ${share.name}…")
         lateinit var s: Screen
@@ -252,12 +259,15 @@ object SharedFiles {
                 Net.async({ LocalFiles.fetch(share) }) { r ->
                     r.onSuccess { list ->
                         val rows = mutableListOf<Row>()
-                        if (list.isEmpty()) rows += Row("No videos shared yet. On the computer: My files › Folders and sharing.")
-                        list.groupBy { it.folder }.toSortedMap(String.CASE_INSENSITIVE_ORDER).forEach { (folder, files) ->
-                            if (folder.isNotEmpty()) rows += Row("──── $folder ────")
-                            files.forEach { f ->
-                                val go = { Player.play(app, LocalFiles.playUrl(share, f), f.name.substringBeforeLast('.')) }
-                                rows += Row(f.name.substringBeforeLast('.'), LocalFiles.size(f.size) + "  ►", action = { go() }, play = { go() })
+                        if (list.isEmpty()) rows += Row("No videos shared yet.")
+                        else {
+                            rows += Row("──── Recently added ────")
+                            LocalFiles.newest(list).take(8).forEach { rows += fileRow(app, share, it) }
+                            rows += Row("──── Folders ────")
+                            list.groupBy { it.folder }.toSortedMap(String.CASE_INSENSITIVE_ORDER).forEach { (folder, files) ->
+                                rows += Row("▸ " + folder.ifEmpty { "(top)" }, "${files.size}  ►", opens = {
+                                    Screen(folder.substringAfterLast('/').ifEmpty { share.name }, LocalFiles.newest(files).map { fileRow(app, share, it) })
+                                })
                             }
                         }
                         s.rows = rows
@@ -332,12 +342,36 @@ object PhoneShare {
         java.util.UUID.randomUUID().toString().replace("-", "").take(20).also { prefs(c).edit().putString("shareKey", it).apply() }
     }
 
-    /** Where phones keep videos: camera, Movies, Downloads, Pictures, WhatsApp. */
-    private fun roots(): List<java.io.File> {
-        val E = android.os.Environment::class.java.let { android.os.Environment::getExternalStoragePublicDirectory }
-        val pub = listOf(android.os.Environment.DIRECTORY_DCIM, android.os.Environment.DIRECTORY_MOVIES, android.os.Environment.DIRECTORY_DOWNLOADS, android.os.Environment.DIRECTORY_PICTURES).map { E(it) }
+    /** The folders that could be shared, with a name; Camera and Movies are shared unless you change it. */
+    private fun candidates(): List<Pair<String, java.io.File>> {
+        val E = android.os.Environment::getExternalStoragePublicDirectory
         val sd = android.os.Environment.getExternalStorageDirectory()
-        return (pub + listOf(java.io.File(sd, "Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video"), java.io.File(sd, "WhatsApp/Media/WhatsApp Video"))).filter { it.isDirectory }
+        return listOf(
+            "Camera" to java.io.File(E(android.os.Environment.DIRECTORY_DCIM), "Camera"),
+            "Movies" to E(android.os.Environment.DIRECTORY_MOVIES),
+            "Downloads" to E(android.os.Environment.DIRECTORY_DOWNLOADS),
+            "Pictures" to E(android.os.Environment.DIRECTORY_PICTURES),
+            "WhatsApp" to java.io.File(sd, "Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video").takeIf { it.isDirectory }.let { it ?: java.io.File(sd, "WhatsApp/Media/WhatsApp Video") },
+        ).filter { it.second.isDirectory }
+    }
+
+    private fun chosen(c: Context): Set<String> = prefs(c).getStringSet("shareFolders", null) ?: setOf("Camera", "Movies")
+
+    private fun roots(c: Context): List<java.io.File> = candidates().filter { it.first in chosen(c) }.map { it.second }
+
+    fun foldersRow(app: MainActivity): Row? = if (!app.isPhone) null else Row("Folders to share", chosen(app).sorted().joinToString(", ").ifEmpty { "none" } + "  ►", opens = { foldersScreen(app) })
+
+    private fun foldersScreen(app: MainActivity): Screen {
+        lateinit var s: Screen
+        fun build(): List<Row> = listOf(Row("Only these are shared. Tick what you want the TV to see.")) + candidates().map { (name, dir) ->
+            val on = name in chosen(app)
+            Row((if (on) "✓ " else "   ") + name, dir.path.substringAfter("/0/"), action = {
+                prefs(app).edit().putStringSet("shareFolders", if (on) chosen(app) - name else chosen(app) + name).apply()
+                s.rows = build(); app.refresh(s)
+            })
+        }
+        s = Screen("Folders to share", build())
+        return s
     }
 
     private fun allowed(app: MainActivity) = android.os.Build.VERSION.SDK_INT < 23 || app.checkSelfPermission(perm) == android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -361,8 +395,8 @@ object PhoneShare {
     fun resume(app: MainActivity) { if (app.isPhone && on(app) && allowed(app)) start(app) }
 
     private fun start(app: MainActivity, announce: Boolean = false) {
-        val roots = roots()
-        val srv = server ?: LocalFiles.Server({ roots }, key(app)).also { server = it }
+        val ctx = app.applicationContext
+        val srv = server ?: LocalFiles.Server({ roots(ctx) }, key(app)).also { server = it }
         Net.async({ val ip = LocalFiles.lanAddress() ?: throw Exception("no Wi-Fi"); ip to srv.start() }) { r ->
             r.onSuccess { (ip, port) ->
                 val name = android.os.Build.MODEL ?: "phone"

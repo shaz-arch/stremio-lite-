@@ -80,7 +80,10 @@ object LocalFiles {
         }
     }
 
-    class Shared(val id: String, val name: String, val folder: String, val size: Long)
+    class Shared(val id: String, val name: String, val folder: String, val size: Long, val modified: Long = 0)
+
+    /** Newest first, for "Recently added" and inside each folder. */
+    fun newest(list: List<Shared>) = list.sortedWith(compareByDescending<Shared> { it.modified }.thenBy { it.name.lowercase() })
 
     /** On the TV: the shared list (blocking). */
     fun fetch(share: Record.Share): List<Shared> {
@@ -88,7 +91,7 @@ object LocalFiles {
         c.connectTimeout = 4_000; c.readTimeout = 15_000
         try {
             val a = JSONArray(c.inputStream.use { it.readBytes().toString(Charsets.UTF_8) })
-            return (0 until a.length()).mapNotNull { a.optJSONObject(it) }.map { Shared(it.optString("id"), it.optString("name"), it.optString("folder"), it.optLong("size")) }
+            return (0 until a.length()).mapNotNull { a.optJSONObject(it) }.map { Shared(it.optString("id"), it.optString("name"), it.optString("folder"), it.optLong("size"), it.optLong("modified")) }
         } finally { c.disconnect() }
     }
 
@@ -144,7 +147,7 @@ object LocalFiles {
                 files().values.sortedBy { it.absolutePath.lowercase() }.forEach { f ->
                     val root = rootsNow.firstOrNull { f.absolutePath.startsWith(it.absolutePath) }
                     val folder = f.parentFile?.absolutePath?.removePrefix(root?.parentFile?.absolutePath.orEmpty())?.trim('/').orEmpty()
-                    a.put(JSONObject().put("id", id(f)).put("name", f.name).put("folder", folder).put("size", f.length()))
+                    a.put(JSONObject().put("id", id(f)).put("name", f.name).put("folder", folder).put("size", f.length()).put("modified", f.lastModified()))
                 }
                 send("200 OK", "application/json; charset=utf-8", a.toString().toByteArray()); return
             }

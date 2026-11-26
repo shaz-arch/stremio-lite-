@@ -153,13 +153,19 @@ object PhoneFiles {
         val s = Screen("Files on ${sh.name}", listOf(Row("Asking ${sh.name}…")))
         App.async({ LocalFiles.fetch(sh) }) { r ->
             r.onSuccess { list ->
+                fun row(f: LocalFiles.Shared): Row {
+                    val go = { Player.play(LocalFiles.playUrl(sh, f), f.name.substringBeforeLast('.'), null, 0) { } }
+                    val date = if (f.modified > 0) java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.UK).format(java.util.Date(f.modified)) + " · " else ""
+                    return Row(f.name.substringBeforeLast('.'), date + LocalFiles.size(f.size) + "  ►", action = { go() }, play = { go() })
+                }
                 val rows = mutableListOf<Row>()
                 if (list.isEmpty()) rows += Row("No videos found on ${sh.name}.")
-                list.groupBy { it.folder }.toSortedMap(String.CASE_INSENSITIVE_ORDER).forEach { (folder, files) ->
-                    if (folder.isNotEmpty()) rows += Row("──── $folder ────")
-                    files.forEach { f ->
-                        val go = { Player.play(LocalFiles.playUrl(sh, f), f.name.substringBeforeLast('.'), null, 0) { } }
-                        rows += Row(f.name.substringBeforeLast('.'), LocalFiles.size(f.size) + "  ►", action = { go() }, play = { go() })
+                else {
+                    rows += Row("──── Recently added ────")
+                    LocalFiles.newest(list).take(8).forEach { rows += row(it) }
+                    rows += Row("──── Folders ────")
+                    list.groupBy { it.folder }.toSortedMap(String.CASE_INSENSITIVE_ORDER).forEach { (folder, files) ->
+                        rows += Row("▸ " + folder.ifEmpty { "(top)" }, "${files.size}  ►", opens = { Screen(folder.substringAfterLast('/').ifEmpty { sh.name }, LocalFiles.newest(files).map { row(it) }) })
                     }
                 }
                 s.rows = rows
