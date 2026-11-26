@@ -10,8 +10,29 @@ object NextList {
     private fun raw() = Lib.raw(NextWatch.ID)?.toString()
 
     private fun started(id: String): Boolean {
+        // An episode put here from Ready leaves once you've started or watched that episode.
+        if (':' in id) {
+            val show = id.substringBefore(':')
+            return Lib.resumeAt(show, id) > 0L || episodeWatched(show, id)
+        }
         val i = Lib.info(id)
         return i?.continuing == true || i?.filmWatched == true
+    }
+
+    private fun episodeWatched(show: String, id: String) =
+        NewEpisodes.shows().firstOrNull { it.id == show }?.let { id in Lib.watchedEpisodes(show, MetaParse.stremioOrder(it)) } == true
+
+    fun ids(): Set<String> = NextWatch.parse(raw()).mapTo(HashSet()) { it.id }
+
+    fun add(e: NextWatch.Entry) { save(NextWatch.added(NextWatch.parse(raw()), e)); BasketList.done(e.id) }
+
+    private fun openEpisode(e: NextWatch.Entry, play: Boolean = false) {
+        App.async({ MetaParse.fetch(Home.all(), "series", e.show) }) { r ->
+            val f = r.getOrNull()
+            val v = f?.videos?.firstOrNull { it.id == e.id }
+            if (f == null || v == null) { App.toast("Couldn't load that episode"); return@async }
+            App.push(if (play) Play.best("series", v.id, "${f.name} ${MetaParse.epLabel(v)}", Details.watchFor(f, v), Lib.resumeAt(f.id, v.id)) else Details.episode(f, v))
+        }
     }
 
     /** Your Next watch, without anything you've since started (those drop out on every device). */
@@ -31,8 +52,8 @@ object NextList {
         if (list.isEmpty()) return "empty"
         val w = Waiting.list().associate { it.id to (it.better to it.ready) }
         val NS = app.stremiolite.NextStatus
-        val ready = list.count { NS.effective(it.id) { id -> w[id] }?.group == app.stremiolite.NextStatus.Group.READY }
-        val known = list.count { NS.effective(it.id) { id -> w[id] } != null }
+        val ready = list.count { it.isEpisode || NS.effective(it.id) { id -> w[id] }?.group == app.stremiolite.NextStatus.Group.READY }
+        val known = list.count { it.isEpisode || NS.effective(it.id) { id -> w[id] } != null }
         if (known < list.size && ready == 0) return "${list.size}  ►"
         return listOfNotNull("$ready ready", (list.size - ready).takeIf { it > 0 }?.let { "$it on the way" }).joinToString(" · ") + "  ►"
     }
@@ -45,7 +66,7 @@ object NextList {
         r = Row(label(), action = {
             val list = NextWatch.parse(raw())
             if (has(f.id)) { save(NextWatch.removed(list, f.id)); App.toast("Removed from Next watch") }
-            else { save(NextWatch.added(list, NextWatch.Entry(f.id, f.type, f.name, f.year))); App.toast("Added to Next watch") }
+            else { add(NextWatch.Entry(f.id, f.type, f.name, f.year)); App.toast("Added to Next watch") }
             r.label = label()
             App.refresh()
         })
@@ -62,7 +83,7 @@ object NextList {
 
     private fun statusOf(): (String) -> app.stremiolite.NextStatus.Status? {
         val w = Waiting.list().associate { it.id to (it.better to it.ready) }
-        return { id -> app.stremiolite.NextStatus.effective(id) { w[it] } }
+        return { id -> if (':' in id) app.stremiolite.NextStatus.Status(app.stremiolite.NextStatus.Group.READY, "new episode") else app.stremiolite.NextStatus.effective(id) { w[it] } }
     }
 
     private fun detail(st: app.stremiolite.NextStatus.Status?): String = st?.detail ?: "checking…"
@@ -78,7 +99,8 @@ object NextList {
             val status = statusOf()
             fun row(e: NextWatch.Entry): Row {
                 val st = status(e.id)
-                return Row(Marks.title(st?.shape ?: Marks.NEXT, e.name), detail(st) + "  ►", action = { Details.screenFor(e.id, e.type, e.name)?.let { App.push(it) } })
+                return Row(Marks.title(st?.shape ?: Marks.NEXT, e.name), detail(st) + "  ►", action = { if (e.isEpisode) openEpisode(e) else App.push(Details.screenFor(e.id, e.type, e.name)) },
+                    play = { if (e.isEpisode) openEpisode(e, play = true) else App.push(Details.screenFor(e.id, e.type, e.name, autoPlay = true)) })
             }
             // Only what plays now; the rest is on its way (in Waiting or Following) and comes in by itself.
             val groups = app.stremiolite.NextStatus.grouped(list, status)
@@ -114,7 +136,7 @@ object NextList {
             items = all().toMutableList(),
             label = { Marks.title(statusOf()(it.id)?.shape ?: Marks.NEXT, it.name) },
             detail = { detail(statusOf()(it.id)) },
-            open = { Details.screenFor(it.id, it.type, it.name) },
+            open = { if (it.isEpisode) { openEpisode(it); null } else Details.screenFor(it.id, it.type, it.name) },
             commit = { save(it) },
         )
         val s = r.build("Next watch")
@@ -123,7 +145,7 @@ object NextList {
     }
 
     private fun fill(s: Screen, changed: () -> Unit) {
-        val todo = app.stremiolite.NextStatus.missing(all())
+        val todo = app.stremiolite.NextStatus.missing(all().filter { !it.isEpisode })
         if (todo.isEmpty()) return
         val addons = Home.all()
         fun next(i: Int) {

@@ -200,6 +200,11 @@ object Prefs {
         get() = data().optString("epSeen", "")
         set(v) { data().put("epSeen", v); save() }
 
+    /** Episodes dismissed from Ready (this computer only). */
+    var readyGone: String
+        get() = data().optString("readyGone", "")
+        set(v) { data().put("readyGone", v); save() }
+
     /** When you last looked at films that became ready (this computer only, never synced). */
     var readySeen: Long
         get() = data().optLong("readySeen", 0)
