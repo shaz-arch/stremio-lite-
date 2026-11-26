@@ -418,7 +418,9 @@ object Waiting {
             upgrades.sortedBy { it.name }.forEach { e -> rows += Row(filmLabel(e), "have: ${e.have}  ►", opens = { entry(app, e) }) }
             // Shows you follow: waiting for a new season, or for the next episode of this one.
             val shows = shownShows(app).filter { !Following.ended(it) }
-            val (season, episodes) = shows.partition { sh -> Releases.upcoming(sh, 3650).firstOrNull()?.let { it.episode == 1 } ?: true }
+            // Each show sits where you follow it: for new seasons, or for every new episode.
+            val rec = Follow.raw(app)
+            val (season, episodes) = shows.partition { sh -> Following.mode(rec, sh.id) == Following.SEASONS }
             fun showRow(sh: Full) = Row(Marks.title(Marks.FOLLOWING, sh.name), Following.nextText(sh) + "  ►",
                 opens = { Details.screenFor(app, sh.id, "series", sh.name, "") ?: Screen(sh.name, listOf(Row("Your add-ons are still loading."))) })
             val loadingShows = NewEpisodes.isLoading()

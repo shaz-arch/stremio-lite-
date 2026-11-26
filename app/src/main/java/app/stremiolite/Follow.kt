@@ -21,7 +21,9 @@ object Follow {
 
     fun isFollowed(c: Context, id: String) = Following.isFollowed(id, History.infos(c), record(c), Settings.autoFollow(c))
 
-    fun follow(c: Context, id: String, name: String) = History.putRemote(c, Following.follow(record(c), id, name))
+    fun follow(c: Context, id: String, name: String, mode: String = Following.EPISODES) = History.putRemote(c, Following.follow(record(c), id, name, mode))
+
+    fun mode(c: Context, id: String) = Following.mode(record(c), id)
 
     fun unfollow(c: Context, id: String) = History.putRemote(c, Following.unfollow(record(c), id))
 

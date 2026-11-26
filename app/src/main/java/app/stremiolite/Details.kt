@@ -184,15 +184,23 @@ object Details {
         if (f.type == "series") {
             // Following is separate from the Library: shows you've started are followed automatically.
             lateinit var fol: Row
-            fun folLabel() = if (Follow.isFollowed(app, f.id)) "Following new episodes and seasons ✓ (stop)" else "Tell me about new episodes and seasons"
+            // OK goes round: every new episode → new seasons only → not following.
+            fun folLabel() = when {
+                !Follow.isFollowed(app, f.id) -> "Follow: tell me about new episodes or seasons"
+                Follow.mode(app, f.id) == Following.EPISODES -> "Following: every new episode ✓ (OK: seasons only)"
+                else -> "Following: new seasons only ✓ (OK: stop)"
+            }
             fol = Row(folLabel(), action = {
-                if (Follow.isFollowed(app, f.id)) {
-                    Follow.unfollow(app, f.id)
-                    app.toast("Stopped following ${f.name}")
-                } else {
-                    Follow.follow(app, f.id, f.name)
-                    Waiting.askToNotify(app)
-                    app.toast("Following ${f.name}: you'll be told when new episodes play")
+                when {
+                    !Follow.isFollowed(app, f.id) -> {
+                        Follow.follow(app, f.id, f.name, Following.EPISODES); Waiting.askToNotify(app)
+                        app.toast("Following ${f.name}: every new episode comes to Ready")
+                    }
+                    Follow.mode(app, f.id) == Following.EPISODES -> {
+                        Follow.follow(app, f.id, f.name, Following.SEASONS)
+                        app.toast("Following ${f.name}: only a new season comes to Ready")
+                    }
+                    else -> { Follow.unfollow(app, f.id); app.toast("Stopped following ${f.name}") }
                 }
                 fol.label = folLabel()
                 app.refreshTop()

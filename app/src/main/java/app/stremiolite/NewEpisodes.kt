@@ -101,10 +101,13 @@ object NewEpisodes {
         if (loading) return
         loading = true
         checked = 0
+        val cont = History.continueWatching(app).filter { it.type == "series" }.map { it.id to it.name }
         Net.async({ followed(app, Home.allAddons()) }) { r ->
-            val shows = r.getOrDefault(emptyList())
-            if (r.isSuccess) lastFollowed = shows
-            followedCount = shows.size
+            val mine = r.getOrDefault(emptyList())
+            if (r.isSuccess) lastFollowed = mine
+            followedCount = mine.size
+            // Shows in Continue watching are checked too: their new episodes come to Ready.
+            val shows = (mine + cont).distinctBy { it.first }
             val got = mutableListOf<Full>()
             fun finish() {
                 fulls = got.toList(); fullsAt = System.currentTimeMillis(); loading = false; failed.clear()
@@ -194,13 +197,24 @@ object NewEpisodes {
             .sortedWith(compareByDescending<Found> { it.ep.released }.thenBy { it.show.name }.thenBy { it.ep.episode })
     }
 
-    /** Whether an episode is news to you ([Releases.isNews]): not just the next one while you catch up. */
+    /**
+     * Whether a new episode goes to Ready and the Home line ([Releases.isReady]): shows in Continue
+     * watching or followed for every episode get each one that's news; shows followed for seasons,
+     * only a new season. Not shows already lined up in Next watch.
+     */
     fun isNews(c: Context): (Full, Video) -> Boolean {
         val infos = History.infos(c).associateBy { it.id }
+        val cont = History.continueWatching(c).mapTo(HashSet()) { it.id }
+        val followed = Waiting.following(c).mapTo(HashSet()) { it.first }
+        val next = NextList.ids(c)
+        val rec = Follow.raw(c)
         val cache = HashMap<String, Pair<Set<String>, Long>>()
         return { sh, ep ->
-            val (w, last) = cache.getOrPut(sh.id) { Waiting.watchedOf(c, sh, infos) to (infos[sh.id]?.lastWatched ?: 0L) }
-            Releases.isNews(sh, ep, w, last)
+            if (sh.id in next || (sh.id !in cont && sh.id !in followed)) false
+            else {
+                val (w, last) = cache.getOrPut(sh.id) { Waiting.watchedOf(c, sh, infos) to (infos[sh.id]?.lastWatched ?: 0L) }
+                Releases.isReady(sh, ep, w, last, sh.id in cont, Following.mode(rec, sh.id), Following.since(rec, sh.id))
+            }
         }
     }
 

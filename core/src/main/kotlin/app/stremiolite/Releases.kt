@@ -55,6 +55,23 @@ object Releases {
         return lastWatched <= aired + 86_400_000L
     }
 
+    /**
+     * Whether a new episode belongs in Ready (and the Home line). Never a special, nor one out
+     * before you followed the show ([since]), nor a new show's first episode you weren't
+     * following for. A show you're watching ([continuing]) or follow for every episode:
+     * news by [isNews]. One followed for new seasons: only a season's first episode.
+     */
+    fun isReady(show: Full, ep: Video, watched: Set<String>, lastWatched: Long, continuing: Boolean, mode: String, since: Long): Boolean {
+        if (ep.season <= 0 || ep.episode <= 0) return false
+        if (since > 0) {
+            val from = SimpleDateFormat("yyyy-MM-dd", Locale.UK).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date(since))
+            if (ep.released < from) return false
+        }
+        if (ep.season == 1 && ep.episode == 1 && since == 0L) return false
+        if (continuing || mode == Following.EPISODES) return isNews(show, ep, watched, lastWatched)
+        return ep.episode == 1
+    }
+
     /** The first episode of a season after the first. */
     fun opensSeason(v: Video) = v.season > 1 && v.episode == 1
 

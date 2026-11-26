@@ -76,13 +76,12 @@ object Ready {
     class Episode(val show: Full, val ep: Video)
 
     fun episodes(): List<Episode> {
-        val followed = Waiting.following().map { it.first }.toSet()
         val next = NextList.ids()
         val gone = gone()
-        return NewEpisodes.shows().filter { it.id in followed }.flatMap { sh ->
+        val news = NewEpisodes.isNews()
+        return NewEpisodes.shows().flatMap { sh ->
             val done = Lib.watchedEpisodes(sh.id, MetaParse.stremioOrder(sh))
-            val last = Lib.info(sh.id)?.lastWatched ?: 0L
-            Releases.recent(sh, Releases.day(EPISODE_DAYS)).filter { it.id !in done && Lib.resumeAt(sh.id, it.id) <= 0L && Releases.isNews(sh, it, done, last) }.map { Episode(sh, it) }
+            Releases.recent(sh, Releases.day(EPISODE_DAYS)).filter { it.id !in done && Lib.resumeAt(sh.id, it.id) <= 0L && news(sh, it) }.map { Episode(sh, it) }
         }.filter { it.ep.id !in gone && it.ep.id !in next }
             .sortedWith(compareByDescending<Episode> { it.ep.released }.thenBy { it.show.name }.thenBy { it.ep.season }.thenBy { it.ep.episode })
     }
@@ -113,7 +112,7 @@ object Ready {
         }
         val s = Screen("Ready", rows)
         s.onShow = {
-            val missing = Waiting.following().map { it.first }.filter { id -> NewEpisodes.shows().none { it.id == id } }.toSet()
+            val missing = (Waiting.following().map { it.first } + Lib.continueWatching().filter { it.type == "series" }.map { it.id }).filter { id -> NewEpisodes.shows().none { it.id == id } }.toSet()
             // Ask once for each show missing (a redrawn screen mustn't ask again: load can answer at once).
             if (missing.isNotEmpty() && !askedShows.containsAll(missing)) { askedShows = askedShows + missing; NewEpisodes.load(force = true) { if (App.top()?.title == "Ready") App.replaceTop(screen()) } }
         }
