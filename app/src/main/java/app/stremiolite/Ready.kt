@@ -48,7 +48,11 @@ object Ready {
             Waiting.markSeen(app); NewEpisodes.markSeen(app)
             redraw()
             History.pull(app) { redraw() }
-            if (!loaded) { loaded = true; NewEpisodes.load(app) { redraw() } }
+            if (!loaded) {
+                loaded = true
+                val missing = Waiting.following(app).any { (id, _) -> NewEpisodes.shows().none { it.id == id } }
+                NewEpisodes.load(app, force = missing) { redraw() }
+            }
         }
         return s
     }

@@ -135,10 +135,12 @@ object Search {
     private fun row(app: MainActivity, p: Pair<Addon, Meta>): Row {
         val (a, m) = p
         val detail = if (m.id in collections) listOf(m.year, "Collection").filter { it.isNotBlank() }.joinToString("  ") else Catalogs.detail(m)
-        return Row(Marks.title(History.marks(app)[m.id], m.name), detail, opens = { Details.screen(app, a, m) }, play = {
-            if (m.type == "movie") Streams.prefetch(app, m.type, m.id)
-            app.push(Details.screen(app, a, m, autoPlay = true))
+        lateinit var r: Row
+        r = Row(Marks.title(History.marks(app)[m.id], m.name), detail, opens = { Details.screen(app, a, m) }, play = {
+            BasketList.toggle(app, m.id, m.type, m.name, m.year)
+            r.label = Marks.title(History.marks(app)[m.id], m.name); app.refreshTop()
         })
+        return r
     }
 
     private fun results(app: MainActivity, query: String): Screen {

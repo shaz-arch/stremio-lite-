@@ -404,7 +404,7 @@ object Waiting {
             fun filmLabel(e: Entry) = Marks.title(if (e.better) Marks.BETTER else Marks.WAITING, e.name) + if (e.year.isNotEmpty()) " (${e.year})" else ""
             // Films: no stream yet (out, or not out to stream yet with its date), and better versions.
             val notOut = Follow.films(app)
-            val plain = keep.filter { !it.better && it.ready == 0L }
+            val plain = keep.filter { !it.better && it.ready == 0L && notOut.none { n -> n.id == it.id } }
             rows += Row("──── Films: waiting for a stream ────")
             if (plain.isEmpty() && notOut.isEmpty()) rows += Row("None. On a film, choose 'Tell me when a stream is available'.")
             plain.sortedBy { it.name }.forEach { e -> rows += Row(filmLabel(e), "no stream yet  ►", opens = { entry(app, e) }) }
@@ -421,11 +421,17 @@ object Waiting {
             val (season, episodes) = shows.partition { sh -> Releases.upcoming(sh, 3650).firstOrNull()?.let { it.episode == 1 } ?: true }
             fun showRow(sh: Full) = Row(Marks.title(Marks.FOLLOWING, sh.name), Following.nextText(sh) + "  ►",
                 opens = { Details.screenFor(app, sh.id, "series", sh.name, "") ?: Screen(sh.name, listOf(Row("Your add-ons are still loading."))) })
-            val loadingShows = NewEpisodes.shows().isEmpty() && following(app).isNotEmpty()
+            val loadingShows = NewEpisodes.isLoading()
+            // Followed shows whose details haven't come in yet (just followed, or a fetch failed).
+            val unknown = following(app).filter { (id, _) -> NewEpisodes.shows().none { it.id == id } }
             rows += Row("──── Shows: waiting for a new season ────")
             if (loadingShows) rows += Row("Checking the shows you follow…")
-            else if (season.isEmpty()) rows += Row("None. On a show, choose 'Tell me about new episodes and seasons'.")
+            else if (season.isEmpty() && unknown.isEmpty()) rows += Row("None. On a show, choose 'Tell me about new episodes and seasons'.")
             season.sortedBy { it.name }.forEach { rows += showRow(it) }
+            if (!loadingShows) unknown.sortedBy { it.second }.forEach { (id, name) ->
+                rows += Row(Marks.title(Marks.FOLLOWING, name), "couldn't load its dates yet  ►",
+                    opens = { Details.screenFor(app, id, "series", name, "") ?: Screen(name, listOf(Row("Your add-ons are still loading."))) })
+            }
             rows += Row("──── Shows: waiting for new episodes ────")
             if (!loadingShows && episodes.isEmpty()) rows += Row("None right now.")
             episodes.sortedBy { Releases.upcoming(it, 3650).firstOrNull()?.released ?: "9" }.forEach { rows += showRow(it) }
@@ -451,7 +457,13 @@ object Waiting {
             screen.rows = build(); app.refresh(screen)
             // Changes made on another device (follows, the waiting list) are fetched on the way in.
             History.pull(app, force = true) { if (app.isTop(screen)) { screen.rows = build(); app.refresh(screen) } }
-            if (!loaded) { loaded = true; NewEpisodes.load(app) { if (app.isTop(screen)) { screen.rows = build(); app.refresh(screen) } } }
+            if (!loaded) {
+                loaded = true
+                val missing = following(app).any { (id, _) -> NewEpisodes.shows().none { it.id == id } }
+                NewEpisodes.load(app, force = missing, progress = { if (app.isTop(screen)) { screen.rows = build(); app.refresh(screen) } }) {
+                    if (app.isTop(screen)) { screen.rows = build(); app.refresh(screen) }
+                }
+            }
             checkFollowedFilms(app) { if (app.isTop(screen)) { screen.rows = build(); app.refresh(screen) } }
         }
         return screen

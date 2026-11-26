@@ -16,20 +16,22 @@ object Marks {
     const val WAITING = "◷"
     const val FAVOURITE = "♡"
     const val FOLLOWING = "○"
+    const val BASKET = "□"
 
     /** In priority order, with what each means (for a key on screen if wanted). */
     val KEY = listOf(
-        FAVOURITE to "a favourite", FOLLOWING to "following", NEXT to "Next watch", CONTINUE to "Continue watching", WATCHED to "watched",
+        BASKET to "in your basket", FAVOURITE to "a favourite", FOLLOWING to "following (new episodes)", NEXT to "Next watch", CONTINUE to "Continue watching", WATCHED to "watched",
         WAITING to "waiting for a stream", READY to "stream now ready", BETTER to "better version coming",
     )
 
-    fun pick(watched: Boolean, continuing: Boolean, ready: Boolean, better: Boolean, waiting: Boolean, library: Boolean, next: Boolean = false, following: Boolean = false): String? = when {
+    fun pick(watched: Boolean, continuing: Boolean, ready: Boolean, better: Boolean, waiting: Boolean, library: Boolean, next: Boolean = false, following: Boolean = false, basket: Boolean = false): String? = when {
         watched -> WATCHED
         continuing -> CONTINUE
         next -> NEXT
         ready -> READY
         better -> BETTER
         waiting -> WAITING
+        basket -> BASKET
         library -> FAVOURITE
         following -> FOLLOWING
         else -> null

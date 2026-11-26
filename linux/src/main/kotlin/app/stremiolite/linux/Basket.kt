@@ -17,6 +17,12 @@ object BasketList {
     private fun save(list: List<NextWatch.Entry>) = Lib.put(Basket.record(raw(), list))
     fun add(e: NextWatch.Entry) = save(NextWatch.added(all(), e))
     fun done(id: String) { if (has(id)) save(NextWatch.removed(all(), id)) }
+    fun toggle(id: String, type: String, name: String, year: String) {
+        if (has(id)) { done(id); App.toast("Taken out of the basket: $name") } else { add(NextWatch.Entry(id, type, name, year)); App.toast("In the basket: $name") }
+        App.top()?.rows?.firstOrNull { it.label.endsWith(" $name") }?.let { r -> r.label = Marks.title(Catalogs.mark(id, type), name) }
+        App.refresh()
+    }
+
     fun summary(): String = all().size.let { if (it == 0) "empty" else "$it  ►" }
 
     fun row(f: Full): Row {
@@ -34,7 +40,7 @@ object BasketList {
         val list = all()
         val rows = mutableListOf<Row>()
         if (list.isEmpty()) rows += Row("Empty. While browsing, choose 'Add to basket' on anything you like the look of.")
-        else rows += Row("Open one to choose: Next watch, Favourites, or tell me when it's ready.")
+        else rows += Row("Open one to choose: Next watch, Favourites, or tell me when it's ready. It stays here until you take it out.")
         list.forEach { e ->
             rows += Row(Marks.title(Catalogs.mark(e.id, e.type), e.name) + if (e.year.isNotEmpty()) " (${e.year})" else "",
                 MetaParse.typeLabel(e.type) + "  ►", opens = { Details.screenFor(e.id, e.type, e.name) },
@@ -42,9 +48,9 @@ object BasketList {
         }
         if (list.isNotEmpty()) {
             rows += Row("────────────────────")
-            rows += Row("Empty the basket", "►", opens = {
-                confirmScreen("Empty the basket?", "Takes all ${list.size} out, on every device.", "Yes, empty it") {
-                    save(emptyList()); App.toast("Basket emptied"); App.back(); App.replaceTop(screen())
+            rows += Row("Clear the basket", "►", opens = {
+                confirmScreen("Clear the basket?", "Takes all ${list.size} out, on every device. Whatever you chose for them stays.", "Yes, clear it") {
+                    save(emptyList()); App.toast("Basket cleared"); App.back(); App.replaceTop(screen())
                 }
             })
         }
@@ -57,7 +63,7 @@ object BasketList {
 /** Ready: films whose stream (or better version) turned up, and new episodes of shows you follow. */
 object Ready {
     private const val EPISODE_DAYS = 30
-    private var askedShows = false
+    private var askedShows = emptySet<String>()
 
     private fun gone() = ReadyNotice.readSeen(Prefs.readyGone)
     private fun dismiss(id: String) { Prefs.readyGone = ReadyNotice.writeSeen(gone(), listOf(id)) }
@@ -105,7 +111,11 @@ object Ready {
             }
         }
         val s = Screen("Ready", rows)
-        s.onShow = { if (!askedShows && NewEpisodes.shows().isEmpty()) { askedShows = true; NewEpisodes.load { if (App.top()?.title == "Ready") App.replaceTop(screen()) } } }
+        s.onShow = {
+            val missing = Waiting.following().map { it.first }.filter { id -> NewEpisodes.shows().none { it.id == id } }.toSet()
+            // Ask once for each show missing (a redrawn screen mustn't ask again: load can answer at once).
+            if (missing.isNotEmpty() && !askedShows.containsAll(missing)) { askedShows = askedShows + missing; NewEpisodes.load(force = true) { if (App.top()?.title == "Ready") App.replaceTop(screen()) } }
+        }
         return s
     }
 

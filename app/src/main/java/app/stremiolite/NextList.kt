@@ -12,7 +12,7 @@ object NextList {
         return { id -> if (':' in id) History.progress(c, id) != null else m[id] == Marks.WATCHED || m[id] == Marks.CONTINUE }
     }
 
-    fun add(c: Context, e: NextWatch.Entry) { save(c, NextWatch.added(NextWatch.parse(raw(c)), e)); BasketList.done(c, e.id) }
+    fun add(c: Context, e: NextWatch.Entry) { save(c, NextWatch.added(NextWatch.parse(raw(c)), e)) }
 
     /** Opens an episode put in Next watch (its show's details are fetched first). */
     private fun openEpisode(app: MainActivity, e: NextWatch.Entry, play: Boolean = false) {

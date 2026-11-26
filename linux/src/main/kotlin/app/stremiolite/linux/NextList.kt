@@ -24,7 +24,7 @@ object NextList {
 
     fun ids(): Set<String> = NextWatch.parse(raw()).mapTo(HashSet()) { it.id }
 
-    fun add(e: NextWatch.Entry) { save(NextWatch.added(NextWatch.parse(raw()), e)); BasketList.done(e.id) }
+    fun add(e: NextWatch.Entry) { save(NextWatch.added(NextWatch.parse(raw()), e)) }
 
     private fun openEpisode(e: NextWatch.Entry, play: Boolean = false) {
         App.async({ MetaParse.fetch(Home.all(), "series", e.show) }) { r ->

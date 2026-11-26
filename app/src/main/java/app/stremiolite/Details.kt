@@ -191,7 +191,6 @@ object Details {
                     app.toast("Stopped following ${f.name}")
                 } else {
                     Follow.follow(app, f.id, f.name)
-                    BasketList.done(app, f.id)
                     Waiting.askToNotify(app)
                     app.toast("Following ${f.name}: you'll be told when new episodes play")
                 }
@@ -227,7 +226,6 @@ object Details {
                                 Waiting.askToNotify(app)
                                 app.toast("Not out to stream yet ($note): added to Waiting")
                             }
-                            BasketList.done(app, f.id)
                             wait.label = waitLabel(); app.refreshTop()
                         }
                     }
@@ -246,7 +244,6 @@ object Details {
                 } else {
                     app.toast("Checking what's there now…")
                     Waiting.addBetter(app, f.id, f.type, f.name, f.year) { have ->
-                        BasketList.done(app, f.id)
                         app.toast("I'll tell you when something better than $have appears")
                         better.label = betterLabel(); wait.label = waitLabel(); app.refreshTop()
                     }

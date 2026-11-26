@@ -17,8 +17,14 @@ object BasketList {
 
     fun add(c: Context, e: NextWatch.Entry) = save(c, NextWatch.added(all(c), e))
 
-    /** You've decided about it: out of the basket (nothing happens if it wasn't there). */
+    /** Out of the basket (only when you take it out: choosing something for it leaves it here to review). */
     fun done(c: Context, id: String) { if (has(c, id)) save(c, NextWatch.removed(all(c), id)) }
+
+    /** Play on a title in a list: in or out of the basket. */
+    fun toggle(app: MainActivity, id: String, type: String, name: String, year: String) {
+        if (has(app, id)) { done(app, id); app.toast("Taken out of the basket: $name") }
+        else { add(app, NextWatch.Entry(id, type, name, year)); app.toast("In the basket: $name") }
+    }
 
     fun summary(c: Context): String = all(c).size.let { if (it == 0) "empty" else "$it  ►" }
 
@@ -40,7 +46,7 @@ object BasketList {
             val list = all(app)
             if (list.isEmpty()) return listOf(Row("Empty. While browsing, choose 'Add to basket' on anything you like the look of."))
             val marks = History.marks(app)
-            val rows = mutableListOf(Row("Open one to choose: Next watch, Favourites, or tell me when it's ready."))
+            val rows = mutableListOf(Row("Open one to choose: Next watch, Favourites, or tell me when it's ready. It stays here until you take it out."))
             list.forEach { e ->
                 rows += Row(Marks.title(marks[e.id], e.name) + if (e.year.isNotEmpty()) " (${e.year})" else "",
                     Catalogs.typeLabel(e.type).removeSuffix("s") + "  ►",
@@ -48,9 +54,9 @@ object BasketList {
                     play = { Details.screenFor(app, e.id, e.type, e.name, e.year, autoPlay = true)?.let { app.push(it) } })
             }
             rows += Row("────────────────────")
-            rows += Row("Empty the basket", "►", opens = {
-                confirmScreen(app, "Empty the basket?", "Takes all ${list.size} out, on every device.", "Yes, empty it") {
-                    save(app, emptyList()); app.toast("Basket emptied"); app.back()
+            rows += Row("Clear the basket", "►", opens = {
+                confirmScreen(app, "Clear the basket?", "Takes all ${list.size} out, on every device. Whatever you chose for them (Next watch, Waiting) stays.", "Yes, clear it") {
+                    save(app, emptyList()); app.toast("Basket cleared"); app.back()
                 }
             })
             return rows

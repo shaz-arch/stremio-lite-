@@ -460,16 +460,17 @@ object Catalogs {
         val w = Waiting.list().firstOrNull { it.id == id }
         return Marks.pick(
             watched = type == "movie" && Lib.filmWatched(id), continuing = info?.continuing == true,
-            ready = w != null && w.ready > 0, better = w != null && w.better, waiting = w != null,
+            ready = w != null && w.ready > 0, better = w != null && w.better, waiting = w != null || Follow.followsFilm(id),
             library = info?.inLibrary == true, next = NextList.has(id),
-            following = Follow.followsFilm(id) || (type == "series" && Follow.isFollowed(id)),
+            following = type == "series" && Follow.isFollowed(id), basket = BasketList.has(id),
         )
     }
 
     fun row(a: Addon?, m: Meta): Row = Row(
         Marks.title(mark(m), m.name), detail(m),
         opens = { Details.screen(a, m) },
-        play = { App.push(Details.screen(a, m, autoPlay = true)) },
+        // p (Play) puts a title in the basket while browsing; Enter opens it.
+        play = { BasketList.toggle(m.id, m.type, m.name, m.year) },
     )
 
     fun screen(a: Addon, c: Addon.Catalog, title: String = c.name): Screen {
@@ -783,7 +784,7 @@ object Details {
             fun folLabel() = if (Follow.isFollowed(f.id)) "Following new episodes and seasons ✓ (stop)" else "Tell me about new episodes and seasons"
             fol = Row(folLabel(), action = {
                 if (Follow.isFollowed(f.id)) { Follow.unfollow(f.id); App.toast("Stopped following ${f.name}") }
-                else { Follow.follow(f.id, f.name); BasketList.done(f.id); App.toast("Following ${f.name}: your phone tells you when new episodes play") }
+                else { Follow.follow(f.id, f.name); App.toast("Following ${f.name}: your phone tells you when new episodes play") }
                 fol.label = folLabel()
                 App.refresh()
             })
@@ -810,7 +811,6 @@ object Details {
                         App.toast("Checking…")
                         App.async({ app.stremiolite.FilmOut.check(Home.all(), Prefs.tmdbKey, Prefs.watchRegion, f.id) }) { r ->
                             val (out, note) = r.getOrDefault(true to "")
-                            BasketList.done(f.id)
                             if (out) Waiting.add(f.id, f.type, f.name, f.year)
                             else {
                                 Follow.followFilms(listOf(app.stremiolite.Following.Film(f.id, f.name, f.year, note)))
@@ -832,7 +832,6 @@ object Details {
                 else {
                     App.toast("Checking what's there now…")
                     Waiting.addBetter(f.id, f.type, f.name, f.year) { have ->
-                        BasketList.done(f.id)
                         App.toast("Your phone will tell you when something better than $have appears", 8_000)
                         better.label = betterLabel(); wait.label = label(); App.refresh()
                     }
@@ -1201,7 +1200,7 @@ object Waiting {
 
     /** The same followed list New episodes and the Calendar use (with your list rows). */
     fun following() = NewEpisodes.followedNow()
-    private var askedShows = false
+    private var askedShows = emptySet<String>()
 
     fun summary(): String {
         val films = current().count { it.ready == 0L } + Follow.films().size
@@ -1253,7 +1252,7 @@ object Waiting {
         val now = current()
         fun filmLabel(e: Entry) = Marks.title(if (e.better) Marks.BETTER else Marks.WAITING, e.name) + if (e.year.isNotEmpty()) " (${e.year})" else ""
         val notOut = Follow.films()
-        val plain = now.filter { !it.better && it.ready == 0L }
+        val plain = now.filter { !it.better && it.ready == 0L && notOut.none { n -> n.id == it.id } }
         rows += Row("──── Films: waiting for a stream ────")
         if (plain.isEmpty() && notOut.isEmpty()) rows += Row("None. On a film, choose 'Tell me when a stream is available'.")
         plain.sortedBy { it.name }.forEach { e -> rows += Row(filmLabel(e), "no stream yet  ►", opens = { Details.screenFor(e.id, e.type, e.name) }) }
@@ -1268,11 +1267,15 @@ object Waiting {
         val shows = shownShows().filter { !F.ended(it) }
         val (season, episodes) = shows.partition { sh -> R.upcoming(sh, 3650).firstOrNull()?.let { it.episode == 1 } ?: true }
         fun showRow(sh: Full) = Row(Marks.title(Marks.FOLLOWING, sh.name), F.nextText(sh) + "  ►", opens = { Details.screenFor(sh.id, "series", sh.name) })
-        val loadingShows = NewEpisodes.shows().isEmpty() && following().isNotEmpty()
+        val loadingShows = NewEpisodes.isLoading()
+        val unknown = following().filter { (id, _) -> NewEpisodes.shows().none { it.id == id } }
         rows += Row("──── Shows: waiting for a new season ────")
         if (loadingShows) rows += Row("Checking the shows you follow…")
-        else if (season.isEmpty()) rows += Row("None. On a show, choose 'Tell me about new episodes and seasons'.")
+        else if (season.isEmpty() && unknown.isEmpty()) rows += Row("None. On a show, choose 'Tell me about new episodes and seasons'.")
         season.sortedBy { it.name }.forEach { rows += showRow(it) }
+        if (!loadingShows) unknown.sortedBy { it.second }.forEach { (id, name) ->
+            rows += Row(Marks.title(Marks.FOLLOWING, name), "couldn't load its dates yet  ►", opens = { Details.screenFor(id, "series", name) })
+        }
         rows += Row("──── Shows: waiting for new episodes ────")
         if (!loadingShows && episodes.isEmpty()) rows += Row("None right now.")
         episodes.sortedBy { R.upcoming(it, 3650).firstOrNull()?.released ?: "9" }.forEach { rows += showRow(it) }
@@ -1295,7 +1298,9 @@ object Waiting {
                 if (App.top()?.title == "Waiting") App.replaceTop(screen())
             }
             // Once per run: the redrawn screen must not ask again (load can answer at once).
-            if (!askedShows && NewEpisodes.shows().isEmpty()) { askedShows = true; NewEpisodes.load { if (App.top()?.title == "Waiting") App.replaceTop(screen()) } }
+            val missing = following().map { it.first }.filter { id -> NewEpisodes.shows().none { it.id == id } }.toSet()
+            // Ask once for each show missing (a redrawn screen mustn't ask again: load can answer at once).
+            if (missing.isNotEmpty() && !askedShows.containsAll(missing)) { askedShows = askedShows + missing; NewEpisodes.load(force = true) { if (App.top()?.title == "Waiting") App.replaceTop(screen()) } }
             checkFollowedFilms { if (App.top()?.title == "Waiting") App.replaceTop(screen()) }
         }
         return s

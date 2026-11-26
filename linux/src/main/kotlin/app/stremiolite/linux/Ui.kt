@@ -377,7 +377,7 @@ object App {
             }
             else -> {
                 g.foregroundColor = t.dim
-                g.putString(left, h - 1, fit("↑↓ move  Enter open  p play  ←→ page  Esc back  / search  q quit", inner - width(clock) - 2))
+                g.putString(left, h - 1, fit("↑↓ move  Enter open  p play/basket  ←→ page  Esc back  / search  q quit", inner - width(clock) - 2))
             }
         }
         if (p == null && clock.isNotEmpty()) {
