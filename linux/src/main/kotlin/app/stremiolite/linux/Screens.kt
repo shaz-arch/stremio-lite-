@@ -1589,11 +1589,10 @@ object NewEpisodes {
     }
 
     private fun calendarFilms(): List<app.stremiolite.FilmDates.Film> {
-        val F = app.stremiolite.FilmDates
-        return (Waiting.list().filter { it.type == "movie" }.map { F.Film(it.id, it.name, it.year) } +
-            Follow.films().map { F.Film(it.id, it.name, it.year) } +
-            NextList.all().filter { it.type == "movie" }.map { F.Film(it.id, it.name, it.year) } +
-            BasketList.all().filter { it.type == "movie" }.map { F.Film(it.id, it.name, it.year) }).distinctBy { it.id }
+        return (Waiting.list().filter { it.type == "movie" }.map { app.stremiolite.FilmDates.Film(it.id, it.name, it.year) } +
+            Follow.films().map { app.stremiolite.FilmDates.Film(it.id, it.name, it.year) } +
+            NextList.all().filter { it.type == "movie" }.map { app.stremiolite.FilmDates.Film(it.id, it.name, it.year) } +
+            BasketList.all().filter { it.type == "movie" }.map { app.stremiolite.FilmDates.Film(it.id, it.name, it.year) }).distinctBy { it.id }
     }
 
     /** Episodes of shows you follow and dates of films you care about, next 30 days, by day. */
