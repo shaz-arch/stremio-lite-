@@ -1147,12 +1147,12 @@ object Waiting {
     fun follow(films: List<app.stremiolite.NextWatch.Entry>) {
         val NS = app.stremiolite.NextStatus
         val movies = films.filter { it.type == "movie" }
-        val soon = movies.filter { NS.of(it.id)?.group == NS.Group.SOON }
+        val soon = movies.filter { NS.of(it.id)?.group == app.stremiolite.NextStatus.Group.SOON }
         val have = list()
         val followed = Follow.films().map { it.id }.toSet()
         Follow.followFilms(soon.filter { it.id !in followed }.map { app.stremiolite.Following.Film(it.id, it.name, it.year, NS.of(it.id)?.detail.orEmpty()) })
         val kept = have.filter { e -> e.better || soon.none { it.id == e.id } }
-        val add = (movies - soon.toSet()).filter { f -> NS.of(f.id)?.group == NS.Group.WAITING && kept.none { it.id == f.id } && f.id !in followed }
+        val add = (movies - soon.toSet()).filter { f -> NS.of(f.id)?.group == app.stremiolite.NextStatus.Group.WAITING && kept.none { it.id == f.id } && f.id !in followed }
         if (add.isNotEmpty() || kept.size != have.size) save(kept + add.map { Entry(it.id, it.type, it.name, it.year, 0) })
     }
 
