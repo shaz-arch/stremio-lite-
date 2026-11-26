@@ -57,6 +57,7 @@ object BasketList {
 /** Ready: films whose stream (or better version) turned up, and new episodes of shows you follow. */
 object Ready {
     private const val EPISODE_DAYS = 30
+    private var askedShows = false
 
     private fun gone() = ReadyNotice.readSeen(Prefs.readyGone)
     private fun dismiss(id: String) { Prefs.readyGone = ReadyNotice.writeSeen(gone(), listOf(id)) }
@@ -104,8 +105,7 @@ object Ready {
             }
         }
         val s = Screen("Ready", rows)
-        var loaded = false
-        s.onShow = { if (!loaded) { loaded = true; if (NewEpisodes.shows().isEmpty()) NewEpisodes.load { if (App.top()?.title == "Ready") App.replaceTop(screen()) } } }
+        s.onShow = { if (!askedShows && NewEpisodes.shows().isEmpty()) { askedShows = true; NewEpisodes.load { if (App.top()?.title == "Ready") App.replaceTop(screen()) } } }
         return s
     }
 

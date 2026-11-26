@@ -1201,6 +1201,7 @@ object Waiting {
 
     /** The same followed list New episodes and the Calendar use (with your list rows). */
     fun following() = NewEpisodes.followedNow()
+    private var askedShows = false
 
     fun summary(): String {
         val films = current().count { it.ready == 0L } + Follow.films().size
@@ -1289,12 +1290,12 @@ object Waiting {
             }
         })
         val s = Screen("Waiting", rows)
-        var loaded = false
         s.onShow = {
             if (System.currentTimeMillis() - Lib.lastPull > 15_000) Lib.pull(force = true) {
                 if (App.top()?.title == "Waiting") App.replaceTop(screen())
             }
-            if (!loaded) { loaded = true; if (NewEpisodes.shows().isEmpty()) NewEpisodes.load { if (App.top()?.title == "Waiting") App.replaceTop(screen()) } }
+            // Once per run: the redrawn screen must not ask again (load can answer at once).
+            if (!askedShows && NewEpisodes.shows().isEmpty()) { askedShows = true; NewEpisodes.load { if (App.top()?.title == "Waiting") App.replaceTop(screen()) } }
             checkFollowedFilms { if (App.top()?.title == "Waiting") App.replaceTop(screen()) }
         }
         return s
