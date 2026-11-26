@@ -126,11 +126,12 @@ object Home {
             ) + (if (KidsGuard.hides(app)) emptyList() else listOf(search)) + listOf(
                 Row("Continue watching", if (cw.isEmpty()) "nothing yet" else "${cw.size}  ►", opens = { continueScreen(app) }),
                 Row("Next watch", NextList.summary(app), opens = { NextList.screen(app) }),
-                Row("Library", if (lib.isEmpty()) "empty" else "${lib.size}  ►", opens = { libraryScreen(app) }),
+                Row("Favourites", if (lib.isEmpty()) "empty" else "${lib.size}  ►", opens = { libraryScreen(app) }),
                 Row("New episodes", NewEpisodes.recentCount()?.let { if (it == 0) "none  ►" else "$it  ►" } ?: "", opens = { NewEpisodes.screen(app) }),
                 Row("Calendar", NewEpisodes.weekCount()?.let { if (it == 0) "nothing this week  ►" else "$it this week  ►" } ?: "", opens = { NewEpisodes.calendar(app) }),
                 Row("Watched", History.watched(app).size.let { if (it == 0) "" else "$it  ►" }, opens = { watchedScreen(app) }),
-                Row("Waiting for streams", Waiting.summary(app), opens = { Waiting.screen(app) }),
+                Row("Waiting", Waiting.summary(app), opens = { Waiting.screen(app) }),
+                Row("Following", Waiting.followingSummary(app), opens = { Waiting.followingScreen(app) }),
             ) + (if (Settings.liveTv(app) && !KidsGuard.hides(app)) listOf(Row("Live TV", Live.homeDetail(app), opens = { Live.screen(app) })) else emptyList()) + listOf(
                 Row("──── Browse ────"),
             ))
@@ -273,21 +274,21 @@ object Home {
         lateinit var screen: Screen
         fun build(): List<Row> {
             val list = History.library(app)
-            if (list.isEmpty()) return listOf(Row("Empty. Use \"Add to library\" on any film or show."))
+            if (list.isEmpty()) return listOf(Row("Empty. Use \"Add to favourites\" on any film or show."))
             return list.map { s ->
                 Row(s.name, listOf(s.year, Catalogs.typeLabel(s.type).removeSuffix("s")).filter { it.isNotBlank() }.joinToString("  "), opens = {
                     Details.screenFor(app, s.id, s.type, s.name, s.year) ?: Screen(s.name, listOf(Row("Your add-ons are still loading. Try again in a moment.")))
                 }, play = { Details.screenFor(app, s.id, s.type, s.name, s.year, autoPlay = true)?.let { app.push(it) } })
             } + listOf(
                 Row("────────────────────"),
-                Row("Clear Library", "►", opens = {
-                    confirmScreen(app, "Clear Library?", "Removes all ${list.size} from your Library on every device. History and watched marks stay.", "Yes, clear all ${list.size}") {
-                        History.clearLibrary(app); app.toast("Library cleared"); app.back()
+                Row("Clear Favourites", "►", opens = {
+                    confirmScreen(app, "Clear Favourites?", "Removes all ${list.size} from your Favourites on every device (Stremio's own apps call it the Library). History and watched marks stay.", "Yes, clear all ${list.size}") {
+                        History.clearLibrary(app); app.toast("Favourites cleared"); app.back()
                     }
                 }),
             )
         }
-        screen = Screen("Library", build())
+        screen = Screen("Favourites", build())
         screen.onShow = {
             screen.rows = build(); app.refresh(screen)
             History.pull(app) { screen.rows = build(); app.refresh(screen) }

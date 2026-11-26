@@ -134,13 +134,14 @@ object History {
         val saved = library.mapTo(HashSet()) { it.id }
         val waits = runCatching { Waiting.list(c) }.getOrDefault(emptyList()).associateBy { it.id }
         val next = NextWatch.parse(remote[NextWatch.ID]).mapTo(HashSet()) { it.id }
+        val followed = runCatching { Follow.shows(c).map { it.first } + Follow.films(c).map { it.id } }.getOrDefault(emptyList()).toHashSet()
         val m = HashMap<String, String>()
-        for (id in watched + continuing + saved + waits.keys + next) {
+        for (id in watched + continuing + saved + waits.keys + next + followed) {
             val w = waits[id]
             Marks.pick(
                 watched = id in watched, continuing = id in continuing,
                 ready = w != null && w.ready > 0, better = w != null && w.better, waiting = w != null,
-                library = id in saved, next = id in next,
+                library = id in saved, next = id in next, following = id in followed,
             )?.let { m[id] = it }
         }
         marks = m

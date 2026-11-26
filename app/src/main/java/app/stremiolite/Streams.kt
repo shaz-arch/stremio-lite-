@@ -339,7 +339,7 @@ object Streams {
                 val r = rows().toMutableList()
                 if (type == "movie" && !Waiting.has(app, id)) r.add(1, Row("Tell me when a stream is available", action = {
                     Waiting.add(app, Waiting.Entry(id, type, title, "", 0))
-                    app.toast("Added to Waiting for streams")
+                    app.toast("Added to Waiting")
                     app.back()
                 }))
                 screen.rows = r

@@ -172,10 +172,10 @@ object Details {
     private fun libraryRows(app: MainActivity, f: Full): List<Row> {
         val rows = mutableListOf<Row>()
         lateinit var lib: Row
-        lib = Row(if (History.inLibrary(app, f.id)) "Remove from library" else "Add to library", action = {
+        lib = Row(if (History.inLibrary(app, f.id)) "♡ Remove from favourites" else "Add to favourites", action = {
             val added = History.toggleLibrary(app, History.Saved(f.id, f.type, f.name, f.year))
-            lib.label = if (added) "Remove from library" else "Add to library"
-            app.toast(if (added) "Added to library" else "Removed from library")
+            lib.label = if (added) "♡ Remove from favourites" else "Add to favourites"
+            app.toast(if (added) "Added to favourites" + (if (f.type == "series") ": following new episodes" else "") else "Removed from favourites")
             app.refreshTop()
         })
         rows += lib
@@ -205,10 +205,30 @@ object Details {
         })
         if (f.type == "movie") {
             lateinit var wait: Row
-            fun waitLabel() = if (Waiting.has(app, f.id)) "Stop waiting for a stream" else "Tell me when a stream is available"
+            fun waitLabel() = when {
+                Follow.followsFilm(app, f.id) -> "Following until it's out to stream ✓ (stop)"
+                Waiting.has(app, f.id) -> "Stop waiting for a stream"
+                else -> "Tell me when a stream is available"
+            }
             wait = Row(waitLabel(), action = {
-                if (Waiting.has(app, f.id)) { Waiting.remove(app, f.id); app.toast("Removed from Waiting for streams") }
-                else { Waiting.add(app, Waiting.Entry(f.id, f.type, f.name, f.year, 0)); app.toast("Added to Waiting for streams") }
+                when {
+                    Follow.followsFilm(app, f.id) -> { Follow.unfollowFilms(app, listOf(f.id)); app.toast("Stopped following ${f.name}") }
+                    Waiting.has(app, f.id) -> { Waiting.remove(app, f.id); app.toast("Removed from Waiting") }
+                    else -> {
+                        // Not out to stream yet: it's followed until it is, then waits for a good stream.
+                        app.toast("Checking…")
+                        Net.async({ FilmOut.check(Home.allAddons(), Settings.tmdbKey(app), Settings.watchRegion(app), f.id) }) { r ->
+                            val (out, note) = r.getOrDefault(true to "")
+                            if (out) { Waiting.add(app, Waiting.Entry(f.id, f.type, f.name, f.year, 0)); app.toast("Added to Waiting") }
+                            else {
+                                Follow.followFilms(app, listOf(Following.Film(f.id, f.name, f.year, note)))
+                                Waiting.askToNotify(app)
+                                app.toast("Not out to stream yet ($note): added to Following")
+                            }
+                            wait.label = waitLabel(); app.refreshTop()
+                        }
+                    }
+                }
                 wait.label = waitLabel()
                 app.refreshTop()
             })

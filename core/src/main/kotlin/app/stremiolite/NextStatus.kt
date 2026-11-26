@@ -8,7 +8,7 @@ import java.util.concurrent.ConcurrentHashMap
  * remembered for 6 hours.
  */
 object NextStatus {
-    enum class Group(val heading: String) { READY("Ready now"), SOON("Coming soon"), WAITING("Waiting for streams") }
+    enum class Group(val heading: String) { READY("Ready now"), SOON("Coming soon"), WAITING("Waiting") }
 
     /** [key] orders titles inside a group (Coming soon: the date, soonest first). */
     class Status(val group: Group, val detail: String, val key: Long = 0) {

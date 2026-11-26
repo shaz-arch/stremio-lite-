@@ -24,4 +24,18 @@ object Follow {
     fun follow(c: Context, id: String, name: String) = History.putRemote(c, Following.follow(record(c), id, name))
 
     fun unfollow(c: Context, id: String) = History.putRemote(c, Following.unfollow(record(c), id))
+
+    /** Shows you chose to follow yourself (not just because they're favourites or started). */
+    fun chosen(c: Context): Set<String> = Following.read(record(c)).follow.keys
+
+    /** Films followed until they're out to stream. */
+    fun films(c: Context) = Following.films(record(c))
+
+    fun followsFilm(c: Context, id: String) = films(c).any { it.id == id }
+
+    fun followFilms(c: Context, films: List<Following.Film>) { if (films.isNotEmpty()) History.putRemote(c, Following.followFilms(record(c), films)) }
+
+    fun unfollowFilms(c: Context, ids: Collection<String>) { if (ids.isNotEmpty()) History.putRemote(c, Following.unfollowFilms(record(c), ids)) }
+
+    fun raw(c: Context) = record(c)
 }

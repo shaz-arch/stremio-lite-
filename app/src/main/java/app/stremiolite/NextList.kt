@@ -121,7 +121,7 @@ object NextList {
             if (!app.inStack(s)) return
             if (app.playerOpen) { Net.later(10_000) { next(i) }; return }
             if (i >= todo.size) {
-                Waiting.follow(app, all(app).filter { NextStatus.of(it.id)?.group?.let { g -> g != NextStatus.Group.READY } == true })
+                Waiting.follow(app, all(app))
                 return
             }
             Net.async({ NextStatus.check(addons, todo[i], System.currentTimeMillis(), key, region) }) { _ -> if (app.inStack(s)) changed(); next(i + 1) }

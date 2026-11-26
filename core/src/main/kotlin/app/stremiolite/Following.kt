@@ -13,22 +13,29 @@ import org.json.JSONObject
 object Following {
     const val ID = "stremiolite:following"
 
-    class Choices(val follow: Map<String, String>, val unfollow: Set<String>)
+    /** A film followed until it's out to stream; [note] is where and when ("Netflix 23 Dec"). */
+    class Film(val id: String, val name: String, val year: String, val note: String = "")
+
+    class Choices(val follow: Map<String, String>, val unfollow: Set<String>, val films: List<Film> = emptyList())
 
     enum class Section { CAUGHT_UP, WATCHING, NOT_STARTED, FINISHED }
 
     fun read(record: JSONObject?): Choices {
         val o = record?.optString("name")?.let { runCatching { JSONObject(it) }.getOrNull() } ?: return Choices(emptyMap(), emptySet())
+        val films = o.optJSONArray("films")?.let { a ->
+            (0 until a.length()).mapNotNull { a.optJSONObject(it) }.map { Film(it.optString("id"), it.optString("name"), it.optString("year"), it.optString("note")) }
+        }.orEmpty().filter { it.id.isNotEmpty() }
         val follow = LinkedHashMap<String, String>()
         o.optJSONArray("follow")?.let { a -> for (i in 0 until a.length()) a.optJSONObject(i)?.let { follow[it.optString("id")] = it.optString("name") } }
         val unfollow = o.optJSONArray("unfollow")?.let { a -> (0 until a.length()).map { a.optString(it) }.toSet() } ?: emptySet()
-        return Choices(follow, unfollow)
+        return Choices(follow, unfollow, films)
     }
 
     private fun write(record: JSONObject?, c: Choices): JSONObject {
         val o = JSONObject()
             .put("follow", JSONArray(c.follow.map { (id, name) -> JSONObject().put("id", id).put("name", name) }))
             .put("unfollow", JSONArray(c.unfollow.toList()))
+            .put("films", JSONArray(c.films.map { JSONObject().put("id", it.id).put("name", it.name).put("year", it.year).put("note", it.note) }))
         val item = record ?: Sync.newItem(ID, "other", "{}")
         return item.put("name", o.toString()).put("removed", true).put("temp", false).put("_mtime", Sync.iso(System.currentTimeMillis()))
     }
@@ -36,14 +43,34 @@ object Following {
     /** The record after following [id] on purpose (and no longer "stopped"). */
     fun follow(record: JSONObject?, id: String, name: String): JSONObject {
         val c = read(record)
-        return write(record, Choices(c.follow + (id to name), c.unfollow - id))
+        return write(record, Choices(c.follow + (id to name), c.unfollow - id, c.films))
     }
 
     /** The record after stopping following [id] (it stays stopped even if you watch more). */
     fun unfollow(record: JSONObject?, id: String): JSONObject {
         val c = read(record)
-        return write(record, Choices(c.follow - id, c.unfollow + id))
+        return write(record, Choices(c.follow - id, c.unfollow + id, c.films))
     }
+
+    // ---- films not out to stream yet ---------------------------------------------------------
+
+    fun films(record: JSONObject?): List<Film> = read(record).films
+
+    /** The record with [films] followed (new ones added, notes updated). */
+    fun followFilms(record: JSONObject?, films: List<Film>): JSONObject {
+        val c = read(record)
+        val by = LinkedHashMap<String, Film>(); c.films.forEach { by[it.id] = it }
+        films.forEach { f -> by[f.id] = if (f.note.isBlank()) (by[f.id]?.let { Film(f.id, f.name, f.year, it.note) } ?: f) else f }
+        return write(record, Choices(c.follow, c.unfollow, by.values.toList()))
+    }
+
+    fun unfollowFilms(record: JSONObject?, ids: Collection<String>): JSONObject {
+        val c = read(record)
+        return write(record, Choices(c.follow, c.unfollow, c.films.filter { it.id !in ids }))
+    }
+
+    /** Your favourite shows are followed by themselves (unless you've stopped them). */
+    fun favouriteShows(infos: List<LibraryItems.Info>) = infos.filter { it.type == "series" && it.inLibrary }
 
     /** A show counts as started once any episode has been watched or played. */
     fun started(i: LibraryItems.Info) = i.type == "series" &&
@@ -56,7 +83,8 @@ object Following {
     fun shows(infos: List<LibraryItems.Info>, record: JSONObject?, fromLists: List<Pair<String, String>> = emptyList(), autoStarted: Boolean = false): List<Pair<String, String>> {
         val c = read(record)
         val auto = if (!autoStarted) emptyList() else infos.filter { started(it) }.sortedByDescending { it.updated }.map { it.id to it.name }
-        return (auto + c.follow.map { it.key to it.value } + fromLists).distinctBy { it.first }.filter { it.first !in c.unfollow }
+        val favs = favouriteShows(infos).sortedByDescending { it.updated }.map { it.id to it.name }
+        return (auto + favs + c.follow.map { it.key to it.value } + fromLists).distinctBy { it.first }.filter { it.first !in c.unfollow }
     }
 
     /** Shows you've stopped following (kept stopped even if they're in a list row). */
@@ -75,7 +103,7 @@ object Following {
     fun isFollowed(id: String, infos: List<LibraryItems.Info>, record: JSONObject?, autoStarted: Boolean = false): Boolean {
         val c = read(record)
         if (id in c.unfollow) return false
-        return id in c.follow || (autoStarted && infos.any { it.id == id && started(it) })
+        return id in c.follow || c.films.any { it.id == id } || favouriteShows(infos).any { it.id == id } || (autoStarted && infos.any { it.id == id && started(it) })
     }
 
     /** Where a followed show belongs, given its episodes and the ones you've watched. */
