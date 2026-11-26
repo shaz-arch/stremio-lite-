@@ -169,6 +169,58 @@ object GDrive {
         return (direct + inside).distinctBy { it.id }.sortedBy { it.name.lowercase() }
     }
 
+    /** Blocking: changes a picked file (PATCH, sent as POST with an override for old Androids). */
+    private fun patch(access: String, id: String, body: JSONObject) {
+        val c = URL("https://www.googleapis.com/drive/v3/files/${enc(id)}?supportsAllDrives=true").openConnection() as HttpURLConnection
+        try {
+            c.requestMethod = "POST"; c.doOutput = true; c.connectTimeout = 15_000; c.readTimeout = 20_000
+            c.setRequestProperty("X-HTTP-Method-Override", "PATCH")
+            c.setRequestProperty("Authorization", "Bearer $access")
+            c.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            c.outputStream.use { it.write(body.toString().toByteArray()) }
+            val code = c.responseCode
+            if (code >= 400) {
+                val err = c.errorStream?.use { it.readBytes().toString(Charsets.UTF_8) }.orEmpty()
+                throw Failed(runCatching { JSONObject(err).optJSONObject("error")?.optString("message") }.getOrNull() ?: "Drive said $code")
+            }
+        } finally { c.disconnect() }
+    }
+
+    /** Renames the file in your Drive. */
+    fun rename(access: String, id: String, name: String) = patch(access, id, JSONObject().put("name", name))
+
+    /** Moves the file to your Drive's bin (Google keeps it 30 days). */
+    fun trash(access: String, id: String) = patch(access, id, JSONObject().put("trashed", true))
+
+    /**
+     * Groups and hidden videos, kept on your Stremio account (Stremonino only; Drive is untouched),
+     * so every device shows the same arrangement.
+     */
+    object Org {
+        const val ID = "stremiolite:drive"
+        class State(val groups: Map<String, List<String>>, val hidden: Set<String>) {
+            fun groupOf(id: String) = groups.entries.firstOrNull { id in it.value }?.key
+            fun put(id: String, group: String?) = State(
+                groups.mapValues { (_, v) -> v - id }.filterValues { it.isNotEmpty() }.toMutableMap().apply { if (group != null) this[group] = (this[group].orEmpty()) + id },
+                hidden)
+            fun hide(id: String, on: Boolean) = State(groups, if (on) hidden + id else hidden - id)
+        }
+        fun parse(raw: String?): State {
+            val o = raw?.let { runCatching { JSONObject(JSONObject(it).optString("name")) }.getOrNull() } ?: return State(emptyMap(), emptySet())
+            val g = o.optJSONObject("groups")
+            val groups = LinkedHashMap<String, List<String>>()
+            g?.keys()?.forEach { k -> groups[k] = g.optJSONArray(k)?.let { a -> (0 until a.length()).map { a.optString(it) } }.orEmpty() }
+            val h = o.optJSONArray("hidden")?.let { a -> (0 until a.length()).map { a.optString(it) }.toSet() }.orEmpty()
+            return State(groups, h)
+        }
+        fun record(base: String?, s: State): JSONObject {
+            val item = base?.let { runCatching { JSONObject(it) }.getOrNull() } ?: Sync.newItem(ID, "other", "{}")
+            val g = JSONObject(); s.groups.forEach { (k, v) -> g.put(k, org.json.JSONArray(v)) }
+            return item.put("name", JSONObject().put("groups", g).put("hidden", org.json.JSONArray(s.hidden.toList())).toString())
+                .put("removed", true).put("temp", false).put("_mtime", Sync.iso(System.currentTimeMillis()))
+        }
+    }
+
     fun nice(f: File): String {
         val parts = mutableListOf<String>()
         if (f.durationMs > 0) parts += "${f.durationMs / 60_000} min"

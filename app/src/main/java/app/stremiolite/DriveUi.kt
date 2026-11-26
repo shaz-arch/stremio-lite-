@@ -54,7 +54,8 @@ object DriveUi {
     }
 
     private fun pickScreen(app: MainActivity, first: Boolean) = Screen(if (first) "Connect Google Drive" else "Pick more videos", listOf(
-        Row("Google's own picker opens. Tick the videos you want in Stremonino (home movies, say)."),
+        Row("Google's own picker opens. Tick the videos you want in Stremonino (home movies, say): you can tick many at once."),
+        Row("Pick the videos themselves: Google doesn't let apps see inside a picked folder. You can group them here afterwards."),
         Row("Stremonino only ever sees the files you pick, nothing else in your Drive."),
         Row("────────────────────"),
         Row(if (first) "Sign in and pick videos" else "Open the picker", "►", action = { openPicker(app) }),
@@ -110,12 +111,30 @@ object DriveUi {
         return s
     }
 
-    // ---- the videos ----------------------------------------------------------------------------
+    // ---- the videos: groups (yours, kept on the account), hidden ones, and changes to Drive ------
 
-    fun screen(app: MainActivity): Screen {
+    private var files: List<GDrive.File> = emptyList()
+
+    private fun org(c: Context) = GDrive.Org.parse(History.rawRemote(c, GDrive.Org.ID))
+    private fun saveOrg(c: Context, s: GDrive.Org.State) = History.putRemote(c, GDrive.Org.record(History.rawRemote(c, GDrive.Org.ID), s))
+
+    private fun ask(app: MainActivity, title: String, initial: String, done: (String) -> Unit) {
+        val input = android.widget.EditText(app).apply { setText(initial); setSingleLine(); setSelection(initial.length) }
+        android.app.AlertDialog.Builder(app).setTitle(title).setView(input)
+            .setPositiveButton("OK") { _, _ -> input.text.toString().trim().takeIf { it.isNotEmpty() }?.let(done) }
+            .setNegativeButton("Cancel", null).show()
+    }
+
+    private fun play(app: MainActivity, f: GDrive.File) = Player.play(app, bridge(app).url(f.id, f.name), f.name.substringBeforeLast('.'))
+
+    private fun videoRow(app: MainActivity, f: GDrive.File) =
+        Row(f.name.substringBeforeLast('.'), GDrive.nice(f) + "  ►", opens = { videoScreen(app, f) }, play = { play(app, f) })
+
+    /** [group]: one group's videos; [hidden]: the hidden ones; neither: everything. */
+    fun screen(app: MainActivity, group: String? = null, hidden: Boolean = false): Screen {
         val status = Row("Getting your videos…")
         lateinit var s: Screen
-        fun tools(): List<Row> = listOf(
+        fun tools(): List<Row> = if (group != null || hidden) emptyList() else listOf(
             Row("────────────────────"),
             if (app.isPhone) Row("Pick more videos", "►", opens = { pickScreen(app, first = false) })
             else Row("Pick more on your phone: Stremonino › My Drive videos › Pick more videos."),
@@ -124,21 +143,86 @@ object DriveUi {
                 app.toast("Disconnected from Google Drive"); app.back(); Home.redraw()
             }),
         )
-        s = Screen("My Drive videos", listOf(status) + tools())
+        fun build(): List<Row> {
+            val o = org(app)
+            val shown = files.filter { (it.id in o.hidden) == hidden }
+            val rows = mutableListOf<Row>()
+            when {
+                hidden -> shown.forEach { rows += videoRow(app, it) }
+                group != null -> shown.filter { o.groupOf(it.id) == group }.forEach { rows += videoRow(app, it) }
+                else -> {
+                    o.groups.keys.sortedBy { it.lowercase() }.forEach { g ->
+                        val n = shown.count { o.groupOf(it.id) == g }
+                        if (n > 0) rows += Row("▸ $g", "$n  ►", opens = { screen(app, group = g) })
+                    }
+                    shown.filter { o.groupOf(it.id) == null }.forEach { rows += videoRow(app, it) }
+                    if (files.isNotEmpty() && shown.isEmpty()) rows += Row("Every video is hidden.")
+                    if (files.isEmpty()) rows += Row("No videos picked yet." + if (app.isPhone) " Use 'Pick more videos' below." else " Pick some on your phone.")
+                    val h = files.count { it.id in o.hidden }
+                    if (h > 0) rows += Row("Hidden videos", "$h  ►", opens = { screen(app, hidden = true) })
+                }
+            }
+            if (rows.isEmpty()) rows += Row("Nothing here now.")
+            return rows + tools()
+        }
+        s = Screen(when { hidden -> "Hidden Drive videos"; group != null -> group; else -> "My Drive videos" }, listOf(status) + tools())
         s.onShow = {
-            Net.async({ GDrive.videos(token(app)) }) { r ->
-                r.onSuccess { list ->
-                    val b = bridge(app)
-                    s.rows = (if (list.isEmpty()) listOf(Row("No videos picked yet." + if (app.isPhone) " Use 'Pick more videos' below." else " Pick some on your phone."))
-                    else list.map { f ->
-                        Row(f.name, GDrive.nice(f) + "  ►", action = { Player.play(app, b.url(f.id, f.name), f.name.substringBeforeLast('.')) },
-                            play = { Player.play(app, b.url(f.id, f.name), f.name.substringBeforeLast('.')) })
-                    }) + tools()
-                }.onFailure { status.label = "Couldn't get your videos: ${it.message}"; s.rows = listOf(status) + tools() }
+            if (group != null || hidden) { s.rows = build(); app.refresh(s) }
+            else Net.async({ GDrive.videos(token(app)) }) { r ->
+                r.onSuccess { list -> files = list; s.rows = build() }
+                    .onFailure { status.label = "Couldn't get your videos: ${it.message}"; s.rows = listOf(status) + tools() }
                 if (app.isTop(s)) app.refresh(s)
             }
         }
         return s
+    }
+
+    /** One video: play it, rename it, put it in a group, hide it, or bin it. */
+    private fun videoScreen(app: MainActivity, f: GDrive.File): Screen {
+        lateinit var s: Screen
+        fun build(): List<Row> {
+            val o = org(app)
+            val g = o.groupOf(f.id)
+            return listOf(
+                Row(f.name), Row(listOfNotNull(GDrive.nice(f).ifEmpty { null }, g?.let { "in: $it" }).joinToString(" · ")),
+                Row("────────────────────"),
+                Row("Play", "►", action = { play(app, f) }),
+                Row(if (g == null) "Put in a group" else "Move to another group", "►", opens = { groupPick(app, f) }),
+                Row("Rename (in your Drive)", action = {
+                    ask(app, "New name", f.name) { name ->
+                        Net.async({ GDrive.rename(token(app), f.id, name) }) { r ->
+                            r.onSuccess { files = files.map { x -> if (x.id == f.id) GDrive.File(x.id, name, x.size, x.durationMs, x.folder) else x }; app.toast("Renamed"); app.back() }
+                                .onFailure { app.toast("Couldn't rename: ${it.message}") }
+                        }
+                    }
+                }),
+                Row(if (f.id in o.hidden) "Show it again" else "Hide from Stremonino (stays in your Drive)", action = {
+                    saveOrg(app, org(app).hide(f.id, f.id !in org(app).hidden)); app.toast(if (f.id in org(app).hidden) "Hidden" else "Shown again"); app.back()
+                }),
+                Row("Move to your Drive's bin", "►", opens = {
+                    confirmScreen(app, "Move to the bin?", "\"${f.name}\" goes to your Google Drive bin. Google keeps it there for 30 days, so you can restore it from drive.google.com.", "Yes, move it to the bin") {
+                        Net.async({ GDrive.trash(token(app), f.id) }) { r ->
+                            r.onSuccess { files = files.filter { it.id != f.id }; saveOrg(app, org(app).put(f.id, null).hide(f.id, false)); app.toast("Moved to the bin"); app.back(); app.back() }
+                                .onFailure { app.toast("Couldn't: ${it.message}") }
+                        }
+                    }
+                }),
+            )
+        }
+        s = Screen(f.name.substringBeforeLast('.'), build())
+        s.onShow = { s.rows = build(); app.refresh(s) }
+        return s
+    }
+
+    private fun groupPick(app: MainActivity, f: GDrive.File): Screen {
+        val o = org(app)
+        val rows = mutableListOf<Row>()
+        o.groups.keys.sortedBy { it.lowercase() }.forEach { g ->
+            rows += Row(g, if (o.groupOf(f.id) == g) "✓" else "", action = { saveOrg(app, org(app).put(f.id, g)); app.toast("In $g"); app.back() })
+        }
+        rows += Row("New group…", action = { ask(app, "Group name (e.g. Holiday 2025)", "") { g -> saveOrg(app, org(app).put(f.id, g)); app.toast("In $g"); app.back() } })
+        if (o.groupOf(f.id) != null) rows += Row("Not in a group", action = { saveOrg(app, org(app).put(f.id, null)); app.toast("Out of the group"); app.back() })
+        return Screen("Put in a group", rows)
     }
 }
 
