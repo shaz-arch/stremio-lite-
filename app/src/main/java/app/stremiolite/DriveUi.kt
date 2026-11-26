@@ -66,6 +66,10 @@ object DriveUi {
         if (uri == null || uri.scheme != GDrive.ANDROID_SCHEME) return
         uri.getQueryParameter("error")?.let { app.toast("Google Drive: $it"); return }
         val code = uri.getQueryParameter("code") ?: return
+        // Picking a removed video again brings it back.
+        uri.getQueryParameter("picked_file_ids")?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.let { ids ->
+            var st = org(app); ids.forEach { st = st.hide(it, false) }; saveOrg(app, st)
+        }
         val verifier = prefs(app).getString("gdriveVerifier", "").orEmpty()
         app.toast("Connecting Google Drive…")
         Net.async({ GDrive.exchange(GDrive.ANDROID_ID, code, verifier, GDrive.ANDROID_REDIRECT) }) { r ->
@@ -156,16 +160,16 @@ object DriveUi {
                         if (n > 0) rows += Row("▸ $g", "$n  ►", opens = { screen(app, group = g) })
                     }
                     shown.filter { o.groupOf(it.id) == null }.forEach { rows += videoRow(app, it) }
-                    if (files.isNotEmpty() && shown.isEmpty()) rows += Row("Every video is hidden.")
+                    if (files.isNotEmpty() && shown.isEmpty()) rows += Row("Every video has been removed from Stremonino.")
                     if (files.isEmpty()) rows += Row("No videos picked yet." + if (app.isPhone) " Use 'Pick more videos' below." else " Pick some on your phone.")
                     val h = files.count { it.id in o.hidden }
-                    if (h > 0) rows += Row("Hidden videos", "$h  ►", opens = { screen(app, hidden = true) })
+                    if (h > 0) rows += Row("Removed videos", "$h  ►", opens = { screen(app, hidden = true) })
                 }
             }
             if (rows.isEmpty()) rows += Row("Nothing here now.")
             return rows + tools()
         }
-        s = Screen(when { hidden -> "Hidden Drive videos"; group != null -> group; else -> "My Drive videos" }, listOf(status) + tools())
+        s = Screen(when { hidden -> "Removed Drive videos"; group != null -> group; else -> "My Drive videos" }, listOf(status) + tools())
         s.onShow = {
             if (group != null || hidden) { s.rows = build(); app.refresh(s) }
             else Net.async({ GDrive.videos(token(app)) }) { r ->
@@ -196,8 +200,8 @@ object DriveUi {
                         }
                     }
                 }),
-                Row(if (f.id in o.hidden) "Show it again" else "Hide from Stremonino (stays in your Drive)", action = {
-                    saveOrg(app, org(app).hide(f.id, f.id !in org(app).hidden)); app.toast(if (f.id in org(app).hidden) "Hidden" else "Shown again"); app.back()
+                Row(if (f.id in o.hidden) "Put it back in Stremonino" else "Remove from Stremonino (stays in your Drive)", action = {
+                    saveOrg(app, org(app).hide(f.id, f.id !in org(app).hidden)); app.toast(if (f.id in org(app).hidden) "Removed from Stremonino" else "Back in Stremonino"); app.back()
                 }),
                 Row("Move to your Drive's bin", "►", opens = {
                     confirmScreen(app, "Move to the bin?", "\"${f.name}\" goes to your Google Drive bin. Google keeps it there for 30 days, so you can restore it from drive.google.com.", "Yes, move it to the bin") {
