@@ -20,11 +20,11 @@ import java.util.Properties
  * (Drive wants a sign-in on every request, which video players can't send).
  */
 object GDrive {
-    const val ANDROID_ID = "1057144830851-e76he188istc9p3v09vs5coe09qkrd6r.apps.googleusercontent.com"
+    const val ANDROID_ID = "1057144830851-oj132p8ogplug0mm685f20p0ilm61f2j.apps.googleusercontent.com"
     const val TV_ID = "1057144830851-6i3q6s7ff8d6ecvi89irje8ommp2t3qf.apps.googleusercontent.com"
-    const val DESKTOP_ID = "1057144830851-oj132p8ogplug0mm685f20p0ilm61f2j.apps.googleusercontent.com"
+    const val DESKTOP_ID = "1057144830851-e76he188istc9p3v09vs5coe09qkrd6r.apps.googleusercontent.com"
     /** The phone comes back from Google's picker through this address. */
-    const val ANDROID_SCHEME = "com.googleusercontent.apps.1057144830851-e76he188istc9p3v09vs5coe09qkrd6r"
+    const val ANDROID_SCHEME = "com.googleusercontent.apps.1057144830851-oj132p8ogplug0mm685f20p0ilm61f2j"
     const val ANDROID_REDIRECT = "$ANDROID_SCHEME:/oauth2redirect"
     const val SCOPE = "https://www.googleapis.com/auth/drive.file"
 
