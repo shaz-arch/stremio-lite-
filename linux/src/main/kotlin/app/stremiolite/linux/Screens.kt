@@ -220,6 +220,7 @@ object Home {
             rows += Row("Watched", Watched.list().size.let { if (it == 0) "" else "$it  ►" }, opens = { watchedScreen() })
             rows += Row("Calendar", NewEpisodes.weekCount()?.let { if (it == 0) "nothing this week  ►" else "$it this week  ►" } ?: "", opens = { NewEpisodes.calendar() })
             if (Prefs.liveTv && !KidsGuard.hides()) rows += Row("Live TV", Live.homeDetail(), opens = { Live.screen() })
+            rows += ForYouUi.homeRows()
             if (list != null) {
                 rows += Row("──── Browse ────")
                 val entries = Index.entries(list)
@@ -758,6 +759,7 @@ object Details {
         DetailExtras.facts(f, DetailExtras.today()).forEach { (k, v) -> rows += Row(info(k, v)) }
         DetailExtras.history(Lib.info(f.id)).forEach { (k, v) -> rows += Row(info(k, v)) }
         if (f.imdbUrl.isNotBlank()) rows += Row("IMDb page", "opens browser  ►", action = { WebLink.open(f.imdbUrl) })
+        Trailers.row(f)?.let { rows += it }
         rows += watchRows(f)
         if (f.description.isNotBlank()) {
             rows += Row("────────────────────")
@@ -778,7 +780,6 @@ object Details {
             App.toast(if (added) "Added to favourites" + (if (f.type == "series") ": following new episodes" else "") else "Removed from favourites")
         })
         rows += BasketList.row(f)
-        Trailers.row(f)?.let { rows += it }
         TvRemote.sendRow(f)?.let { rows += it }
         rows += lib
         NextList.row(f)?.let { rows += it }

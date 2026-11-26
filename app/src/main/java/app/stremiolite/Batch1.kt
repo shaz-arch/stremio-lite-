@@ -15,7 +15,7 @@ object Trailers {
 
     fun row(app: MainActivity, f: Full): Row? {
         if (f.trailerUrl.isBlank() && Settings.tmdbKey(app).isBlank()) return null
-        return Row("Watch the trailer", "►", action = {
+        return Row("Trailer", (if (app.isPhone) "opens YouTube" else "YouTube app or QR") + "  ►", action = {
             if (f.trailerUrl.isNotBlank()) open(app, f.name, f.trailerUrl)
             else {
                 app.toast("Finding the trailer…")
@@ -129,5 +129,73 @@ object CalendarExport {
                 .putExtra(CalendarContract.Events.DESCRIPTION, note)
             try { app.startActivity(i) } catch (e: ActivityNotFoundException) { app.toast("No calendar app found") }
         })
+    }
+}
+
+/** "For you" on Home: suggestions from your history ([ForYou]), rebuilt once a day in the background. */
+object ForYouUi {
+    private var result: ForYou.Result? = null
+    private var readFor = ""
+    private var building = false
+    private var tried = 0L
+
+    private fun prefs(c: Context) = Profiles.prefsFor(c, "settings")
+
+    private fun current(c: Context): ForYou.Result? {
+        val who = Profiles.current(c)?.id.orEmpty()
+        if (who != readFor) { readFor = who; result = ForYou.parse(prefs(c).getString("forYou", null)) }
+        return result
+    }
+
+    /** Rebuilds if it's a day old (or [force]); then [done]. */
+    fun refresh(app: MainActivity, force: Boolean = false, done: () -> Unit = {}) {
+        val key = Settings.tmdbKey(app)
+        val have = current(app)
+        // Nothing to do: no callback (Home redraws from the callback, which would ask again).
+        if (key.isBlank() || building || (!force && have != null && System.currentTimeMillis() - have.at < ForYou.KEEP_MS)) return
+        if (!force && System.currentTimeMillis() - tried < 10 * 60_000L) return
+        tried = System.currentTimeMillis()
+        building = true
+        val infos = History.infos(app).filter { it.type == "movie" || it.type == "series" }
+        val recent = infos.filter { it.lastWatched > 0 }.sortedByDescending { it.lastWatched }.map { ForYou.Seed(it.id, it.type, it.name) }
+        val favs = infos.filter { it.inLibrary }.sortedByDescending { it.updated }.map { ForYou.Seed(it.id, it.type, it.name) }
+        val exclude = (infos.filter { it.filmWatched || it.continuing || Following.started(it) }.map { it.id } + NextList.ids(app)).toSet()
+        Net.async({ ForYou.build(key, recent, favs, exclude) }) { r ->
+            building = false
+            r.getOrNull()?.let { res -> result = res; prefs(app).edit().putString("forYou", ForYou.json(res)).apply() }
+            done()
+        }
+    }
+
+    fun homeRows(app: MainActivity): List<Row> {
+        if (Settings.tmdbKey(app).isBlank() || KidsGuard.locked(app)) return emptyList()
+        val r = current(app)
+        if (r == null || System.currentTimeMillis() - r.at > ForYou.KEEP_MS) refresh(app) { Home.redraw() }
+        val rows = mutableListOf(Row("──── For you ────"))
+        if (r == null) { rows += Row("Finding suggestions from what you watch…"); return rows }
+        if (r.top.isNotEmpty()) rows += Row("Top picks for you", "${r.top.size}  ►", opens = { list(app, "Top picks for you", r.top, refreshRow = true) })
+        r.because.forEach { (s, l) -> rows += Row("Because you watched ${s.name}", "${l.size}  ►", opens = { list(app, "Because you watched ${s.name}", l) }) }
+        if (r.favourites.isNotEmpty()) rows += Row("More like your favourites", "${r.favourites.size}  ►", opens = { list(app, "More like your favourites", r.favourites) })
+        if (rows.size == 1) rows += Row("Watch a few things and suggestions appear here.")
+        return rows
+    }
+
+    private fun list(app: MainActivity, title: String, picks: List<ForYou.Pick>, refreshRow: Boolean = false): Screen {
+        lateinit var s: Screen
+        fun build(): List<Row> {
+            val marks = History.marks(app)
+            val rows = picks.map { p ->
+                Row(Marks.title(marks[p.id], p.name) + if (p.year.isNotEmpty()) " (${p.year})" else "", Catalogs.typeLabel(p.type).removeSuffix("s") + "  ►",
+                    opens = { Details.screenFor(app, p.id, p.type, p.name, p.year) ?: Screen(p.name, listOf(Row("Your add-ons are still loading."))) },
+                    play = { BasketList.toggle(app, p.id, p.type, p.name, p.year); s.rows = build(); app.refresh(s) })
+            }.toMutableList()
+            if (refreshRow) {
+                rows += Row("────────────────────")
+                rows += Row("Refresh suggestions", action = { app.toast("Finding new suggestions…"); refresh(app, force = true) { app.toast("Suggestions updated"); Home.redraw() } })
+            }
+            return rows
+        }
+        s = Screen(title, build())
+        return s
     }
 }

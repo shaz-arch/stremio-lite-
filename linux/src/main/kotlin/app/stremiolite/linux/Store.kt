@@ -91,6 +91,9 @@ object Prefs {
     var receiveSends: Boolean
         get() = data().optBoolean("receiveSends", false)
         set(v) { data().put("receiveSends", v); save() }
+    var forYou: String
+        get() = data().optString("forYou", "")
+        set(v) { data().put("forYou", v); save() }
     var sentHandled: Long
         get() = data().optLong("sentHandled", 0L)
         set(v) { data().put("sentHandled", v); save() }

@@ -16,7 +16,7 @@ object Trailers {
 
     fun row(f: Full): Row? {
         if (f.trailerUrl.isBlank() && Prefs.tmdbKey.isBlank()) return null
-        return Row("Watch the trailer", if (ytdlp && File(Prefs.player).name.startsWith("mpv")) "in mpv  ►" else "browser  ►", action = {
+        return Row("Trailer", if (ytdlp && File(Prefs.player).name.startsWith("mpv")) "in mpv  ►" else "browser  ►", action = {
             if (f.trailerUrl.isNotBlank()) open(f.trailerUrl)
             else {
                 App.toast("Finding the trailer…")
@@ -106,4 +106,61 @@ object NowPlaying {
         Row("Show the time on screen", action = { Player.command("show-progress") }),
         Row("Stop", action = { Player.stop("Stopped from Stremonino"); App.back() }),
     ))
+}
+
+/** "For you" on Home: suggestions from your history ([app.stremiolite.ForYou]), rebuilt once a day. */
+object ForYouUi {
+    private val F = app.stremiolite.ForYou
+    private var result: app.stremiolite.ForYou.Result? = null
+    private var readFor = ""
+    private var building = false
+    private var tried = 0L
+
+    private fun current(): app.stremiolite.ForYou.Result? {
+        val who = Profiles.current()?.name.orEmpty()
+        if (who != readFor) { readFor = who; result = F.parse(Prefs.forYou.ifEmpty { null }) }
+        return result
+    }
+
+    fun refresh(force: Boolean = false, done: () -> Unit = {}) {
+        val key = Prefs.tmdbKey
+        val have = current()
+        if (key.isBlank() || building || (!force && have != null && System.currentTimeMillis() - have.at < F.KEEP_MS)) return
+        if (!force && System.currentTimeMillis() - tried < 10 * 60_000L) return
+        tried = System.currentTimeMillis(); building = true
+        val infos = Lib.infos().filter { it.type == "movie" || it.type == "series" }
+        val recent = infos.filter { it.lastWatched > 0 }.sortedByDescending { it.lastWatched }.map { app.stremiolite.ForYou.Seed(it.id, it.type, it.name) }
+        val favs = infos.filter { it.inLibrary }.sortedByDescending { it.updated }.map { app.stremiolite.ForYou.Seed(it.id, it.type, it.name) }
+        val exclude = (infos.filter { it.filmWatched || it.continuing || app.stremiolite.Following.started(it) }.map { it.id } + NextList.ids()).toSet()
+        App.async({ F.build(key, recent, favs, exclude) }) { r ->
+            building = false
+            r.getOrNull()?.let { res -> result = res; Prefs.forYou = F.json(res) }
+            done()
+        }
+    }
+
+    fun homeRows(): List<Row> {
+        if (Prefs.tmdbKey.isBlank() || KidsGuard.locked()) return emptyList()
+        val r = current()
+        if (r == null || System.currentTimeMillis() - r.at > F.KEEP_MS) refresh { Home.redraw() }
+        val rows = mutableListOf(Row("──── For you ────"))
+        if (r == null) { rows += Row("Finding suggestions from what you watch…"); return rows }
+        if (r.top.isNotEmpty()) rows += Row("Top picks for you", "${r.top.size}  ►", opens = { list("Top picks for you", r.top, true) })
+        r.because.forEach { (s, l) -> rows += Row("Because you watched ${s.name}", "${l.size}  ►", opens = { list("Because you watched ${s.name}", l) }) }
+        if (r.favourites.isNotEmpty()) rows += Row("More like your favourites", "${r.favourites.size}  ►", opens = { list("More like your favourites", r.favourites) })
+        if (rows.size == 1) rows += Row("Watch a few things and suggestions appear here.")
+        return rows
+    }
+
+    private fun list(title: String, picks: List<app.stremiolite.ForYou.Pick>, refreshRow: Boolean = false): Screen {
+        val rows = picks.map { p ->
+            Row(app.stremiolite.Marks.title(Catalogs.mark(p.id, p.type), p.name) + if (p.year.isNotEmpty()) " (${p.year})" else "", MetaParse.typeLabel(p.type) + "  ►",
+                opens = { Details.screenFor(p.id, p.type, p.name) }, play = { BasketList.toggle(p.id, p.type, p.name, p.year) })
+        }.toMutableList()
+        if (refreshRow) {
+            rows += Row("────────────────────")
+            rows += Row("Refresh suggestions", action = { App.toast("Finding new suggestions…"); refresh(true) { App.toast("Suggestions updated"); Home.redraw() } })
+        }
+        return Screen(title, rows)
+    }
 }

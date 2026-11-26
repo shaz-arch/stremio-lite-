@@ -180,7 +180,6 @@ object Details {
             app.refreshTop()
         })
         rows += BasketList.row(app, f)
-        Trailers.row(app, f)?.let { rows += it }
         TvRemote.sendRow(app, f)?.let { rows += it }
         // The next dated thing (a coming episode, or the film's release) into the phone's calendar.
         val nextEp = if (f.type == "series") Releases.upcoming(f, 3650).firstOrNull() else null
@@ -351,6 +350,7 @@ object Details {
         DetailExtras.facts(f, DetailExtras.today()).forEach { (k, v) -> rows += Row(info(k, v)) }
         DetailExtras.history(History.infos(app).firstOrNull { it.id == f.id }).forEach { (k, v) -> rows += Row(info(k, v)) }
         if (f.imdbUrl.isNotBlank()) rows += LinkOut.row(app, "IMDb page", "IMDb: ${f.name}", f.imdbUrl)
+        Trailers.row(app, f)?.let { rows += it }
         rows += watchRows(app, f)
         if (f.description.isNotBlank()) {
             rows += Row("────────────────────")
