@@ -112,6 +112,10 @@ object Play {
                 playing = false
                 if (next == null) {
                     status.label = "That release has no playable video, and there's no other good one. Choose another below."
+                    if (type == "movie" && NextList.has(id)) {
+                        Waiting.unplayable(id, title)
+                        status.label += " It's back in Waiting until one plays."
+                    }
                     s.rows = rows(); App.refresh()
                 } else {
                     picked = next

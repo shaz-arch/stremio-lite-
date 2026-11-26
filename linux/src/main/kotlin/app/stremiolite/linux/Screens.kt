@@ -1146,6 +1146,8 @@ object Waiting {
     /** Next watch films that aren't ready yet, quietly: not out yet → Following; out, no good stream → here. */
     fun follow(films: List<app.stremiolite.NextWatch.Entry>) {
         val NS = app.stremiolite.NextStatus
+        films.filter { it.type == "series" && app.stremiolite.NextStatus.of(it.id)?.group == app.stremiolite.NextStatus.Group.SOON && !Follow.isFollowed(it.id) }
+            .forEach { Follow.follow(it.id, it.name) }
         val movies = films.filter { it.type == "movie" }
         val soon = movies.filter { NS.of(it.id)?.group == app.stremiolite.NextStatus.Group.SOON }
         val have = list()
@@ -1154,6 +1156,15 @@ object Waiting {
         val kept = have.filter { e -> e.better || soon.none { it.id == e.id } }
         val add = (movies - soon.toSet()).filter { f -> NS.of(f.id)?.group == app.stremiolite.NextStatus.Group.WAITING && kept.none { it.id == f.id } && f.id !in followed }
         if (add.isNotEmpty() || kept.size != have.size) save(kept + add.map { Entry(it.id, it.type, it.name, it.year, 0) })
+    }
+
+    /** Play best found nothing that plays for a Next watch film: back into Waiting, not ready. */
+    fun unplayable(id: String, name: String) {
+        val have = list()
+        val e = have.firstOrNull { it.id == id }
+        save(if (e == null) have + Entry(id, "movie", name, "", 0)
+             else have.map { if (it.id == id) Entry(it.id, it.type, it.name, it.year, 0, it.better, it.bar, it.have, "") else it })
+        app.stremiolite.NextStatus.forget(id)
     }
 
     /** Followed films now out to stream move here (the phone then checks them); the rest get a fresh note. */

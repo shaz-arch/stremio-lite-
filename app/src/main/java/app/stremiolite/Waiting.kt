@@ -103,6 +103,9 @@ object Waiting {
      * ones not out to stream yet go to Following, ones out with no good stream to Waiting.
      */
     fun follow(app: MainActivity, films: List<NextWatch.Entry>) {
+        // A show with no episode out yet is followed; it comes into Next watch when episode 1 lands.
+        films.filter { it.type == "series" && NextStatus.of(it.id)?.group == NextStatus.Group.SOON && !Follow.isFollowed(app, it.id) }
+            .forEach { Follow.follow(app, it.id, it.name) }
         val movies = films.filter { it.type == "movie" }
         val soon = movies.filter { NextStatus.of(it.id)?.group == NextStatus.Group.SOON }
         val have = list(app)
@@ -236,6 +239,19 @@ object Waiting {
         if (out.isNotEmpty()) rec = Following.unfollowFilms(rec, out.map { it.id })
         val add = out.filter { o -> wait.none { it.id == o.id && !it.better } }.map { Entry(it.id, "movie", it.name, it.year, 0) }
         return (if (rec !== fol) rec else null) to (if (add.isNotEmpty()) wait + add else null)
+    }
+
+    /**
+     * Play best found nothing that plays for a Next watch film: it goes (back) into Waiting, not
+     * ready, so Next watch stops calling it ready until a stream that plays turns up.
+     */
+    fun unplayable(app: MainActivity, id: String, name: String) {
+        val have = list(app)
+        val e = have.firstOrNull { it.id == id }
+        val updated = if (e == null) have + Entry(id, "movie", name, "", 0)
+        else have.map { if (it.id == id) Entry(it.id, it.type, it.name, it.year, 0, it.better, it.bar, it.have, "") else it }
+        save(app, updated)
+        NextStatus.forget(id)
     }
 
     /** In the app: re-checks the followed films now (when Following opens), then [done]. */

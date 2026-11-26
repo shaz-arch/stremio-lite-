@@ -80,6 +80,8 @@ object NextStatus {
         val (better, ready) = w
         if (ready > 0) return Status(Group.READY, if (better) "better version found" else "ready")
         if (s?.group == Group.SOON) return s
+        // It plays now and you'd like better: it stays ready while Waiting looks.
+        if (better && s?.group == Group.READY) return Status(Group.READY, "ready · watching for better")
         return Status(Group.WAITING, if (better) "waiting for a better version" else "no streams yet")
     }
 

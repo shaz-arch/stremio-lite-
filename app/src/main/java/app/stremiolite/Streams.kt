@@ -280,6 +280,10 @@ object Streams {
                         val next = if (tried.size >= 6) null else Best.pick(fetch.found.filter { it !in tried }, minutes, prefer)
                         if (next == null) {
                             status.label = "That release has no playable video, and there's no other good one. Choose below."
+                            if (type == "movie" && NextList.has(app, id)) {
+                                Waiting.unplayable(app, id, title)
+                                status.label += " It's back in Waiting until one plays."
+                            }
                             screen.rows = rows(); app.refresh(screen)
                         } else {
                             picked = next

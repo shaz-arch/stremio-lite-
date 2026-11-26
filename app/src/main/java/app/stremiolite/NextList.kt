@@ -26,7 +26,15 @@ object NextList {
 
     private fun save(c: Context, list: List<NextWatch.Entry>) = History.putRemote(c, NextWatch.record(raw(c), list))
 
-    fun summary(c: Context): String = all(c).size.let { if (it == 0) "empty" else "$it  ►" }
+    fun summary(c: Context): String {
+        val list = all(c)
+        if (list.isEmpty()) return "empty"
+        val w = Waiting.list(c).associate { it.id to (it.better to it.ready) }
+        val ready = list.count { NextStatus.effective(it.id) { id -> w[id] }?.group == NextStatus.Group.READY }
+        val known = list.count { NextStatus.effective(it.id) { id -> w[id] } != null }
+        if (known < list.size && ready == 0) return "${list.size}  ►"
+        return listOfNotNull("$ready ready", (list.size - ready).takeIf { it > 0 }?.let { "$it on the way" }).joinToString(" · ") + "  ►"
+    }
 
     /** "Add to Next watch" on a title's page (not shown once you've started or finished it). */
     fun row(app: MainActivity, f: Full): Row? {
@@ -70,15 +78,25 @@ object NextList {
             val rows = mutableListOf(viewRow(app))
             if (list.isEmpty()) rows += Row("Nothing lined up. On a film or show, choose 'Add to Next watch'.")
             val status = statusOf(app)
-            NextStatus.grouped(list, status).forEach { (g, items) ->
-                rows += Row("──── ${g?.heading ?: "Checking…"} ────")
-                items.forEach { e ->
-                    val st = status(e.id)
-                    rows += Row(Marks.title(st?.shape ?: Marks.NEXT, e.name), detail(st) + "  ►", action = { Details.screenFor(app, e.id, e.type, e.name, e.year)?.let { app.push(it) } })
-                }
+            fun row(e: NextWatch.Entry): Row {
+                val st = status(e.id)
+                return Row(Marks.title(st?.shape ?: Marks.NEXT, e.name), detail(st) + "  ►", action = { Details.screenFor(app, e.id, e.type, e.name, e.year)?.let { app.push(it) } })
             }
-            if (list.isNotEmpty()) rows += Row("────────────────────")
-            if (list.isNotEmpty()) rows += Row("Films not ready yet are followed: you'll be told when they are.")
+            // Only what plays now; the rest is on its way (in Waiting or Following) and comes in by itself.
+            val groups = NextStatus.grouped(list, status)
+            val ready = groups.firstOrNull { it.first == NextStatus.Group.READY }?.second.orEmpty()
+            val coming = groups.filter { it.first != NextStatus.Group.READY }
+            ready.forEach { rows += row(it) }
+            if (list.isNotEmpty() && ready.isEmpty()) rows += Row(if (coming.any { it.first == null }) "Checking what's ready…" else "Nothing ready to play yet.")
+            val n = coming.sumOf { it.second.size }
+            if (n > 0) {
+                rows += Row("────────────────────")
+                rows += Row("On the way", "$n  ►", opens = {
+                    Screen("On the way", listOf(Row("These come into Next watch by themselves once they play.")) + coming.flatMap { (g, items) ->
+                        listOf(Row("──── ${g?.heading ?: "Checking…"} ────")) + items.map { row(it) }
+                    })
+                })
+            }
             s.rows = rows
             app.refresh(s)
         }
