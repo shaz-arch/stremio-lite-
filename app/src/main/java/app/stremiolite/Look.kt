@@ -27,6 +27,8 @@ object Look {
         Theme("Black & white", Color.BLACK, Color.WHITE, Color.rgb(190, 190, 190), Color.WHITE, Color.WHITE, Color.BLACK),
         // Newsprint: dark ink on grey paper, a charcoal bar for the cursor.
         Theme("Newspaper grey", Color.rgb(214, 212, 206), Color.rgb(26, 26, 26), Color.rgb(96, 96, 92), Color.BLACK, Color.rgb(58, 58, 56), Color.rgb(236, 234, 228)),
+        // Lavender: soft white on near-black, periwinkle headings and bar (like Android's own dark screens).
+        Theme("Lavender", Color.rgb(20, 18, 24), Color.rgb(230, 225, 229), Color.rgb(147, 143, 153), Color.rgb(190, 194, 255), Color.rgb(190, 194, 255), Color.rgb(27, 29, 72)),
     )
 
     class Size(val name: String, val sp: Float)

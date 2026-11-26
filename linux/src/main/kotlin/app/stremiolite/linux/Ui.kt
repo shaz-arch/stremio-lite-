@@ -47,6 +47,7 @@ val themes = listOf(
     Theme("Amber", TextColor.RGB(16, 10, 0), TextColor.RGB(255, 176, 0), TextColor.RGB(190, 120, 0), TextColor.RGB(255, 214, 102), TextColor.RGB(255, 176, 0), TextColor.RGB(0, 0, 0)),
     Theme("Black & white", TextColor.RGB(0, 0, 0), TextColor.RGB(255, 255, 255), TextColor.RGB(190, 190, 190), TextColor.RGB(255, 255, 255), TextColor.RGB(255, 255, 255), TextColor.RGB(0, 0, 0)),
     Theme("Newspaper grey", TextColor.RGB(214, 212, 206), TextColor.RGB(26, 26, 26), TextColor.RGB(96, 96, 92), TextColor.RGB(0, 0, 0), TextColor.RGB(58, 58, 56), TextColor.RGB(236, 234, 228)),
+    Theme("Lavender", TextColor.RGB(20, 18, 24), TextColor.RGB(230, 225, 229), TextColor.RGB(147, 143, 153), TextColor.RGB(190, 194, 255), TextColor.RGB(190, 194, 255), TextColor.RGB(27, 29, 72)),
 )
 
 /** "Label               value" lines, like the Android app. */
