@@ -112,6 +112,7 @@ object NewEpisodes {
             fun finish() {
                 fulls = got.toList(); fullsAt = System.currentTimeMillis(); loading = false; failed.clear()
                 writeCache(app)
+                refreshFilms(app)
                 val list = waiting.toList(); waiting.clear(); list.forEach { it() }
             }
             if (shows.isEmpty()) { finish(); return@async }
@@ -172,7 +173,26 @@ object NewEpisodes {
     fun recentCount(): Int? = if (fullsAt == 0L) null else fulls.sumOf { Releases.recent(it).size }
 
     /** Episodes due in the next 7 days (null until checked). */
-    fun weekCount(): Int? = if (fullsAt == 0L) null else fulls.sumOf { Releases.upcoming(it, 7).size }
+    fun weekCount(): Int? = if (fullsAt == 0L) null else fulls.sumOf { Releases.upcoming(it, 7).size } +
+        filmEvents.orEmpty().count { it.day <= Releases.day(-7) }
+
+    // ---- film dates for the Calendar (and its count on Home), fetched at most once an hour ----
+
+    private var filmEvents: List<FilmDates.Event>? = null
+    private var filmsAt = 0L
+    private var filmsLoading = false
+
+    private fun refreshFilms(app: MainActivity, force: Boolean = false, done: () -> Unit = {}) {
+        if (filmsLoading || (!force && System.currentTimeMillis() - filmsAt < KEEP_MS)) { done(); return }
+        filmsLoading = true
+        val want = calendarFilms(app); val addons = Home.allAddons()
+        val key = Settings.tmdbKey(app); val region = Settings.watchRegion(app)
+        Net.async({ FilmDates.events(addons, key, region, want) }) { r ->
+            filmsLoading = false
+            r.getOrNull()?.let { filmEvents = it; filmsAt = System.currentTimeMillis() }
+            done()
+        }
+    }
 
     private val pretty = SimpleDateFormat("EEE d MMM", Locale.UK)
     private val iso = SimpleDateFormat("yyyy-MM-dd", Locale.UK)
@@ -203,10 +223,10 @@ object NewEpisodes {
      * watching or followed for every episode get each one that's news; shows followed for seasons,
      * only a new season. Not shows already lined up in Next watch.
      */
-    fun isNews(c: Context): (Full, Video) -> Boolean {
+    fun isNews(c: Context, alsoFollowed: Collection<String> = emptyList()): (Full, Video) -> Boolean {
         val infos = History.infos(c).associateBy { it.id }
         val cont = History.continueWatching(c).mapTo(HashSet()) { it.id }
-        val followed = Waiting.following(c).mapTo(HashSet()) { it.first }
+        val followed = Waiting.following(c).mapTo(HashSet()) { it.first } + alsoFollowed
         val next = NextList.ids(c)
         val rec = Follow.raw(c)
         val cache = HashMap<String, Pair<Set<String>, Long>>()
@@ -238,45 +258,6 @@ object NewEpisodes {
 
     private fun epLabel(v: Video) = Details.epLabel(v)
 
-    fun screen(app: MainActivity): Screen {
-        val status = Row("")
-        lateinit var screen: Screen
-        fun build() {
-            markSeen(app)   // looking at the list clears the line on Home
-            val rows = mutableListOf(status)
-            val list = fulls.flatMap { sh -> Releases.recent(sh).map { Found(sh, it) } }
-                .sortedWith(compareByDescending<Found> { it.ep.released }.thenBy { it.show.name }.thenBy { it.ep.episode })
-            status.label = when {
-                loading -> "Checking $followedCount shows… $checked done"
-                followedCount == 0 -> "Start watching a show, or on a show choose 'Tell me about new episodes and seasons', to see its new episodes here."
-                list.isEmpty() -> "No new episodes in the last ${Releases.DAYS} days ($followedCount shows followed)."
-                else -> "Out in the last ${Releases.DAYS} days · $followedCount shows followed · ► plays"
-            }
-            list.forEach { f ->
-                val date = runCatching { pretty.format(iso.parse(f.ep.released)!!) }.getOrDefault(f.ep.released)
-                val watched = if (History.progress(app, f.ep.id)?.done == true) "✓  " else ""
-                val season = if (Releases.opensSeason(f.ep)) "new season · " else ""
-                rows += epRow(app, f, watched + season + date)
-            }
-            rows += Row("────────────────────")
-            rows += Row("Calendar: coming up", "►", opens = { calendar(app) })
-            screen.rows = rows
-            app.refresh(screen)
-        }
-        screen = Screen("New episodes", listOf(status))
-        var started = false
-        screen.onShow = {
-            if (!started) {
-                started = true
-                Waiting.askToNotify(app)
-                status.label = "Finding the shows you follow…"
-                load(app, progress = { if (app.isTop(screen)) build() }) { build() }
-            }
-            build()
-        }
-        return screen
-    }
-
     /** Episodes due in the next 30 days for the shows you follow, by day. */
     /** Films for the Calendar: ones you're waiting on, lined up in Next watch, or have in the basket. */
     private fun calendarFilms(app: MainActivity): List<FilmDates.Film> =
@@ -288,8 +269,8 @@ object NewEpisodes {
     fun calendar(app: MainActivity): Screen {
         val status = Row("")
         lateinit var screen: Screen
-        var films: List<FilmDates.Event>? = null
         fun build() {
+            val films = filmEvents
             val rows = mutableListOf(status)
             val eps = fulls.flatMap { sh -> Releases.upcoming(sh).map { Found(sh, it) } }
             // Episodes and films together, by day.
@@ -321,9 +302,8 @@ object NewEpisodes {
                 started = true
                 status.label = "Finding the shows you follow…"
                 load(app, progress = { if (app.isTop(screen)) build() }) { build() }
-                val want = calendarFilms(app); val addons = Home.allAddons()
-                val key = Settings.tmdbKey(app); val region = Settings.watchRegion(app)
-                Net.async({ FilmDates.events(addons, key, region, want) }) { r -> films = r.getOrDefault(emptyList()); if (app.isTop(screen)) build() }
+                // Fresh each time it opens: you may have added films since.
+                refreshFilms(app, force = true) { if (filmEvents == null) filmEvents = emptyList(); if (app.isTop(screen)) build() }
             }
             build()
         }
@@ -342,11 +322,16 @@ object NewEpisodes {
         val prefs = Profiles.prefsFor(c, "episodes")
         val alerts = mutableListOf<Releases.Alert>()
         val e = prefs.edit()
-        for ((id, _) in followed(c, addons)) {
+        // The same rule as Ready: how you follow it, and only news (not the next one while you catch up).
+        val mine = followed(c, addons)
+        val news = isNews(c, mine.map { it.first })
+        val cont = History.continueWatching(c).filter { it.type == "series" }.map { it.id to it.name }
+        for ((id, _) in (mine + cont).distinctBy { it.first }) {
             val show = runCatching { MetaParse.fetch(addons, "series", id) }.getOrNull() ?: continue
             val seen = prefs.getString(id, null)
             if (seen != null && Releases.finished(show)) continue
-            val (alert, mark) = Releases.check(show, seen)
+            val (found, mark) = Releases.check(show, seen)
+            val alert = found?.let { a -> a.episodes.filter { news(show, it) }.takeIf { it.isNotEmpty() }?.let { Releases.Alert(show, it) } }
             if (alert == null) { if (mark != null) e.putString(id, mark); continue }
             // Only tell once it really plays; after a couple of days, tell anyway.
             val newest = alert.episodes.last()
@@ -374,7 +359,7 @@ object NewEpisodes {
             if (Build.VERSION.SDK_INT >= 23) PendingIntent.FLAG_IMMUTABLE else 0,
         )
         val title = if (alerts.size == 1) alerts[0].text else "New episodes for ${alerts.size} shows"
-        val text = if (alerts.size == 1) "Open New episodes to watch" else alerts.joinToString(" · ") { it.text }
+        val text = if (alerts.size == 1) "Open Ready to watch" else alerts.joinToString(" · ") { it.text }
         @Suppress("DEPRECATION")
         val b = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(c, CHANNEL) else Notification.Builder(c)
         val n = b.setSmallIcon(R.mipmap.ic_launcher).setContentTitle(title).setContentText(text)

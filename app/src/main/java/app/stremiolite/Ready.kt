@@ -12,9 +12,9 @@ object Ready {
     private const val EPISODE_DAYS = 30
 
     private fun prefs(c: Context) = Profiles.prefsFor(c, "settings")
-    private fun gone(c: Context) = ReadyNotice.readSeen(prefs(c).getString("readyGone", null))
-    private fun dismiss(c: Context, id: String) =
-        prefs(c).edit().putString("readyGone", ReadyNotice.writeSeen(gone(c), listOf(id))).apply()
+    /** Dismissed episodes: on the account (every device), plus any dismissed here before that. */
+    private fun gone(c: Context) = ReadyGone.parse(History.rawRemote(c, ReadyGone.ID)) + ReadyNotice.readSeen(prefs(c).getString("readyGone", null))
+    private fun dismiss(c: Context, id: String) = History.putRemote(c, ReadyGone.add(History.rawRemote(c, ReadyGone.ID), id))
 
     fun films(c: Context): List<Waiting.Entry> {
         val next = NextList.ids(c)
@@ -68,7 +68,7 @@ object Ready {
             films.forEach { e ->
                 rows += Row(Marks.title(Marks.READY, e.name) + if (e.year.isNotEmpty()) " (${e.year})" else "",
                     (if (e.better) "better: ${e.found}" else "stream found") + "  ►",
-                    opens = { Details.screenFor(app, e.id, e.type, e.name, e.year) ?: filmScreen(app, e, changed) },
+                    opens = { Details.screenFor(app, e.id, e.type, e.name, e.year) ?: Screen(e.name, listOf(Row("Your add-ons are still loading."))) },
                     play = { Details.screenFor(app, e.id, e.type, e.name, e.year, autoPlay = true)?.let { app.push(it) } })
             }
         }
@@ -77,7 +77,7 @@ object Ready {
             eps.forEach { x ->
                 val season = if (Releases.opensSeason(x.ep)) "new season · " else ""
                 rows += Row(Marks.title(Marks.READY, x.show.name), season + Details.epLabel(x.ep) + "  ►",
-                    opens = { Details.screenFor(app, x.show.id, "series", x.show.name, "") ?: episodeScreen(app, x, changed) },
+                    opens = { Details.screenFor(app, x.show.id, "series", x.show.name, "") ?: Screen(x.show.name, listOf(Row("Your add-ons are still loading."))) },
                     play = { app.push(Details.playEpisode(app, x.show, x.ep)) })
             }
         }
@@ -114,28 +114,4 @@ object Ready {
         return rows
     }
 
-    private fun filmScreen(app: MainActivity, e: Waiting.Entry, changed: () -> Unit) = Screen(e.name, listOfNotNull(
-        Row(if (e.better) "Better version found: ${e.found}" else "A stream is available now."),
-        Row("────────────────────"),
-        Row("Play now", "►", action = { Details.screenFor(app, e.id, e.type, e.name, e.year, autoPlay = true)?.let { app.back(); app.push(it) } }),
-        Row("Add to Next watch", action = {
-            NextList.add(app, NextWatch.Entry(e.id, e.type, e.name, e.year))
-            Waiting.remove(app, e.id)
-            app.toast("${e.name} is in Next watch"); app.back(); changed()
-        }),
-        Details.screenFor(app, e.id, e.type, e.name, e.year)?.let { d -> Row("Open its page", "►", opens = { d }) },
-        Row("Dismiss", action = { Waiting.remove(app, e.id); app.toast("Dismissed"); app.back(); changed() }),
-    ))
-
-    private fun episodeScreen(app: MainActivity, x: Episode, changed: () -> Unit) = Screen(x.show.name, listOf(
-        Row(Details.epLabel(x.ep) + (if (x.ep.title.isNotBlank()) " · ${x.ep.title}" else "")),
-        Row("────────────────────"),
-        Row("Play now", "►", action = { app.back(); app.push(Details.playEpisode(app, x.show, x.ep)) }),
-        Row("Add to Next watch", action = {
-            NextList.add(app, NextWatch.Entry(x.ep.id, "series", "${x.show.name} · ${Details.epLabel(x.ep)}", "", x.show.id))
-            app.toast("In Next watch"); app.back(); changed()
-        }),
-        Row("Open the episode", "►", opens = { Details.episodeScreen(app, x.show, x.ep) }),
-        Row("Dismiss", action = { dismiss(app, x.ep.id); app.toast("Dismissed"); app.back(); changed() }),
-    ))
 }

@@ -1154,21 +1154,6 @@ object Waiting {
         Lib.put(item)
     }
 
-    /** Next watch films that aren't ready yet, quietly: not out yet → Following; out, no good stream → here. */
-    fun follow(films: List<app.stremiolite.NextWatch.Entry>) {
-        val NS = app.stremiolite.NextStatus
-        films.filter { it.type == "series" && app.stremiolite.NextStatus.of(it.id)?.group == app.stremiolite.NextStatus.Group.SOON && !Follow.isFollowed(it.id) }
-            .forEach { Follow.follow(it.id, it.name) }
-        val movies = films.filter { it.type == "movie" }
-        val soon = movies.filter { NS.of(it.id)?.group == app.stremiolite.NextStatus.Group.SOON }
-        val have = list()
-        val followed = Follow.films().map { it.id }.toSet()
-        Follow.followFilms(soon.filter { it.id !in followed }.map { app.stremiolite.Following.Film(it.id, it.name, it.year, NS.of(it.id)?.detail.orEmpty()) })
-        val kept = have.filter { e -> e.better || soon.none { it.id == e.id } }
-        val add = (movies - soon.toSet()).filter { f -> NS.of(f.id)?.group == app.stremiolite.NextStatus.Group.WAITING && kept.none { it.id == f.id } && f.id !in followed }
-        if (add.isNotEmpty() || kept.size != have.size) save(kept + add.map { Entry(it.id, it.type, it.name, it.year, 0) })
-    }
-
     /** Play best found nothing that plays for a Next watch film: back into Waiting, not ready. */
     fun unplayable(id: String, name: String) {
         val have = list()
@@ -1316,79 +1301,6 @@ object Waiting {
         return s
     }
 
-    /** Shows you follow (favourites by themselves), and films followed until they're out to stream. */
-    fun followingScreen(): Screen {
-        val rows = mutableListOf(Row("──── Films not out to stream yet ────"))
-        val filmsF = Follow.films()
-        if (filmsF.isEmpty()) rows += Row("None. Films in Next watch that aren't out yet come here by themselves.")
-        filmsF.sortedBy { it.name }.forEach { f ->
-            rows += Row(Marks.title(Marks.FOLLOWING, f.name) + if (f.year.isNotEmpty()) " (${f.year})" else "", f.note.ifBlank { "not out yet" } + "  ►", opens = {
-                Screen(f.name, listOf(
-                    Row(if (f.note.isBlank()) "Not out to stream yet." else "Not out to stream yet: ${f.note}."),
-                    Row("Moves to Waiting when it's out, then you're told once a good stream turns up."),
-                    Row("────────────────────"),
-                    Row("Open", "►", opens = { Details.screenFor(f.id, "movie", f.name) }),
-                    Row("Stop following", action = { Follow.unfollowFilms(listOf(f.id)); App.toast("Stopped following ${f.name}"); App.back(); App.back(); App.push(followingScreen()) }),
-                ))
-            })
-        }
-        val followed = following()
-        if (followed.isEmpty()) {
-            rows += Row("──── Shows ────")
-            rows += Row("None yet. Your favourite shows are followed by themselves.")
-        } else if (NewEpisodes.shows().isEmpty() && !NewEpisodes.fresh()) {
-            // Only when a check is actually due: a fresh-but-empty result would otherwise redraw for ever.
-            rows += Row("──── Shows: ${followed.size} followed ────")
-            rows += Row("Checking where you're up to…")
-            NewEpisodes.load { App.post { if (App.top()?.title == "Following" && NewEpisodes.shows().isNotEmpty()) App.replaceTop(followingScreen()) } }
-        } else {
-            val R = app.stremiolite.Releases
-            val coming = NewEpisodes.ensure(followed) { if (App.top()?.title == "Following") App.replaceTop(followingScreen()) }
-            val infos = Lib.infos().associateBy { it.id }
-            val ids = followed.map { it.first }.toSet()
-            val shown = shownShows().map { it.id }.toSet()
-            val shows = NewEpisodes.shows().filter { it.id in ids && it.id in shown }
-            val watchedOf = shows.associate { it.id to Lib.watchedEpisodes(it.id, MetaParse.stremioOrder(it)) }
-            val by = shows.groupBy { app.stremiolite.Following.section(it, watchedOf[it.id] ?: emptySet(), infos[it.id]) }
-            fun next(sh: Full) = app.stremiolite.Following.nextText(sh)
-            fun section(title: String, list: List<Full>?, detail: (Full) -> String) {
-                if (list.isNullOrEmpty()) return
-                rows += Row("──── $title ────")
-                list.sortedBy { it.name }.forEach { sh -> rows += Row(Marks.title(Catalogs.mark(sh.id, "series"), sh.name), detail(sh) + "  ►", opens = { Details.screenFor(sh.id, "series", sh.name) }) }
-            }
-            section("Caught up: waiting for more", by[app.stremiolite.Following.Section.CAUGHT_UP]) { next(it) }
-            section("Watching", by[app.stremiolite.Following.Section.WATCHING]) { sh ->
-                app.stremiolite.Following.progressText(sh, watchedOf[sh.id] ?: emptySet(), infos[sh.id])
-            }
-            section("Not started", by[app.stremiolite.Following.Section.NOT_STARTED]) { next(it) }
-            val pending = followed.filter { it.first in coming }
-            if (pending.isNotEmpty()) {
-                rows += Row("──── Checking ────")
-                pending.forEach { (_, name) -> rows += Row(name, "checking…") }
-            }
-        }
-        rows += Row("────────────────────")
-        rows += Row("Episodes out in the last week", "►", opens = { NewEpisodes.screen() })
-        rows += Row("Calendar: coming up", "►", opens = { NewEpisodes.calendar() })
-        if (filmsF.isNotEmpty()) rows += Row("Stop following the films", "►", opens = {
-            confirmScreen("Stop following the films?", "Stops all ${filmsF.size} films, on every device.", "Yes, stop all ${filmsF.size}") {
-                Follow.unfollowFilms(filmsF.map { it.id }); App.toast("Stopped following the films"); App.back(); App.replaceTop(followingScreen())
-            }
-        })
-        if (followed.isNotEmpty()) rows += Row("Stop following all shows", "►", opens = {
-            confirmScreen("Stop following all shows?", "Stops all ${followed.size} shows, on every device. They stay stopped even if you watch more or they're favourites; follow one again from its page.", "Yes, stop all ${followed.size}") {
-                Follow.unfollowAll(followed.map { it.first }); App.toast("Stopped following all shows"); App.back(); App.replaceTop(followingScreen())
-            }
-        })
-        val s = Screen("Following", rows)
-        s.onShow = {
-            if (System.currentTimeMillis() - Lib.lastPull > 15_000) Lib.pull(force = true) {
-                if (App.top()?.title == "Following") App.replaceTop(followingScreen())
-            }
-            checkFollowedFilms { if (App.top()?.title == "Following") App.replaceTop(followingScreen()) }
-        }
-        return s
-    }
 }
 
 // ============================================================================================
@@ -1455,6 +1367,7 @@ object NewEpisodes {
             fun finish() {
                 fulls = got.toList(); fullsAt = System.currentTimeMillis(); loading = false; failed.clear()
                 writeCache()
+                refreshFilms()
                 val l = waiting.toList(); waiting.clear(); l.forEach { it() }
             }
             if (shows.isEmpty()) { finish(); return@async }
@@ -1500,7 +1413,23 @@ object NewEpisodes {
     }
 
     fun recentCount(): Int? = if (fullsAt == 0L) null else fulls.sumOf { app.stremiolite.Releases.recent(it).size }
-    fun weekCount(): Int? = if (fullsAt == 0L) null else fulls.sumOf { app.stremiolite.Releases.upcoming(it, 7).size }
+    fun weekCount(): Int? = if (fullsAt == 0L) null else fulls.sumOf { app.stremiolite.Releases.upcoming(it, 7).size } +
+        filmEvents.orEmpty().count { it.day <= app.stremiolite.Releases.day(-7) }
+
+    private var filmEvents: List<app.stremiolite.FilmDates.Event>? = null
+    private var filmsAt = 0L
+    private var filmsLoading = false
+
+    private fun refreshFilms(force: Boolean = false, done: () -> Unit = {}) {
+        if (filmsLoading || (!force && System.currentTimeMillis() - filmsAt < 3_600_000L)) { done(); return }
+        filmsLoading = true
+        val want = calendarFilms(); val addons = Home.all(); val key = Prefs.tmdbKey; val region = Prefs.watchRegion
+        App.async({ app.stremiolite.FilmDates.events(addons, key, region, want) }) { r ->
+            filmsLoading = false
+            r.getOrNull()?.let { filmEvents = it; filmsAt = System.currentTimeMillis() }
+            done()
+        }
+    }
 
     private fun epRow(f: Found, detail: String) = Row(
         f.show.name,
@@ -1555,39 +1484,6 @@ object NewEpisodes {
         })
     }
 
-    fun screen(): Screen {
-        val status = Row("Finding the shows you follow…")
-        lateinit var s: Screen
-        fun build() {
-            markSeen()   // looking at the list clears the line on Home
-            val R = app.stremiolite.Releases
-            val list = fulls.flatMap { sh -> R.recent(sh).map { Found(sh, it) } }
-                .sortedWith(compareByDescending<Found> { it.ep.released }.thenBy { it.show.name }.thenBy { it.ep.episode })
-            status.label = when {
-                loading -> "Checking $followed shows… $checked done"
-                followed == 0 -> "Start watching a show, or on a show choose 'Tell me about new episodes and seasons', to see its new episodes here."
-                list.isEmpty() -> "No new episodes in the last ${R.DAYS} days ($followed shows followed)."
-                else -> "Out in the last ${R.DAYS} days · $followed shows followed · p plays"
-            }
-            val rows = mutableListOf(status)
-            list.forEach { f ->
-                val watched = if (f.ep.id in Lib.watchedEpisodes(f.show.id, MetaParse.stremioOrder(f.show))) "✓ " else ""
-                rows += epRow(f, watched + (if (R.opensSeason(f.ep)) "new season · " else "") + R.dayName(f.ep.released))
-            }
-            rows += Row("────────────────────")
-            rows += Row("Calendar: coming up", "►", opens = { calendar() })
-            s.rows = rows
-            App.refresh()
-        }
-        s = Screen("New episodes", listOf(status))
-        var started = false
-        s.onShow = {
-            if (!started) { started = true; load(onProgress = { if (App.isTop(s)) build() }) { build() } }
-            build()
-        }
-        return s
-    }
-
     private fun calendarFilms(): List<app.stremiolite.FilmDates.Film> {
         return (Waiting.list().filter { it.type == "movie" }.map { app.stremiolite.FilmDates.Film(it.id, it.name, it.year) } +
             Follow.films().map { app.stremiolite.FilmDates.Film(it.id, it.name, it.year) } +
@@ -1599,8 +1495,8 @@ object NewEpisodes {
     fun calendar(): Screen {
         val status = Row("Finding the shows you follow…")
         lateinit var s: Screen
-        var films: List<app.stremiolite.FilmDates.Event>? = null
         fun build() {
+            val films = filmEvents
             val R = app.stremiolite.Releases
             val eps = fulls.flatMap { sh -> R.upcoming(sh).map { Found(sh, it) } }
             val days = (eps.map { it.ep.released } + films.orEmpty().map { it.day }).distinct().sorted()
@@ -1630,8 +1526,7 @@ object NewEpisodes {
             if (!started) {
                 started = true
                 load(onProgress = { if (App.isTop(s)) build() }) { build() }
-                val want = calendarFilms(); val addons = Home.all(); val key = Prefs.tmdbKey; val region = Prefs.watchRegion
-                App.async({ app.stremiolite.FilmDates.events(addons, key, region, want) }) { r -> films = r.getOrDefault(emptyList()); if (App.isTop(s)) build() }
+                refreshFilms(force = true) { if (filmEvents == null) filmEvents = emptyList(); if (App.isTop(s)) build() }
             }
             build()
         }

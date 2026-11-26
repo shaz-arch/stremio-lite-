@@ -49,3 +49,17 @@ object Basket {
     fun parse(raw: String?) = NextWatch.parse(raw)
     fun record(base: String?, list: List<NextWatch.Entry>) = NextWatch.record(base, list, ID)
 }
+
+/** Episodes you've dismissed from Ready, kept on the account so every device leaves them out. */
+object ReadyGone {
+    const val ID = "stremiolite:readygone"
+    private const val KEEP = 300
+
+    fun parse(raw: String?): Set<String> = NextWatch.parse(raw).mapTo(LinkedHashSet()) { it.id }
+
+    /** The record with [id] added (the oldest dropped past a few hundred). */
+    fun add(base: String?, id: String): JSONObject {
+        val ids = (parse(base) + id).toList().takeLast(KEEP)
+        return NextWatch.record(base, ids.map { NextWatch.Entry(it, "", "", "") }, ID)
+    }
+}

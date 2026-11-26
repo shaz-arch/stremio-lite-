@@ -112,7 +112,7 @@ object NextList {
             if (n > 0) {
                 rows += Row("────────────────────")
                 rows += Row("On the way", "$n  ►", opens = {
-                    Screen("On the way", listOf(Row("These come into Next watch by themselves once they play.")) + coming.flatMap { (g, items) ->
+                    Screen("On the way", listOf(Row("Not playable yet: each shows as ready here once a stream plays. To be told, choose "Tell me when a stream is available" on its page.")) + coming.flatMap { (g, items) ->
                         listOf(Row("──── ${g?.heading ?: "Checking…"} ────")) + items.map { row(it) }
                     })
                 })
@@ -151,10 +151,8 @@ object NextList {
         fun next(i: Int) {
             if (!App.inStack(s)) return
             if (Player.playing) { App.later(10_000) { next(i) }; return }
-            if (i >= todo.size) {
-                Waiting.follow(all().filter { app.stremiolite.NextStatus.of(it.id)?.group?.let { g -> g != app.stremiolite.NextStatus.Group.READY } == true })
-                return
-            }
+            // Nothing goes into Waiting by itself: you choose that on a title's page.
+            if (i >= todo.size) return
             App.async({ app.stremiolite.NextStatus.check(addons, todo[i], System.currentTimeMillis(), Prefs.tmdbKey, Prefs.watchRegion) }) { _ -> if (App.inStack(s)) changed(); next(i + 1) }
         }
         next(0)

@@ -65,8 +65,8 @@ object Ready {
     private const val EPISODE_DAYS = 30
     private var askedShows = emptySet<String>()
 
-    private fun gone() = ReadyNotice.readSeen(Prefs.readyGone)
-    private fun dismiss(id: String) { Prefs.readyGone = ReadyNotice.writeSeen(gone(), listOf(id)) }
+    private fun gone() = app.stremiolite.ReadyGone.parse(Lib.raw(app.stremiolite.ReadyGone.ID)?.toString()) + ReadyNotice.readSeen(Prefs.readyGone)
+    private fun dismiss(id: String) { Lib.put(app.stremiolite.ReadyGone.add(Lib.raw(app.stremiolite.ReadyGone.ID)?.toString(), id)) }
 
     fun films(): List<Waiting.Entry> {
         val next = NextList.ids()
@@ -148,27 +148,4 @@ object Ready {
         return rows
     }
 
-    private fun filmScreen(e: Waiting.Entry) = Screen(e.name, listOf(
-        Row(if (e.better) "Better version found: ${e.found}" else "A stream is available now."),
-        Row("────────────────────"),
-        Row("Play now", "►", action = { App.back(); App.push(Details.screenFor(e.id, e.type, e.name, autoPlay = true)) }),
-        Row("Add to Next watch", action = {
-            NextList.add(NextWatch.Entry(e.id, e.type, e.name, e.year)); Waiting.remove(e.id)
-            App.toast("${e.name} is in Next watch"); App.back(); App.replaceTop(screen())
-        }),
-        Row("Open its page", "►", opens = { Details.screenFor(e.id, e.type, e.name) }),
-        Row("Dismiss", action = { Waiting.remove(e.id); App.toast("Dismissed"); App.back(); App.replaceTop(screen()) }),
-    ))
-
-    private fun episodeScreen(x: Episode) = Screen(x.show.name, listOf(
-        Row(MetaParse.epLabel(x.ep) + (if (x.ep.title.isNotBlank()) " · ${x.ep.title}" else "")),
-        Row("────────────────────"),
-        Row("Play now", "►", action = { App.back(); App.push(playEpisode(x)) }),
-        Row("Add to Next watch", action = {
-            NextList.add(NextWatch.Entry(x.ep.id, "series", "${x.show.name} · ${MetaParse.epLabel(x.ep)}", "", x.show.id))
-            App.toast("In Next watch"); App.back(); App.replaceTop(screen())
-        }),
-        Row("Open the episode", "►", opens = { Details.episode(x.show, x.ep) }),
-        Row("Dismiss", action = { dismiss(x.ep.id); App.toast("Dismissed"); App.back(); App.replaceTop(screen()) }),
-    ))
 }

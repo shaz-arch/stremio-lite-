@@ -98,27 +98,6 @@ object Waiting {
 
     private fun save(c: Context, list: List<Entry>) = History.putRemote(c, record(History.rawRemote(c, ID), list))
 
-    /**
-     * Next watch films that aren't ready yet, followed quietly (no check now: it just found none):
-     * ones not out to stream yet go to Following, ones out with no good stream to Waiting.
-     */
-    fun follow(app: MainActivity, films: List<NextWatch.Entry>) {
-        // A show with no episode out yet is followed; it comes into Next watch when episode 1 lands.
-        films.filter { it.type == "series" && NextStatus.of(it.id)?.group == NextStatus.Group.SOON && !Follow.isFollowed(app, it.id) }
-            .forEach { Follow.follow(app, it.id, it.name) }
-        val movies = films.filter { it.type == "movie" }
-        val soon = movies.filter { NextStatus.of(it.id)?.group == NextStatus.Group.SOON }
-        val have = list(app)
-        val followed = Follow.films(app).map { it.id }.toSet()
-        Follow.followFilms(app, soon.filter { it.id !in followed }.map { Following.Film(it.id, it.name, it.year, NextStatus.of(it.id)?.detail.orEmpty()) })
-        // Not out yet after all: it waits in Following, not here (a "better version" wait stays).
-        val kept = have.filter { e -> e.better || soon.none { it.id == e.id } }
-        val add = (movies - soon.toSet()).filter { f -> NextStatus.of(f.id)?.group == NextStatus.Group.WAITING && kept.none { it.id == f.id } && f.id !in followed }
-        if (add.isEmpty() && kept.size == have.size) return
-        save(app, kept + add.map { Entry(it.id, it.type, it.name, it.year, 0) })
-        askToNotify(app)
-    }
-
     fun add(app: MainActivity, e: Entry) {
         save(app, list(app).filter { it.id != e.id } + e)
         askToNotify(app)
@@ -407,7 +386,7 @@ object Waiting {
             val plain = keep.filter { !it.better && it.ready == 0L && notOut.none { n -> n.id == it.id } }
             rows += Row("──── Films: waiting for a stream ────")
             if (plain.isEmpty() && notOut.isEmpty()) rows += Row("None. On a film, choose 'Tell me when a stream is available'.")
-            plain.sortedBy { it.name }.forEach { e -> rows += Row(filmLabel(e), "no stream yet  ►", opens = { Details.screenFor(app, e.id, e.type, e.name, e.year) ?: entry(app, e) }) }
+            plain.sortedBy { it.name }.forEach { e -> rows += Row(filmLabel(e), "no stream yet  ►", opens = { Details.screenFor(app, e.id, e.type, e.name, e.year) ?: Screen(e.name, listOf(Row("Your add-ons are still loading. Try again in a moment."))) }) }
             notOut.sortedBy { it.name }.forEach { f ->
                 rows += Row(Marks.title(Marks.WAITING, f.name) + if (f.year.isNotEmpty()) " (${f.year})" else "", f.note.ifBlank { "not out yet" } + "  ►",
                     opens = { Details.screenFor(app, f.id, "movie", f.name, f.year) ?: Screen(f.name, listOf(Row("Your add-ons are still loading."))) })
@@ -415,7 +394,7 @@ object Waiting {
             val upgrades = keep.filter { it.better && it.ready == 0L }
             rows += Row("──── Films: waiting for a better version ────")
             if (upgrades.isEmpty()) rows += Row("None. After playing a film, choose 'Tell me when a better version appears'.")
-            upgrades.sortedBy { it.name }.forEach { e -> rows += Row(filmLabel(e), "have: ${e.have}  ►", opens = { Details.screenFor(app, e.id, e.type, e.name, e.year) ?: entry(app, e) }) }
+            upgrades.sortedBy { it.name }.forEach { e -> rows += Row(filmLabel(e), "have: ${e.have}  ►", opens = { Details.screenFor(app, e.id, e.type, e.name, e.year) ?: Screen(e.name, listOf(Row("Your add-ons are still loading. Try again in a moment."))) }) }
             // Shows you follow: waiting for a new season, or for the next episode of this one.
             val shows = shownShows(app).filter { !Following.ended(it) }
             // Each show sits where you follow it: for new seasons, or for every new episode.
@@ -471,114 +450,4 @@ object Waiting {
         return screen
     }
 
-    /** Shows you follow (favourites by themselves), and films followed until they're out to stream. */
-    fun followingScreen(app: MainActivity): Screen {
-        lateinit var screen: Screen
-        fun build(): List<Row> {
-            val rows = mutableListOf<Row>()
-            val films = Follow.films(app)
-            rows += Row("──── Films not out to stream yet ────")
-            if (films.isEmpty()) rows += Row("None. Films in Next watch that aren't out yet come here by themselves.")
-            films.sortedBy { it.name }.forEach { f ->
-                rows += Row(Marks.title(Marks.FOLLOWING, f.name) + if (f.year.isNotEmpty()) " (${f.year})" else "", f.note.ifBlank { "not out yet" } + "  ►", opens = {
-                    Screen(f.name, listOfNotNull(
-                        Row(if (f.note.isBlank()) "Not out to stream yet." else "Not out to stream yet: ${f.note}."),
-                        Row("Moves to Waiting when it's out, then you're told once a good stream turns up."),
-                        Row("────────────────────"),
-                        Details.screenFor(app, f.id, "movie", f.name, f.year)?.let { d -> Row("Open", "►", opens = { d }) },
-                        Row("Stop following", action = { Follow.unfollowFilms(app, listOf(f.id)); app.toast("Stopped following ${f.name}"); app.back() }),
-                    ))
-                })
-            }
-            // Shows you follow, by where you're up to (details from the shared hourly check).
-            rows += showSections(app) { if (app.isTop(screen)) { screen.rows = build(); app.refresh(screen) } }
-            rows += Row("────────────────────")
-            rows += Row("Episodes out in the last week", "►", opens = { NewEpisodes.screen(app) })
-            rows += Row("Calendar: coming up", "►", opens = { NewEpisodes.calendar(app) })
-            val shows = following(app)
-            if (shows.isNotEmpty()) rows += Row("Stop following all shows", "►", opens = {
-                confirmScreen(app, "Stop following all shows?", "Stops all ${shows.size} shows, on every device. They stay stopped even if you watch more or they're favourites; follow one again from its page.", "Yes, stop all ${shows.size}") {
-                    Follow.unfollowAll(app, shows.map { it.first }); app.toast("Stopped following all shows"); app.back()
-                }
-            })
-            if (films.isNotEmpty()) rows += Row("Stop following the films", "►", opens = {
-                confirmScreen(app, "Stop following the films?", "Stops all ${films.size} films, on every device.", "Yes, stop all ${films.size}") {
-                    Follow.unfollowFilms(app, films.map { it.id }); app.toast("Stopped following the films"); app.back()
-                }
-            })
-            return rows
-        }
-        screen = Screen("Following", build())
-        screen.onShow = {
-            screen.rows = build(); app.refresh(screen)
-            History.pull(app, force = true) {
-                if (app.isTop(screen)) { screen.rows = build(); app.refresh(screen) }
-                checkFollowedFilms(app) { if (app.isTop(screen)) { screen.rows = build(); app.refresh(screen) } }
-            }
-        }
-        return screen
-    }
-
-    private fun showSections(app: MainActivity, ready: () -> Unit): List<Row> {
-        val rows = mutableListOf<Row>()
-        val followed = following(app)
-        if (followed.isEmpty()) {
-            rows += Row("──── Shows ────")
-            rows += Row("None yet. Your favourite shows are followed by themselves.")
-            return rows
-        }
-        if (!NewEpisodes.fresh() && NewEpisodes.shows().isEmpty()) {
-            rows += Row("──── Shows: ${followed.size} followed ────")
-            rows += Row(if (NewEpisodes.isLoading()) "Checking where you're up to…" else "Checking where you're up to… (back and in again to refresh)")
-            NewEpisodes.load(app) { ready() }
-            return rows
-        }
-        // A show followed since the last check is fetched now, not at the next hourly refresh.
-        val coming = if (NewEpisodes.isLoading()) emptySet() else NewEpisodes.ensure(app, followed) { ready() }
-        val infos = History.infos(app).associateBy { it.id }
-        val ids = followed.map { it.first }.toSet()
-        val watchedOf = NewEpisodes.shows().filter { it.id in ids }.associate { show -> show.id to watchedOf(app, show, infos) }
-        val shown = shownShows(app).map { it.id }.toSet()
-        val bySection = NewEpisodes.shows().filter { it.id in shown }.groupBy { show ->
-            Following.section(show, watchedOf[show.id] ?: emptySet(), infos[show.id])
-        }
-        fun section(title: String, list: List<Full>?, detail: (Full) -> String) {
-            if (list.isNullOrEmpty()) return
-            rows += Row("──── $title ────")
-            list.sortedBy { it.name }.forEach { sh ->
-                rows += Row(Marks.title(History.marks(app)[sh.id], sh.name), detail(sh) + "  ►", opens = {
-                    Details.screenFor(app, sh.id, sh.type, sh.name, sh.year) ?: Screen(sh.name, listOf(Row("Your add-ons are still loading.")))
-                })
-            }
-        }
-        fun next(sh: Full) = Following.nextText(sh)
-        section("Caught up: waiting for more", bySection[Following.Section.CAUGHT_UP]) { next(it) }
-        section("Watching", bySection[Following.Section.WATCHING]) { sh ->
-            Following.progressText(sh, watchedOf[sh.id] ?: emptySet(), infos[sh.id])
-        }
-        section("Not started", bySection[Following.Section.NOT_STARTED]) { next(it) }
-        val pending = followed.filter { it.first in coming }
-        if (pending.isNotEmpty()) {
-            rows += Row("──── Checking ────")
-            pending.forEach { (_, name) -> rows += Row(name, "checking…") }
-        }
-        return rows
-    }
-
-    private fun entry(app: MainActivity, e: Entry): Screen = Screen(
-        e.name,
-        listOfNotNull(
-            Row(
-                when {
-                    e.better && e.ready > 0 -> "Better version found: ${e.found}"
-                    e.better -> "Watching for something better than: ${e.have}"
-                    e.ready > 0 -> "A stream is available now."
-                    else -> "No good stream yet. Still waiting."
-                },
-            ),
-            Row("────────────────────"),
-            Details.screenFor(app, e.id, e.type, e.name, e.year)?.let { d -> Row("Open", "►", opens = { d }) },
-            Row("Remove from the list", action = { remove(app, e.id); app.toast("Removed"); app.back() }),
-        ),
-    )
 }
