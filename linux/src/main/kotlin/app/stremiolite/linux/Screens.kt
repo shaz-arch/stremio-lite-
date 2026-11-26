@@ -1515,9 +1515,8 @@ object NewEpisodes {
             }
             val rows = mutableListOf(status)
             if (n > 0) rows += Row("Save these dates as a calendar file (.ics)", "►", action = {
-                val CF = app.stremiolite.CalendarFile
-                CalendarSave.save(eps.map { CF.Item(it.ep.released, "${it.show.name} ${MetaParse.epLabel(it.ep)}", it.ep.title) } +
-                    films.orEmpty().map { CF.Item(it.day, "${it.film.name} (${it.what})", "Film") })
+                CalendarSave.save(eps.map { app.stremiolite.CalendarFile.Item(it.ep.released, "${it.show.name} ${MetaParse.epLabel(it.ep)}", it.ep.title) } +
+                    films.orEmpty().map { app.stremiolite.CalendarFile.Item(it.day, "${it.film.name} (${it.what})", "Film") })
             })
             days.forEach { day ->
                 rows += Row("──── ${R.dayName(day)} ────")
