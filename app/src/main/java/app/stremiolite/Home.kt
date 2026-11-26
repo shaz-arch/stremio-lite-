@@ -124,14 +124,14 @@ object Home {
             rows.addAll(top, listOf(
                 Row("──── Watching ────"),
             ) + (if (KidsGuard.hides(app)) emptyList() else listOf(search)) + listOf(
-                Row("Continue watching", if (cw.isEmpty()) "nothing yet" else "${cw.size}  ►", opens = { continueScreen(app) }),
+                Row("Basket", BasketList.summary(app), opens = { BasketList.screen(app) }),
                 Row("Next watch", NextList.summary(app), opens = { NextList.screen(app) }),
-                Row("Favourites", if (lib.isEmpty()) "empty" else "${lib.size}  ►", opens = { libraryScreen(app) }),
-                Row("New episodes", NewEpisodes.recentCount()?.let { if (it == 0) "none  ►" else "$it  ►" } ?: "", opens = { NewEpisodes.screen(app) }),
-                Row("Calendar", NewEpisodes.weekCount()?.let { if (it == 0) "nothing this week  ►" else "$it this week  ►" } ?: "", opens = { NewEpisodes.calendar(app) }),
-                Row("Watched", History.watched(app).size.let { if (it == 0) "" else "$it  ►" }, opens = { watchedScreen(app) }),
+                Row("Ready", Ready.summary(app), opens = { Ready.screen(app) }),
                 Row("Waiting", Waiting.summary(app), opens = { Waiting.screen(app) }),
-                Row("Following", Waiting.followingSummary(app), opens = { Waiting.followingScreen(app) }),
+                Row("Favourites", if (lib.isEmpty()) "empty" else "${lib.size}  ►", opens = { libraryScreen(app) }),
+                Row("Continue watching", if (cw.isEmpty()) "nothing yet" else "${cw.size}  ►", opens = { continueScreen(app) }),
+                Row("Watched", History.watched(app).size.let { if (it == 0) "" else "$it  ►" }, opens = { watchedScreen(app) }),
+                Row("Calendar", NewEpisodes.weekCount()?.let { if (it == 0) "nothing this week  ►" else "$it this week  ►" } ?: "", opens = { NewEpisodes.calendar(app) }),
             ) + (if (Settings.liveTv(app) && !KidsGuard.hides(app)) listOf(Row("Live TV", Live.homeDetail(app), opens = { Live.screen(app) })) else emptyList()) + listOf(
                 Row("──── Browse ────"),
             ))

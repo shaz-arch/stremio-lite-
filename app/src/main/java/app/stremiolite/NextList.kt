@@ -8,7 +8,25 @@ object NextList {
 
     private fun started(c: Context): (String) -> Boolean {
         val m = History.marks(c)
-        return { id -> m[id] == Marks.WATCHED || m[id] == Marks.CONTINUE }
+        // An episode put here from Ready leaves once you've started that episode.
+        return { id -> if (':' in id) History.progress(c, id) != null else m[id] == Marks.WATCHED || m[id] == Marks.CONTINUE }
+    }
+
+    fun add(c: Context, e: NextWatch.Entry) { save(c, NextWatch.added(NextWatch.parse(raw(c)), e)); BasketList.done(c, e.id) }
+
+    /** Opens an episode put in Next watch (its show's details are fetched first). */
+    private fun openEpisode(app: MainActivity, e: NextWatch.Entry, play: Boolean = false) {
+        val addons = Home.allAddons()
+        Net.async({ MetaParse.fetch(addons, "series", e.show) }) { r ->
+            val f = r.getOrNull()
+            val v = f?.videos?.firstOrNull { it.id == e.id }
+            if (f == null || v == null) { app.toast("Couldn't load that episode"); return@async }
+            app.push(if (play) Details.playEpisode(app, f, v) else Details.episodeScreen(app, f, v))
+        }
+    }
+
+    private fun open(app: MainActivity, e: NextWatch.Entry) {
+        if (e.isEpisode) openEpisode(app, e) else Details.screenFor(app, e.id, e.type, e.name, e.year)?.let { app.push(it) }
     }
 
     /** Your Next watch, without anything you've since started (those drop out on every device). */
@@ -30,8 +48,8 @@ object NextList {
         val list = all(c)
         if (list.isEmpty()) return "empty"
         val w = Waiting.list(c).associate { it.id to (it.better to it.ready) }
-        val ready = list.count { NextStatus.effective(it.id) { id -> w[id] }?.group == NextStatus.Group.READY }
-        val known = list.count { NextStatus.effective(it.id) { id -> w[id] } != null }
+        val ready = list.count { it.isEpisode || NextStatus.effective(it.id) { id -> w[id] }?.group == NextStatus.Group.READY }
+        val known = list.count { it.isEpisode || NextStatus.effective(it.id) { id -> w[id] } != null }
         if (known < list.size && ready == 0) return "${list.size}  ►"
         return listOfNotNull("$ready ready", (list.size - ready).takeIf { it > 0 }?.let { "$it on the way" }).joinToString(" · ") + "  ►"
     }
@@ -44,7 +62,7 @@ object NextList {
         r = Row(label(), action = {
             val list = NextWatch.parse(raw(app))
             if (has(app, f.id)) { save(app, NextWatch.removed(list, f.id)); app.toast("Removed from Next watch") }
-            else { save(app, NextWatch.added(list, NextWatch.Entry(f.id, f.type, f.name, f.year))); app.toast("Added to Next watch") }
+            else { add(app, NextWatch.Entry(f.id, f.type, f.name, f.year)); app.toast("Added to Next watch") }
             r.label = label()
             app.refreshTop()
         })
@@ -63,7 +81,7 @@ object NextList {
     /** A title's status, with what Waiting for streams says first (you asked to wait, or it found one). */
     private fun statusOf(app: MainActivity): (String) -> NextStatus.Status? {
         val w = Waiting.list(app).associate { it.id to (it.better to it.ready) }
-        return { id -> NextStatus.effective(id) { w[it] } }
+        return { id -> if (':' in id) NextStatus.Status(NextStatus.Group.READY, "new episode") else NextStatus.effective(id) { w[it] } }
     }
 
     private fun detail(st: NextStatus.Status?): String = st?.detail ?: "checking…"
@@ -80,7 +98,8 @@ object NextList {
             val status = statusOf(app)
             fun row(e: NextWatch.Entry): Row {
                 val st = status(e.id)
-                return Row(Marks.title(st?.shape ?: Marks.NEXT, e.name), detail(st) + "  ►", action = { Details.screenFor(app, e.id, e.type, e.name, e.year)?.let { app.push(it) } })
+                return Row(Marks.title(st?.shape ?: Marks.NEXT, e.name), detail(st) + "  ►", action = { open(app, e) },
+                    play = { if (e.isEpisode) openEpisode(app, e, play = true) else Details.screenFor(app, e.id, e.type, e.name, e.year, autoPlay = true)?.let { app.push(it) } })
             }
             // Only what plays now; the rest is on its way (in Waiting or Following) and comes in by itself.
             val groups = NextStatus.grouped(list, status)
@@ -117,7 +136,7 @@ object NextList {
             items = all(app).toMutableList(),
             label = { Marks.title(statusOf(app)(it.id)?.shape ?: Marks.NEXT, it.name) },
             detail = { detail(statusOf(app)(it.id)) },
-            open = { Details.screenFor(app, it.id, it.type, it.name, it.year) },
+            open = { if (it.isEpisode) { openEpisode(app, it); null } else Details.screenFor(app, it.id, it.type, it.name, it.year) },
             commit = { save(app, it) },
         )
         val s = r.build("Next watch")
@@ -130,7 +149,7 @@ object NextList {
      * follows films that aren't ready in Waiting for streams so you're told when they are.
      */
     private fun fill(app: MainActivity, s: Screen, changed: () -> Unit) {
-        val todo = NextStatus.missing(all(app))
+        val todo = NextStatus.missing(all(app).filter { !it.isEpisode })
         if (todo.isEmpty()) return
         val addons = Home.allAddons()
         val key = Settings.tmdbKey(app)

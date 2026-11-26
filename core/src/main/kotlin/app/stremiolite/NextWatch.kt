@@ -11,21 +11,24 @@ import org.json.JSONObject
 object NextWatch {
     const val ID = "stremiolite:next"
 
-    class Entry(val id: String, val type: String, val name: String, val year: String) {
+    /** One title; an episode put here from Ready has its video id as [id] ("tt…:2:5") and [show] set. */
+    class Entry(val id: String, val type: String, val name: String, val year: String, val show: String = "") {
         fun json(): JSONObject = JSONObject().put("id", id).put("type", type).put("name", name).put("year", year)
+            .apply { if (show.isNotEmpty()) put("show", show) }
+        val isEpisode get() = show.isNotEmpty()
     }
 
     fun parse(raw: String?): List<Entry> {
         val name = raw?.let { runCatching { JSONObject(it).optString("name") }.getOrNull() } ?: return emptyList()
         val arr = runCatching { JSONArray(name) }.getOrNull() ?: return emptyList()
         return (0 until arr.length()).mapNotNull { i ->
-            arr.optJSONObject(i)?.let { Entry(it.optString("id"), it.optString("type"), it.optString("name"), it.optString("year")) }
+            arr.optJSONObject(i)?.let { Entry(it.optString("id"), it.optString("type"), it.optString("name"), it.optString("year"), it.optString("show")) }
         }.filter { it.id.isNotEmpty() }.distinctBy { it.id }
     }
 
     /** The account record holding [list], keeping anything else [base] has. */
-    fun record(base: String?, list: List<Entry>): JSONObject {
-        val item = base?.let { runCatching { JSONObject(it) }.getOrNull() } ?: Sync.newItem(ID, "other", "[]")
+    fun record(base: String?, list: List<Entry>, id: String = ID): JSONObject {
+        val item = base?.let { runCatching { JSONObject(it) }.getOrNull() } ?: Sync.newItem(id, "other", "[]")
         return item.put("name", JSONArray().apply { list.forEach { put(it.json()) } }.toString())
             .put("removed", true).put("temp", false).put("_mtime", Sync.iso(System.currentTimeMillis()))
     }
@@ -35,4 +38,14 @@ object NextWatch {
 
     fun added(list: List<Entry>, e: Entry): List<Entry> = list.filter { it.id != e.id } + e
     fun removed(list: List<Entry>, id: String): List<Entry> = list.filter { it.id != id }
+}
+
+/**
+ * The basket: titles you liked the look of while browsing, to decide about later (Next watch,
+ * Favourites, Waiting). Same record shape as [NextWatch], under its own hidden id.
+ */
+object Basket {
+    const val ID = "stremiolite:basket"
+    fun parse(raw: String?) = NextWatch.parse(raw)
+    fun record(base: String?, list: List<NextWatch.Entry>) = NextWatch.record(base, list, ID)
 }

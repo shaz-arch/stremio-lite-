@@ -1,0 +1,106 @@
+package app.stremiolite
+
+import android.content.Context
+
+/**
+ * Ready: what has come good, for you to pick up: a film whose stream turned up, a better version
+ * found, a new episode or season of a show you follow. From here you play it, put it in Next watch,
+ * or dismiss it. Films leave Waiting once they're ready; shows stay there for their next episode.
+ */
+object Ready {
+    /** Episodes stay in Ready this long after they come out, unless you watch, line up or dismiss them. */
+    private const val EPISODE_DAYS = 30
+
+    private fun prefs(c: Context) = Profiles.prefsFor(c, "settings")
+    private fun gone(c: Context) = ReadyNotice.readSeen(prefs(c).getString("readyGone", null))
+    private fun dismiss(c: Context, id: String) =
+        prefs(c).edit().putString("readyGone", ReadyNotice.writeSeen(gone(c), listOf(id))).apply()
+
+    fun films(c: Context): List<Waiting.Entry> {
+        val next = NextList.ids(c)
+        return Waiting.current(c).filter { it.ready > 0 && it.id !in next }.sortedByDescending { it.ready }
+    }
+
+    class Episode(val show: Full, val ep: Video)
+
+    /** New episodes of shows you follow, not watched, not lined up and not dismissed, newest first. */
+    fun episodes(c: Context): List<Episode> {
+        val followed = Waiting.following(c).map { it.first }.toSet()
+        val next = NextList.ids(c)
+        val gone = gone(c)
+        return NewEpisodes.shows().filter { it.id in followed }
+            .flatMap { sh -> Releases.recent(sh, Releases.day(EPISODE_DAYS)).map { Episode(sh, it) } }
+            .filter { it.ep.id !in gone && it.ep.id !in next && History.progress(c, it.ep.id) == null }
+            .sortedWith(compareByDescending<Episode> { it.ep.released }.thenBy { it.show.name }.thenBy { it.ep.season }.thenBy { it.ep.episode })
+    }
+
+    fun summary(c: Context): String {
+        val n = films(c).size + episodes(c).size
+        return if (n == 0) "nothing yet" else "$n  ►"
+    }
+
+    fun screen(app: MainActivity): Screen {
+        lateinit var s: Screen
+        fun redraw() { if (app.inStack(s)) { s.rows = build(app) { redraw() }; app.refresh(s) } }
+        s = Screen("Ready", build(app) { redraw() })
+        var loaded = false
+        s.onShow = {
+            Waiting.markSeen(app); NewEpisodes.markSeen(app)
+            redraw()
+            History.pull(app) { redraw() }
+            if (!loaded) { loaded = true; NewEpisodes.load(app) { redraw() } }
+        }
+        return s
+    }
+
+    private fun build(app: MainActivity, changed: () -> Unit): List<Row> {
+        val films = films(app)
+        val eps = episodes(app)
+        val rows = mutableListOf<Row>()
+        if (films.isEmpty() && eps.isEmpty()) rows += Row("Nothing ready yet. Films you're waiting on and new episodes of shows you follow come here.")
+        if (films.isNotEmpty()) {
+            rows += Row("──── Films ────")
+            films.forEach { e ->
+                rows += Row(Marks.title(Marks.READY, e.name) + if (e.year.isNotEmpty()) " (${e.year})" else "",
+                    (if (e.better) "better: ${e.found}" else "stream found") + "  ►",
+                    opens = { filmScreen(app, e, changed) },
+                    play = { Details.screenFor(app, e.id, e.type, e.name, e.year, autoPlay = true)?.let { app.push(it) } })
+            }
+        }
+        if (eps.isNotEmpty()) {
+            rows += Row("──── Episodes ────")
+            eps.forEach { x ->
+                val season = if (Releases.opensSeason(x.ep)) "new season · " else ""
+                rows += Row(Marks.title(Marks.READY, x.show.name), season + Details.epLabel(x.ep) + "  ►",
+                    opens = { episodeScreen(app, x, changed) },
+                    play = { app.push(Details.playEpisode(app, x.show, x.ep)) })
+            }
+        }
+        return rows
+    }
+
+    private fun filmScreen(app: MainActivity, e: Waiting.Entry, changed: () -> Unit) = Screen(e.name, listOfNotNull(
+        Row(if (e.better) "Better version found: ${e.found}" else "A stream is available now."),
+        Row("────────────────────"),
+        Row("Play now", "►", action = { Details.screenFor(app, e.id, e.type, e.name, e.year, autoPlay = true)?.let { app.back(); app.push(it) } }),
+        Row("Add to Next watch", action = {
+            NextList.add(app, NextWatch.Entry(e.id, e.type, e.name, e.year))
+            Waiting.remove(app, e.id)
+            app.toast("${e.name} is in Next watch"); app.back(); changed()
+        }),
+        Details.screenFor(app, e.id, e.type, e.name, e.year)?.let { d -> Row("Open its page", "►", opens = { d }) },
+        Row("Dismiss", action = { Waiting.remove(app, e.id); app.toast("Dismissed"); app.back(); changed() }),
+    ))
+
+    private fun episodeScreen(app: MainActivity, x: Episode, changed: () -> Unit) = Screen(x.show.name, listOf(
+        Row(Details.epLabel(x.ep) + (if (x.ep.title.isNotBlank()) " · ${x.ep.title}" else "")),
+        Row("────────────────────"),
+        Row("Play now", "►", action = { app.back(); app.push(Details.playEpisode(app, x.show, x.ep)) }),
+        Row("Add to Next watch", action = {
+            NextList.add(app, NextWatch.Entry(x.ep.id, "series", "${x.show.name} · ${Details.epLabel(x.ep)}", "", x.show.id))
+            app.toast("In Next watch"); app.back(); changed()
+        }),
+        Row("Open the episode", "►", opens = { Details.episodeScreen(app, x.show, x.ep) }),
+        Row("Dismiss", action = { dismiss(app, x.ep.id); app.toast("Dismissed"); app.back(); changed() }),
+    ))
+}

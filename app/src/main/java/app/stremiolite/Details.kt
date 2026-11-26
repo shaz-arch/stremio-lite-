@@ -178,6 +178,7 @@ object Details {
             app.toast(if (added) "Added to favourites" + (if (f.type == "series") ": following new episodes" else "") else "Removed from favourites")
             app.refreshTop()
         })
+        rows += BasketList.row(app, f)
         rows += lib
         NextList.row(app, f)?.let { rows += it }
         if (f.type == "series") {
@@ -190,6 +191,7 @@ object Details {
                     app.toast("Stopped following ${f.name}")
                 } else {
                     Follow.follow(app, f.id, f.name)
+                    BasketList.done(app, f.id)
                     Waiting.askToNotify(app)
                     app.toast("Following ${f.name}: you'll be told when new episodes play")
                 }
@@ -206,7 +208,7 @@ object Details {
         if (f.type == "movie") {
             lateinit var wait: Row
             fun waitLabel() = when {
-                Follow.followsFilm(app, f.id) -> "Following until it's out to stream ✓ (stop)"
+                Follow.followsFilm(app, f.id) -> "Waiting until it's out to stream ✓ (stop)"
                 Waiting.has(app, f.id) -> "Stop waiting for a stream"
                 else -> "Tell me when a stream is available"
             }
@@ -223,8 +225,9 @@ object Details {
                             else {
                                 Follow.followFilms(app, listOf(Following.Film(f.id, f.name, f.year, note)))
                                 Waiting.askToNotify(app)
-                                app.toast("Not out to stream yet ($note): added to Following")
+                                app.toast("Not out to stream yet ($note): added to Waiting")
                             }
+                            BasketList.done(app, f.id)
                             wait.label = waitLabel(); app.refreshTop()
                         }
                     }
@@ -243,6 +246,7 @@ object Details {
                 } else {
                     app.toast("Checking what's there now…")
                     Waiting.addBetter(app, f.id, f.type, f.name, f.year) { have ->
+                        BasketList.done(app, f.id)
                         app.toast("I'll tell you when something better than $have appears")
                         better.label = betterLabel(); wait.label = waitLabel(); app.refreshTop()
                     }
