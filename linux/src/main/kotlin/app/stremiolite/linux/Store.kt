@@ -108,6 +108,9 @@ object Prefs {
         if (watched) w.put(path, true)
         save()
     }
+    var castDlna: Boolean
+        get() = data().optBoolean("castDlna", false)
+        set(v) { data().put("castDlna", v); save() }
     var shareFiles: Boolean
         get() = data().optBoolean("shareFiles", false)
         set(v) { data().put("shareFiles", v); save() }

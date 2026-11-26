@@ -1050,6 +1050,7 @@ object Settings {
                 }),
                 DriveUi.settingsRow(),
                 MyFiles.settingsRow(),
+                Row("Play on a TV on my Wi-Fi (DLNA)", "◄ ${if (Prefs.castDlna) "On" else "Off: mpv"} ►", action = { Prefs.castDlna = !Prefs.castDlna; build() }),
                 Row("Play what's sent to the TV", "◄ ${if (Prefs.receiveSends) "On: this computer too" else "Off"} ►", action = {
                     Prefs.receiveSends = !Prefs.receiveSends; build()
                 }),

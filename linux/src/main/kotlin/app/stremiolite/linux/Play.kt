@@ -320,6 +320,8 @@ object Player {
     }
 
     fun play(url: String, title: String, sub: Sub?, startAt: Long, video: String = "", done: (Result) -> Unit) {
+        // Play on a TV instead (Settings): the TV plays the link itself.
+        if (Prefs.castDlna && url.startsWith("http") && !url.contains("127.0.0.1")) { App.push(Cast.screen(url, title)); done(Result(0, 0, false, "cast")); return }
         val cmd = Prefs.player
         val isMpv = File(cmd).name.startsWith("mpv")
         val sock = File(System.getProperty("java.io.tmpdir"), "stremonino-mpv-${ProcessHandle.current().pid()}.sock")

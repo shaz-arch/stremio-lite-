@@ -48,6 +48,11 @@ object Player {
         }
         val uri = Uri.parse(url)
         val choice = force ?: Settings.player(activity).pkg
+        // A TV on the network: it plays the link itself, so this device isn't tied up.
+        if (choice == Cast.PKG) {
+            if (url.contains("127.0.0.1")) { activity.toast("Google Drive videos can't be cast yet: playing here"); }
+            else { activity.push(Cast.screen(activity, url, title)); return }
+        }
         fun viewIntent() = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, "video/*")
             putExtra("title", title)
@@ -74,7 +79,7 @@ object Player {
                 attempts += direct
                 attempts += viewIntent().setPackage(VLC).also { if (startAt > 0) it.putExtra("position", startAt) }
             }
-            null -> Unit
+            null, Cast.PKG -> Unit
             // Just Player and other MX-style players take the start position as an int
             else -> attempts += viewIntent().setPackage(choice).also { if (startAt > 0) it.putExtra("position", startAt.toInt()) }
         }

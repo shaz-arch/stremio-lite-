@@ -182,3 +182,52 @@ object SharedFiles {
         return s
     }
 }
+
+/** Playing on a smart TV on the home network (DLNA), chosen as the player in Settings. */
+object Cast {
+    const val PKG = "dlna"
+    private var last: Dlna.Renderer? = null
+    private var found: List<Dlna.Renderer> = emptyList()
+
+    /** Finds the TVs, then plays [url] on the one you pick (the last one used goes first). */
+    fun screen(app: MainActivity, url: String, title: String): Screen {
+        val status = Row("Looking for TVs on your Wi-Fi…")
+        lateinit var s: Screen
+        fun rows(): List<Row> {
+            val list = (listOfNotNull(last) + found).distinctBy { it.control }
+            val out = mutableListOf(status)
+            list.forEach { r ->
+                out += Row(r.name, if (r.control == last?.control) "last used  ►" else "►", action = {
+                    status.label = "Sending to ${r.name}…"; app.refresh(s)
+                    Net.async({ Dlna.play(r, url, title) }) { res ->
+                        res.onSuccess { last = r; status.label = "Playing on ${r.name}"; app.toast("Playing on ${r.name}") }
+                            .onFailure { status.label = "${r.name}: ${it.message}. Some TVs can't play this kind of file or link." }
+                        s.rows = rows() + controls(app, r); app.refresh(s)
+                    }
+                })
+            }
+            out += Row("Look again", action = { search(app, s, status) { s.rows = rows(); app.refresh(s) } })
+            return out
+        }
+        s = Screen("Play on a TV", rows())
+        var started = false
+        s.onShow = { if (!started) { started = true; search(app, s, status) { s.rows = rows(); app.refresh(s) } } }
+        return s
+    }
+
+    private fun controls(app: MainActivity, r: Dlna.Renderer) = listOf(
+        Row("────────────────────"),
+        Row("Pause", action = { Net.async({ Dlna.pause(r) }) { } }),
+        Row("Resume", action = { Net.async({ Dlna.resume(r) }) { } }),
+        Row("Stop", action = { Net.async({ Dlna.stop(r) }) { app.toast("Stopped") } }),
+    )
+
+    private fun search(app: MainActivity, s: Screen, status: Row, done: () -> Unit) {
+        status.label = "Looking for TVs on your Wi-Fi…"; app.refresh(s)
+        Net.async({ Dlna.discover() }) { r ->
+            found = r.getOrDefault(emptyList())
+            status.label = if (found.isEmpty() && last == null) "No TVs answered. Is the TV on, on the same Wi-Fi, with DLNA or screen sharing switched on?" else "Pick a TV:"
+            done()
+        }
+    }
+}

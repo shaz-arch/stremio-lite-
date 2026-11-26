@@ -113,3 +113,32 @@ object MyFiles {
         }
     }
 }
+
+/** Playing on a smart TV on the home network (DLNA) instead of mpv, when switched on in Settings. */
+object Cast {
+    private var last: app.stremiolite.Dlna.Renderer? = null
+
+    fun screen(url: String, title: String): Screen {
+        val D = app.stremiolite.Dlna
+        val status = Row("Looking for TVs on your Wi-Fi…")
+        val s = Screen("Play on a TV", listOf(status))
+        App.async({ D.discover() }) { r ->
+            val list = (listOfNotNull(last) + r.getOrDefault(emptyList())).distinctBy { it.control }
+            status.label = if (list.isEmpty()) "No TVs answered. Is the TV on, on the same Wi-Fi, with DLNA switched on?" else "Pick a TV:"
+            s.rows = listOf(status) + list.map { tv ->
+                Row(tv.name, "►", action = {
+                    App.async({ D.play(tv, url, title) }) { res ->
+                        res.onSuccess { last = tv; App.toast("Playing on ${tv.name}") }.onFailure { App.toast("${tv.name}: ${it.message}") }
+                    }
+                })
+            } + if (last != null) listOf(
+                Row("────────────────────"),
+                Row("Pause", action = { last?.let { tv -> App.async({ D.pause(tv) }) { } } }),
+                Row("Resume", action = { last?.let { tv -> App.async({ D.resume(tv) }) { } } }),
+                Row("Stop", action = { last?.let { tv -> App.async({ D.stop(tv) }) { } } }),
+            ) else emptyList()
+            App.refresh()
+        }
+        return s
+    }
+}

@@ -18,6 +18,7 @@ object Settings {
         PlayerChoice("Ask each time", null),
         // Added later, so earlier choices keep their place.
         PlayerChoice("Kodi", "org.xbmc.kodi"),
+        PlayerChoice("A TV on my Wi-Fi (DLNA)", Cast.PKG),
     )
 
     /** Each profile has its own settings. */
