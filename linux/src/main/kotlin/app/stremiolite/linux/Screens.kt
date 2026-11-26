@@ -784,12 +784,12 @@ object Details {
             val FO = app.stremiolite.Following
             fun folLabel() = when {
                 !Follow.isFollowed(f.id) -> "Follow: tell me about new episodes or seasons"
-                Follow.mode(f.id) == FO.EPISODES -> "Following: every new episode ✓ (Enter: seasons only)"
+                Follow.mode(f.id) == FO.EPISODES -> "Following: new episodes and seasons ✓ (Enter: seasons only)"
                 else -> "Following: new seasons only ✓ (Enter: stop)"
             }
             fol = Row(folLabel(), action = {
                 when {
-                    !Follow.isFollowed(f.id) -> { Follow.follow(f.id, f.name, FO.EPISODES); App.toast("Following ${f.name}: every new episode comes to Ready") }
+                    !Follow.isFollowed(f.id) -> { Follow.follow(f.id, f.name, FO.EPISODES); App.toast("Following ${f.name}: new episodes and seasons come to Ready") }
                     Follow.mode(f.id) == FO.EPISODES -> { Follow.follow(f.id, f.name, FO.SEASONS); App.toast("Following ${f.name}: only a new season comes to Ready") }
                     else -> { Follow.unfollow(f.id); App.toast("Stopped following ${f.name}") }
                 }

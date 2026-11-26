@@ -187,14 +187,14 @@ object Details {
             // OK goes round: every new episode → new seasons only → not following.
             fun folLabel() = when {
                 !Follow.isFollowed(app, f.id) -> "Follow: tell me about new episodes or seasons"
-                Follow.mode(app, f.id) == Following.EPISODES -> "Following: every new episode ✓ (OK: seasons only)"
+                Follow.mode(app, f.id) == Following.EPISODES -> "Following: new episodes and seasons ✓ (OK: seasons only)"
                 else -> "Following: new seasons only ✓ (OK: stop)"
             }
             fol = Row(folLabel(), action = {
                 when {
                     !Follow.isFollowed(app, f.id) -> {
                         Follow.follow(app, f.id, f.name, Following.EPISODES); Waiting.askToNotify(app)
-                        app.toast("Following ${f.name}: every new episode comes to Ready")
+                        app.toast("Following ${f.name}: new episodes and seasons come to Ready")
                     }
                     Follow.mode(app, f.id) == Following.EPISODES -> {
                         Follow.follow(app, f.id, f.name, Following.SEASONS)
