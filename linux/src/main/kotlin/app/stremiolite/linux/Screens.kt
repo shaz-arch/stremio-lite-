@@ -330,7 +330,7 @@ object Home {
 
     private fun libraryScreen(): Screen {
         val rows = Lib.library().map { i ->
-            Row(i.name, MetaParse.typeLabel(i.type) + "  ►", opens = { Details.screenFor(i.id, i.type, i.name) })
+            Row(Marks.title(Catalogs.mark(i.id, i.type) ?: Marks.FAVOURITE, i.name), MetaParse.typeLabel(i.type) + "  ►", opens = { Details.screenFor(i.id, i.type, i.name) })
         }
         val clear = if (rows.isEmpty()) emptyList() else listOf(
             Row("────────────────────"),
@@ -1254,9 +1254,9 @@ object Waiting {
                     opens = { Details.screenFor(e.id, e.type, e.name) })
             }
         }
+        rows += Row("────────────────────")
         rows += Row("Following: shows and films not out yet", followingSummary(), opens = { followingScreen() })
         if (now.isNotEmpty()) {
-            rows += Row("────────────────────")
             rows += Row("Clear the list", "►", opens = {
                 confirmScreen("Clear Waiting?", "Stops waiting for all ${now.size} films, on every device.", "Yes, clear all ${now.size}") {
                     save(emptyList()); App.toast("Waiting cleared"); App.back(); App.replaceTop(screen())

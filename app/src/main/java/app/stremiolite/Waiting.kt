@@ -186,11 +186,13 @@ object Waiting {
         val addons = runCatching { Stremio.parseAddons(Account.addonCache(c).readText()) }.getOrNull() ?: return emptyList()
         // Followed films now out to stream move here, to be checked for a good stream.
         var moved = false
+        var folNow = fol
         if (Following.films(fol).isNotEmpty()) {
             val (newFol, newAll) = outCheck(c, addons, fol, all, now)
-            if (newFol != null) Sync.push(key, listOf(newFol))
+            if (newFol != null) { Sync.push(key, listOf(newFol)); folNow = newFol }
             if (newAll != null) { all = newAll; moved = true }
         }
+        val notOut = mutableListOf<Following.Film>()
         val pending = all.filter { it.ready == 0L }.take(MAX_CHECKS)
         val got = HashMap<String, String>()
         val tmdb = Settings.tmdbKey(c)
@@ -198,9 +200,18 @@ object Waiting {
         pending.forEach { e ->
             // Only in cinemas, digital later: anything found now is a fake or a cam, not "ready".
             if (tmdb.isNotBlank() && e.type == "movie" &&
-                runCatching { WhereToWatch.load(tmdb, "movie", e.id, "", Settings.watchRegion(c)).notOutYet(today) }.getOrDefault(false)) return@forEach
+                runCatching { WhereToWatch.load(tmdb, "movie", e.id, "", Settings.watchRegion(c)) }.getOrNull()?.takeIf { it.notOutYet(today) }?.let { w ->
+                    // Not out to stream yet: it moves to Following (a "better version" wait stays here).
+                    if (!e.better) notOut += Following.Film(e.id, e.name, e.year, w.notOutLabel(today))
+                    true
+                } == true) return@forEach
             if (e.better) runCatching { StreamParse.betterThan(addons, e.type, e.id, e.bar) }.getOrNull()?.let { got[e.id] = it.first.summary.replace(Regex("\\s+"), " ").trim() }
             else if (runCatching { StreamParse.availableNow(addons, e.type, e.id) }.getOrDefault(false)) got[e.id] = ""
+        }
+        if (notOut.isNotEmpty()) {
+            Sync.push(key, listOf(Following.followFilms(folNow, notOut)))
+            val ids = notOut.map { it.id }.toSet()
+            all = all.filter { it.better || it.id !in ids }; moved = true
         }
         val found = got.keys
         if (found.isEmpty()) { if (moved) Sync.push(key, listOf(record(raw, all))); return emptyList() }
@@ -391,8 +402,8 @@ object Waiting {
                     rows += Row(label, (if (e.ready > 0) "found: ${e.found}" else "have: ${e.have}") + "  ►", opens = { entry(app, e) })
                 }
             }
+            rows += Row("────────────────────")
             rows += Row("Following: shows and films not out yet", Waiting.followingSummary(app), opens = { followingScreen(app) })
-            if (keep.isNotEmpty()) rows += Row("────────────────────")
             if (keep.isNotEmpty()) rows += Row("Clear the list", "►", opens = {
                 confirmScreen(app, "Clear Waiting?", "Stops waiting for all ${keep.size} films, on every device.", "Yes, clear all ${keep.size}") {
                     save(app, emptyList()); app.toast("Waiting cleared"); app.back()

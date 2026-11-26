@@ -276,7 +276,7 @@ object Home {
             val list = History.library(app)
             if (list.isEmpty()) return listOf(Row("Empty. Use \"Add to favourites\" on any film or show."))
             return list.map { s ->
-                Row(s.name, listOf(s.year, Catalogs.typeLabel(s.type).removeSuffix("s")).filter { it.isNotBlank() }.joinToString("  "), opens = {
+                Row(Marks.title(History.marks(app)[s.id] ?: Marks.FAVOURITE, s.name), listOf(s.year, Catalogs.typeLabel(s.type).removeSuffix("s")).filter { it.isNotBlank() }.joinToString("  "), opens = {
                     Details.screenFor(app, s.id, s.type, s.name, s.year) ?: Screen(s.name, listOf(Row("Your add-ons are still loading. Try again in a moment.")))
                 }, play = { Details.screenFor(app, s.id, s.type, s.name, s.year, autoPlay = true)?.let { app.push(it) } })
             } + listOf(
