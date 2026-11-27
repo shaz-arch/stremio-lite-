@@ -72,7 +72,7 @@ object Home {
             History.pull(app, full = true) { rebuildHome?.invoke() }
             if (!loading) load(app, screen)
         }
-        fun appRows() = (if (Settings.sleepOnHome(app)) listOf(sleepRow) else emptyList()) + listOf(
+        fun appRows() = (if (Settings.onHome(app, "sleep")) listOf(sleepRow) else emptyList()) + listOf(
             // Setup items (add-ons, export/import, device check, about) live inside Settings.
             Row("Settings", "►", action = { KidsGuard.guard(app) { app.push(Settings.screen(app)) } }),
             Row("──── Profile ────"),
@@ -84,7 +84,7 @@ object Home {
         val games = Row("Games", "►", opens = { GamesScreen.screen(app) })
         fun tools() = listOf(Row("──── App ────")) +
             (if (Settings.liveTv(app) && !KidsGuard.hides(app)) listOf(Row("Live TV", Live.homeDetail(app), opens = { Live.screen(app) })) else emptyList()) +
-            listOfNotNull(Drives.homeRow(app), Offline.homeRow(app)) +
+            listOfNotNull(Drives.homeRow(app)?.takeIf { Settings.onHome(app, "drives") }, Offline.homeRow(app)?.takeIf { Settings.onHome(app, "downloads") }) +
             (if (KidsGuard.hides(app)) emptyList() else if (Settings.newsOn(app)) news else emptyList()) +
             (if (KidsGuard.locked(app)) listOf(games) else emptyList()) + appRows()
 
@@ -113,8 +113,10 @@ object Home {
             val lib = History.library(app)
             // One line at the top for each kind of news: a film ready to watch, then an update.
             var top = 0
-            NewEpisodes.homeRow(app)?.let { rows.add(0, it); top++ }
-            Waiting.homeRow(app)?.let { rows.add(0, it); top++ }
+            if (Settings.onHome(app, "notices")) {
+                NewEpisodes.homeRow(app)?.let { rows.add(0, it); top++ }
+                Waiting.homeRow(app)?.let { rows.add(0, it); top++ }
+            }
             Updates.available?.let { n ->
                 rows.add(0, Row("Update available: build $n. Press OK to install", "►", action = { Updates.install(app) }))
                 top++
@@ -124,21 +126,22 @@ object Home {
             notices = top
             rows.addAll(top, listOf(
                 Row("──── Watching ────"),
-            ) + (if (KidsGuard.hides(app)) emptyList() else listOf(search)) + listOf(
-                Row("Continue watching", if (cw.isEmpty()) "nothing yet" else "${cw.size}  ►", opens = { continueScreen(app) }),
-                Row("Next watch", NextList.summary(app), opens = { NextList.screen(app) }),
-                Row("Ready", Ready.summary(app), opens = { Ready.screen(app) }),
-                Row("Waiting", Waiting.summary(app), opens = { Waiting.screen(app) }),
-                Row("Calendar", NewEpisodes.weekCount()?.let { if (it == 0) "nothing this week  ►" else "$it this week  ►" } ?: "", opens = { NewEpisodes.calendar(app) }),
-                Row("Favourites", if (lib.isEmpty()) "empty" else "${lib.size}  ►", opens = { libraryScreen(app) }),
-                Row("Watched", History.watched(app).size.let { if (it == 0) "" else "$it  ►" }, opens = { watchedScreen(app) }),
-                Row("Basket", BasketList.summary(app), opens = { BasketList.screen(app) }),
-            ) + ForYouUi.homeRows(app) + listOf(
+            ) + listOfNotNull(
+                search.takeIf { !KidsGuard.hides(app) && Settings.onHome(app, "search") },
+                Row("Continue watching", if (cw.isEmpty()) "nothing yet" else "${cw.size}  ►", opens = { continueScreen(app) }).takeIf { Settings.onHome(app, "continue") },
+                Row("Next watch", NextList.summary(app), opens = { NextList.screen(app) }).takeIf { Settings.onHome(app, "next") },
+                Row("Ready", Ready.summary(app), opens = { Ready.screen(app) }).takeIf { Settings.onHome(app, "ready") },
+                Row("Waiting", Waiting.summary(app), opens = { Waiting.screen(app) }).takeIf { Settings.onHome(app, "waiting") },
+                Row("Calendar", NewEpisodes.weekCount()?.let { if (it == 0) "nothing this week  ►" else "$it this week  ►" } ?: "", opens = { NewEpisodes.calendar(app) }).takeIf { Settings.onHome(app, "calendar") },
+                Row("Watched", History.watched(app).size.let { if (it == 0) "" else "$it  ►" }, opens = { watchedScreen(app) }).takeIf { Settings.onHome(app, "watched") },
+                Row("Favourites", if (lib.isEmpty()) "empty" else "${lib.size}  ►", opens = { libraryScreen(app) }).takeIf { Settings.onHome(app, "favourites") },
+                Row("Basket", BasketList.summary(app), opens = { BasketList.screen(app) }).takeIf { Settings.onHome(app, "basket") },
+            ) + (if (Settings.onHome(app, "foryou")) ForYouUi.homeRows(app) else emptyList()) + listOf(
                 Row("──── Browse ────"),
             ))
             screen.rows = rows + tools()
             // Open on Search, not on the "Watching" header above it.
-            if (!placed) { placed = true; screen.moveTo = screen.rows.indexOf(search).takeIf { it >= 0 } ?: screen.rows.indexOfFirst { it.label == "Continue watching" } }
+            if (!placed) { placed = true; screen.moveTo = screen.rows.indexOf(search).takeIf { it >= 0 } ?: (screen.rows.indexOfFirst { it.label == "──── Watching ────" } + 1).takeIf { it in 1 until screen.rows.size } ?: 0 }
             app.refresh(screen)
         }
         rebuildHome = { rebuild() }

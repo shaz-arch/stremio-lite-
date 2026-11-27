@@ -189,8 +189,10 @@ object Home {
         fun build() {
             val list = addons
             val rows = mutableListOf<Row>()
-            Waiting.homeRow()?.let { rows += it }
-            NewEpisodes.homeRow()?.let { rows += it }
+            if (Prefs.onHome("notices")) {
+                Waiting.homeRow()?.let { rows += it }
+                NewEpisodes.homeRow()?.let { rows += it }
+            }
             Updates.homeRow()?.let { rows += it }
             // A notice you've just opened has gone: back to Search, not the line that moved up.
             if (rows.size < notices) placed = false
@@ -209,17 +211,17 @@ object Home {
             val waiting = Waiting.list()
             rows += Row("──── Watching ────")
             val searchRow = Row("Search", "/  ►", opens = null, action = { Search.start() })
-            if (!KidsGuard.hides()) rows += searchRow
+            if (!KidsGuard.hides() && Prefs.onHome("search")) rows += searchRow
             NowPlaying.row()?.let { rows += it }
-            rows += Row("Continue watching", if (cw.isEmpty()) "nothing yet" else "${cw.size}  ►", opens = { continueScreen() })
-            rows += Row("Next watch", NextList.summary(), opens = { NextList.screen() })
-            rows += Row("Ready", Ready.summary(), opens = { Ready.screen() })
-            rows += Row("Waiting", Waiting.summary(), opens = { Waiting.screen() })
-            rows += Row("Calendar", NewEpisodes.weekCount()?.let { if (it == 0) "nothing this week  ►" else "$it this week  ►" } ?: "", opens = { NewEpisodes.calendar() })
-            rows += Row("Favourites", if (lib.isEmpty()) "empty" else "${lib.size}  ►", opens = { libraryScreen() })
-            rows += Row("Watched", Watched.list().size.let { if (it == 0) "" else "$it  ►" }, opens = { watchedScreen() })
-            rows += Row("Basket", BasketList.summary(), opens = { BasketList.screen() })
-            rows += ForYouUi.homeRows()
+            if (Prefs.onHome("continue")) rows += Row("Continue watching", if (cw.isEmpty()) "nothing yet" else "${cw.size}  ►", opens = { continueScreen() })
+            if (Prefs.onHome("next")) rows += Row("Next watch", NextList.summary(), opens = { NextList.screen() })
+            if (Prefs.onHome("ready")) rows += Row("Ready", Ready.summary(), opens = { Ready.screen() })
+            if (Prefs.onHome("waiting")) rows += Row("Waiting", Waiting.summary(), opens = { Waiting.screen() })
+            if (Prefs.onHome("calendar")) rows += Row("Calendar", NewEpisodes.weekCount()?.let { if (it == 0) "nothing this week  ►" else "$it this week  ►" } ?: "", opens = { NewEpisodes.calendar() })
+            if (Prefs.onHome("watched")) rows += Row("Watched", Watched.list().size.let { if (it == 0) "" else "$it  ►" }, opens = { watchedScreen() })
+            if (Prefs.onHome("favourites")) rows += Row("Favourites", if (lib.isEmpty()) "empty" else "${lib.size}  ►", opens = { libraryScreen() })
+            if (Prefs.onHome("basket")) rows += Row("Basket", BasketList.summary(), opens = { BasketList.screen() })
+            if (Prefs.onHome("foryou")) rows += ForYouUi.homeRows()
             if (list != null) {
                 rows += Row("──── Browse ────")
                 val entries = Index.entries(list)
@@ -242,8 +244,8 @@ object Home {
             rows += Row("──── App ────")
             // Same order and wording as the phone and stick.
             if (Prefs.liveTv && !KidsGuard.hides()) rows += Row("Live TV", Live.homeDetail(), opens = { Live.screen() })
-            Drives.homeRow()?.let { rows += it }
-            Offline.homeRow()?.let { rows += it }
+            if (Prefs.onHome("drives")) Drives.homeRow()?.let { rows += it }
+            if (Prefs.onHome("downloads")) Offline.homeRow()?.let { rows += it }
             if (KidsGuard.locked()) rows += Row("Games", "►", opens = { GamesScreen.screen() })
             if (Prefs.newsOn && !KidsGuard.hides()) {
                 rows += Row("News", "film & TV headlines  ►", opens = { Feeds.news() })
@@ -257,7 +259,7 @@ object Home {
             rows += Row("Sign out of this profile", action = { KidsGuard.guard { App.push(signOut()) } })
             s.rows = rows
             // Open on Search, not on the "Watching" header above it.
-            if (!placed) { placed = true; s.moveTo = rows.indexOf(searchRow).takeIf { it >= 0 } ?: rows.indexOfFirst { it.label == "Continue watching" } }
+            if (!placed) { placed = true; s.moveTo = rows.indexOf(searchRow).takeIf { it >= 0 } ?: (rows.indexOfFirst { it.label == "──── Watching ────" } + 1).takeIf { it in 1 until rows.size } ?: 0 }
             App.refresh()
         }
         rebuild = { build() }
@@ -1056,18 +1058,7 @@ object Settings {
                 Drives.settingsRow(),
                 Offline.settingsRow(),
                 Row("──── Home ────"),
-                Row("Live TV on Home", "◄ ${if (Prefs.liveTv) "Shown" else "Hidden"} ►", action = {
-                    Prefs.liveTv = !Prefs.liveTv; Prefs.syncOut(); Home.redraw(); build()
-                }),
-                Row("News on Home", "◄ ${if (Prefs.newsOn) "Shown" else "Hidden"} ►", action = {
-                    Prefs.newsOn = !Prefs.newsOn; Prefs.syncOut(); Home.redraw(); build()
-                }),
-                Row("Coming soon in Browse", "◄ ${if (Prefs.comingOn) "Shown" else "Hidden"} ►", action = {
-                    Prefs.comingOn = !Prefs.comingOn; Prefs.syncOut(); Home.redraw(); build()
-                }),
-                Row("Sleep timer on Home", "◄ ${if (Prefs.sleepOnHome) "Shown" else "Hidden"} ►", action = {
-                    Prefs.sleepOnHome = !Prefs.sleepOnHome; Home.redraw(); build()
-                }),
+                Row("Show on Home", "►", opens = { homeLines() }),
                 Row("Arrange your Index", "►", opens = { Arrange.screen() }),
                 Row("Hide rows", "►", opens = { rowsScreen() }),
                 Row("──── Look ────"),
@@ -1640,5 +1631,28 @@ fun keysScreen(): Screen {
     s = Screen("Your keys", build())
     s.onShow = { s.rows = build(); App.refresh() }
     s.pos = 2
+    return s
+}
+
+/** Every line on Home you can show or hide (Settings › Home › Show on Home), by section. */
+private val HOME_LINES = listOf(
+    "Watching" to listOf("notices" to "Notices at the top", "search" to "Search", "continue" to "Continue watching", "next" to "Next watch",
+        "ready" to "Ready", "waiting" to "Waiting", "calendar" to "Calendar", "watched" to "Watched", "favourites" to "Favourites", "basket" to "Basket"),
+    "For you and Browse" to listOf("foryou" to "For you", "coming" to "Coming soon"),
+    "App" to listOf("live" to "Live TV", "drives" to "Drives", "downloads" to "Downloads", "news" to "News", "sleep" to "Sleep timer"),
+)
+
+fun homeLines(): Screen {
+    lateinit var s: Screen
+    fun build() {
+        s.rows = HOME_LINES.flatMap { (section, lines) ->
+            listOf(Row("──── $section ────")) + lines.map { (key, label) ->
+                Row(label, "◄ ${if (Prefs.onHome(key)) "Shown" else "Hidden"} ►", action = { Prefs.setOnHome(key, !Prefs.onHome(key)); Home.redraw(); build() })
+            }
+        }
+        App.refresh()
+    }
+    s = Screen("Show on Home", emptyList())
+    s.onShow = { build() }
     return s
 }

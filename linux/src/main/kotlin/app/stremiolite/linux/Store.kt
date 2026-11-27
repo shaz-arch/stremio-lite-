@@ -193,6 +193,21 @@ object Prefs {
         get() = data().optBoolean("newsOn", true)
         set(v) { data().put("newsOn", v); save() }
 
+    /** Lines taken off Home on this computer (Settings › Home › Show on Home). */
+    private var homeHidden: Set<String>
+        get() = data().optJSONArray("homeHidden")?.let { a -> (0 until a.length()).map { a.optString(it) }.toSet() }.orEmpty()
+        set(v) { data().put("homeHidden", org.json.JSONArray(v.toList())); save() }
+    fun onHome(key: String): Boolean = when (key) {
+        "live" -> liveTv; "news" -> newsOn; "coming" -> comingOn; "sleep" -> sleepOnHome
+        else -> key !in homeHidden
+    }
+    fun setOnHome(key: String, on: Boolean) {
+        when (key) {
+            "live" -> liveTv = on; "news" -> newsOn = on; "coming" -> comingOn = on; "sleep" -> sleepOnHome = on
+            else -> homeHidden = if (on) homeHidden - key else homeHidden + key
+        }
+        if (key in setOf("live", "news", "coming")) syncOut()
+    }
     var sleepOnHome: Boolean
         get() = data().optBoolean("sleepOnHome", false)
         set(v) { data().put("sleepOnHome", v); save() }

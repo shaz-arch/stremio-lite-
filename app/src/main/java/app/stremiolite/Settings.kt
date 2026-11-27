@@ -222,6 +222,44 @@ object Settings {
     fun comingOn(c: Context) = prefs(c).getBoolean("comingOn", true)
     fun sleepOnHome(c: Context) = prefs(c).getBoolean("sleepOnHome", false)
 
+    /** Every line on Home you can show or hide (Settings › Home › Show on Home), by section. */
+    private val HOME_LINES = listOf(
+        "Watching" to listOf("notices" to "Notices at the top", "search" to "Search", "continue" to "Continue watching", "next" to "Next watch",
+            "ready" to "Ready", "waiting" to "Waiting", "calendar" to "Calendar", "watched" to "Watched", "favourites" to "Favourites", "basket" to "Basket"),
+        "For you and Browse" to listOf("foryou" to "For you", "coming" to "Coming soon"),
+        "App" to listOf("live" to "Live TV", "drives" to "Drives", "downloads" to "Downloads", "news" to "News", "sleep" to "Sleep timer"),
+    )
+    private fun hiddenOnHome(c: Context): Set<String> = prefs(c).getStringSet("homeHidden", emptySet()) ?: emptySet()
+
+    fun onHome(c: Context, key: String): Boolean = when (key) {
+        "live" -> liveTv(c); "news" -> newsOn(c); "coming" -> comingOn(c); "sleep" -> sleepOnHome(c)
+        else -> key !in hiddenOnHome(c)
+    }
+
+    private fun setOnHome(c: Context, key: String, on: Boolean) {
+        when (key) {
+            "live" -> prefs(c).edit().putBoolean("liveTv", on).apply()
+            "news" -> prefs(c).edit().putBoolean("newsOn", on).apply()
+            "coming" -> prefs(c).edit().putBoolean("comingOn", on).apply()
+            "sleep" -> prefs(c).edit().putBoolean("sleepOnHome", on).apply()
+            else -> prefs(c).edit().putStringSet("homeHidden", if (on) hiddenOnHome(c) - key else hiddenOnHome(c) + key).apply()
+        }
+        if (key in setOf("live", "news", "coming")) syncOut(c)
+    }
+
+    private fun homeLines(app: MainActivity): Screen {
+        lateinit var s: Screen
+        fun build(): List<Row> = HOME_LINES.flatMap { (section, lines) ->
+            listOf(Row("──── $section ────")) + lines.map { (key, label) ->
+                Row(label, "◄ ${if (onHome(app, key)) "Shown" else "Hidden"} ►", action = {
+                    setOnHome(app, key, !onHome(app, key)); Home.redraw(); s.rows = build(); app.refresh(s)
+                })
+            }
+        }
+        s = Screen("Show on Home", build())
+        return s
+    }
+
     /** News feeds you've added (synced). */
     fun newsFeeds(c: Context): List<News.Feed> = News.feeds(prefs(c).getString("newsFeeds", null))
 
@@ -555,7 +593,7 @@ object Settings {
                 Row("──── Alerts ────"), followRow, ntfyRow,
                 Row("──── Drives ────"), Drives.settingsRow(app), *listOfNotNull(Offline.settingsRow(app)).toTypedArray(),
                 Row("──── Home ────"),
-                liveRow, newsRow, comingRow, sleepHomeRow,
+                Row("Show on Home", "►", opens = { homeLines(app) }),
                 Row("Arrange your Index", "►", opens = { Arrange.screen(app) }),
                 Row("Hide rows", "►", opens = { rowsScreen(app) }),
                 Row("──── Look ────"),
