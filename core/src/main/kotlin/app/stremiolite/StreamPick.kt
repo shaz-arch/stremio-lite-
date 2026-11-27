@@ -151,17 +151,42 @@ object StreamParse {
      */
     fun availableNow(addons: List<Addon>, type: String, id: String): Boolean = bestPlayable(addons, type, id) != null
 
-    /** Every direct stream the add-ons offer for a title right now (blocking). */
+    /**
+     * With an AIOStreams on the account, the other stream add-ons (Torrentio and the like) are
+     * fail-safes: asked only when AIOStreams gives nothing playable. Without one, all are asked.
+     */
+    fun tiers(streamAddons: List<Addon>): Pair<List<Addon>, List<Addon>> {
+        val main = streamAddons.filter { StreamSetup.isAioStreams(it) }
+        return if (main.isEmpty() || main.size == streamAddons.size) streamAddons to emptyList()
+        else main to streamAddons.filter { it !in main }
+    }
+
+    /** Something here could play now (not waiting to be fetched by the debrid service). */
+    fun hasPlayable(found: List<Stream>) = found.any { it.cached != false }
+
+    /** The same file from two add-ons: same height, size and release group. */
+    fun dupKey(s: Stream): String = if (s.sizeMb > 0) s.quality + "|" + Math.round(s.sizeMb * 10) + "|" + s.group.lowercase() else s.url
+
+    fun addUnique(found: MutableList<Stream>, s: Stream) { val k = dupKey(s); if (found.none { dupKey(it) == k }) found += s }
+
+    /** Every direct stream the add-ons offer for a title right now (blocking); fail-safes only if needed. */
     fun fetchAll(addons: List<Addon>, type: String, id: String): List<Stream> {
+        val (main, backup) = tiers(addons.filter { it.supports("stream", type, id) })
+        val found = fetchFrom(main, type, id)
+        if (backup.isNotEmpty() && !hasPlayable(found)) fetchFrom(backup, type, id).forEach { addUnique(found, it) }
+        return found
+    }
+
+    private fun fetchFrom(addons: List<Addon>, type: String, id: String): MutableList<Stream> {
         val found = mutableListOf<Stream>()
-        for (a in addons.filter { it.supports("stream", type, id) }) {
+        for (a in addons) {
             val url = a.base + "/stream/" + enc(type) + "/" + enc(id) + ".json"
             val arr = runCatching { JSONObject(Http.get(url, timeoutMs = TIMEOUT_MS)).optJSONArray("streams") }.getOrNull() ?: continue
             for (i in 0 until arr.length()) {
                 val o = arr.optJSONObject(i) ?: continue
                 val link = o.optString("url")
                 if (link.startsWith("http") && o.optJSONObject("behaviorHints")?.optJSONObject("proxyHeaders") == null) {
-                    found.add(parse(o, link, shortName(a.name), found.size))
+                    addUnique(found, parse(o, link, shortName(a.name), found.size))
                 }
             }
         }

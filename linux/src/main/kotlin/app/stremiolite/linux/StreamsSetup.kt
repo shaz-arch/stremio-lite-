@@ -77,6 +77,23 @@ object StreamsSetup {
                     if (pw.length < 6) App.toast("Use at least 6 characters") else { SetupWizard.offer(pw); create(Prefs.debridKeys, pw, replace) }
                 }
             })
+            rows += Row("──── Fail-safe ────")
+            val torrentio = Home.all().firstOrNull { app.stremiolite.Failsafe.isTorrentio(it) }
+            rows += Row("Torrentio (if AIOStreams fails)", if (torrentio != null) "✓ added  ►" else "add  ►", action = {
+                val link = app.stremiolite.Failsafe.torrentioUrl(Prefs.debridKeys)
+                val key = Account.authKey
+                when {
+                    link == null -> App.toast("Add a debrid key first")
+                    key == null -> App.toast("Sign in first")
+                    else -> {
+                        App.toast(if (torrentio != null) "Updating Torrentio with your key…" else "Adding Torrentio…")
+                        App.async({ app.stremiolite.Stremio.installAddon(key, link) }) { r ->
+                            if (r.isFailure) App.toast("Couldn't add it: " + Net.describe(r.exceptionOrNull()!!))
+                            else Home.refresh { s.rows = build(); App.refresh(); App.toast("Torrentio added: used only when AIOStreams gives nothing") }
+                        }
+                    }
+                }
+            })
             return rows
         }
         s = Screen(if (keysOnly) "Debrid keys" else "Your streams (AIOStreams)", emptyList())

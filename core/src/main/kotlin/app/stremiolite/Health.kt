@@ -126,10 +126,20 @@ object Health {
         val streamers = addons.filter { !it.isLocal && it.supports("stream", "movie", TEST_ID) && isStreamProvider(it) }
         if (streamers.isEmpty()) return null
         if (runCatching { Http.get("https://api.strem.io/", timeoutMs = 10_000, allowErrors = true) }.isFailure) return null
-        if (StreamParse.fetchAll(streamers, "movie", TEST_ID).isNotEmpty()) return null
+        val (main, backup) = StreamParse.tiers(streamers)
+        fun works(list: List<Addon>) = StreamParse.hasPlayable(StreamParse.fetchAll(list, "movie", TEST_ID))
+        if (works(main)) return null
         Thread.sleep(5_000)
-        if (StreamParse.fetchAll(streamers, "movie", TEST_ID).isNotEmpty()) return null
-        return streamers.joinToString("; ") { a -> runCatching { whyEmpty(a) }.getOrDefault("${StreamParse.shortName(a.name)} didn't answer") }
+        if (works(main)) return null
+        val why = main.joinToString("; ") { a -> runCatching { whyEmpty(a) }.getOrDefault("${StreamParse.shortName(a.name)} didn't answer") }
+        // AIOStreams is down but a fail-safe answers: you can still watch.
+        return if (backup.isNotEmpty() && works(backup)) FAILSAFE_ON + why else why
+    }
+
+    /** Starts a [streamProblem] when a fail-safe is covering for your main streams. */
+    const val FAILSAFE_ON = "fail-safe|"
+    fun usingFailsafe(problem: String) = problem.startsWith(FAILSAFE_ON)
+    fun problemText(problem: String) = problem.removePrefix(FAILSAFE_ON)
     }
 
     /** Add-ons whose job is giving streams (AIOStreams, Torrentio, Comet…), as opposed to ones that only link out. */

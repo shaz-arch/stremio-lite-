@@ -76,17 +76,23 @@ object Streams {
         val listeners = mutableListOf<() -> Unit>()
         private fun onChange() = listeners.toList().forEach { it() }
 
-        val addons = Home.allAddons().filter { it.supports("stream", type, id) }
+        private val tiers = StreamParse.tiers(Home.allAddons().filter { it.supports("stream", type, id) })
+        /** The add-ons asked so far: AIOStreams, plus the fail-safes once they're needed. */
+        val addons = tiers.first.toMutableList()
         val found = mutableListOf<Stream>()
         val notes = mutableListOf<String>()
         var answered = 0
         var hiddenTorrent = 0
         var hiddenHeaders = 0
+        /** AIOStreams gave nothing playable, so the fail-safes were asked. */
+        var usingFailsafe = false
         val done: Boolean get() = answered >= addons.size
         private var timed = false
+        private val type = type
+        private val id = id
 
-        init {
-            addons.forEach { a ->
+        private fun ask(list: List<Addon>) {
+            list.forEach { a ->
                 val url = a.base + "/stream/" + enc(type) + "/" + enc(id) + ".json"
                 Net.async({ JSONObject(Net.get(url, timeoutMs = TIMEOUT_MS)) }) { r ->
                     answered++
@@ -100,18 +106,32 @@ object Streams {
                                 link.isBlank() || !link.startsWith("http") ->
                                     if (o.has("infoHash")) hiddenTorrent++
                                 hints?.optJSONObject("proxyHeaders") != null -> hiddenHeaders++
-                                else -> found.add(StreamParse.parse(o, link, shortName(a.name), found.size))
+                                else -> StreamParse.addUnique(found, StreamParse.parse(o, link, shortName(a.name), found.size))
                             }
                         }
                     }.onFailure { e ->
                         notes += "${shortName(a.name)}: ${Net.describe(e)}"
                     }
+                    // AIOStreams has answered with nothing playable: ask the fail-safes now.
+                    if (done && !usingFailsafe && tiers.second.isNotEmpty() && !StreamParse.hasPlayable(found)) {
+                        usingFailsafe = true
+                        addons += tiers.second
+                        ask(tiers.second)
+                    }
                     if (done && !timed) { timed = true; Timings.record("Finding streams", System.currentTimeMillis() - started) }
                     onChange()
                 }
             }
+        }
+
+        init {
+            ask(addons)
             if (addons.isEmpty()) Net.later(0, Runnable { onChange() })
         }
+
+        /** "AIOStreams gave nothing: showing your fail-safes (Torrentio)". */
+        fun failsafeLine(): String? = if (!usingFailsafe) null
+            else tiers.first.joinToString(", ") { shortName(it.name) } + " gave nothing: showing your fail-safes (" + tiers.second.joinToString(", ") { shortName(it.name) } + ")"
 
         fun listen(l: () -> Unit): Fetch {
             listeners += l
@@ -190,10 +210,15 @@ object Streams {
                 else -> "${fetch.found.size} streams from ${fetch.addons.size} add-ons"
             }
             subRow.detail = subs.line()
+            // In Play best's order: its score for this device first (★ = what it would pick), then the rest.
+            val mins = Best.minutes(watch?.runtime) ?: if (type == "movie") 110.0 else 45.0
+            val scores = fetch.found.associateWith { Best.score(it, mins) }
             val sorted = fetch.found.sortedWith(
-                compareBy<Stream>({ if (it.cached == false) 1 else 0 }, { -it.rank }, { it.order })
+                compareBy<Stream>({ if (scores[it] != null) 0 else 1 }, { -(scores[it] ?: 0.0) }, { if (it.cached == false) 1 else 0 }, { -it.rank }, { it.order })
             )
+            val star = sorted.firstOrNull { scores[it] != null && it !in broken }
             val rows = mutableListOf(summary, subRow)
+            fetch.failsafeLine()?.let { rows += Row(it) }
             fetch.hiddenLine()?.let { rows += Row(it) }
             fetch.notes.forEach { rows += Row(it) }
             rows += Row("────────────────────")
@@ -206,7 +231,7 @@ object Streams {
             }
             sorted.forEach { s ->
                 val detail = (if (s in broken) "✗ no video · " else "") + (if (s.cached == false) "not cached · " else "") + (if (s.langs.isNotEmpty()) s.langs + " · " else "") + s.addon
-                rows += Row(s.summary, detail, action = {
+                rows += Row((if (s === star) "★ " else "") + s.summary, detail, action = {
                     app.toast("Checking the stream…")
                     Net.async({ StreamCheck.broken(s.url) }) { r ->
                         if (r.getOrDefault(false)) app.toast("That release has no playable video. Pick another.")

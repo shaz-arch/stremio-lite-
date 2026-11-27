@@ -721,9 +721,13 @@ object StreamAlert {
     }
 
     fun homeRow(): Row? {
-        val p = Prefs.streamProblem.ifEmpty { return null }
-        return Row("⚠ Streams aren't working. Enter to see why", "►", opens = {
-            Screen("Streams aren't working", p.chunked(maxOf(40, App.columns() - 8)).map { Row(it) } + listOf(
+        val raw = Prefs.streamProblem.ifEmpty { return null }
+        val covered = app.stremiolite.Health.usingFailsafe(raw)
+        val p = app.stremiolite.Health.problemText(raw)
+        val title = if (covered) "AIOStreams isn't working: using your fail-safes" else "Streams aren't working"
+        return Row("⚠ $title. Enter to see why", "►", opens = {
+            Screen(title, p.chunked(maxOf(40, App.columns() - 8)).map { Row(it) } + listOfNotNull(
+                if (covered) Row("You can still watch: Play best uses your fail-safe streams until it's fixed.") else null,
                 Row(""),
                 Row("Check everything", "►", opens = { HealthScreen.screen() }),
                 Row("Set up your streams again", "►", opens = { StreamsSetup.screen() }),

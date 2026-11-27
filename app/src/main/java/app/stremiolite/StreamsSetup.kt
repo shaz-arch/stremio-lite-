@@ -77,6 +77,23 @@ object StreamsSetup {
                 if (keys().isEmpty()) app.toast("Add a debrid key first")
                 else askPassword(app) { pw -> create(app, keys(), pw, replace) }
             })
+            rows += Row("──── Fail-safe ────")
+            val torrentio = Home.allAddons().firstOrNull { Failsafe.isTorrentio(it) }
+            rows += Row("Torrentio (if AIOStreams fails)", if (torrentio != null) "✓ added  ►" else "add  ►", action = {
+                val link = Failsafe.torrentioUrl(keys())
+                val key = Account.authKey(app)
+                when {
+                    link == null -> app.toast("Add a debrid key first")
+                    key == null -> app.toast("Sign in first")
+                    else -> {
+                        app.toast(if (torrentio != null) "Updating Torrentio with your key…" else "Adding Torrentio…")
+                        Net.async({ Stremio.installAddon(key, link) }) { r ->
+                            if (r.isFailure) app.toast("Couldn't add it: " + Net.describe(r.exceptionOrNull()!!))
+                            else Home.refreshAddons(app) { s.rows = build(); app.refresh(s); app.toast("Torrentio added: used only when AIOStreams gives nothing") }
+                        }
+                    }
+                }
+            })
             return rows
         }
         s = Screen(if (keysOnly) "Debrid keys" else "Your streams (AIOStreams)", emptyList())

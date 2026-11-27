@@ -20,19 +20,24 @@ import java.nio.channels.SocketChannel
 object Play {
     /** One round of asking every stream add-on and subtitle add-on for a title. */
     private class Fetch(type: String, id: String, val onChange: () -> Unit) {
-        val streamAddons = Home.all().filter { it.supports("stream", type, id) }
+        private val tiers = StreamParse.tiers(Home.all().filter { it.supports("stream", type, id) })
+        /** The add-ons asked so far: AIOStreams, plus the fail-safes once they're needed. */
+        val streamAddons = tiers.first.toMutableList()
         val subAddons = Home.all().filter { it.supports("subtitles", type, id) }
         val found = mutableListOf<Stream>()
         val subs = mutableListOf<Sub>()
         val notes = mutableListOf<String>()
         var answered = 0
         var subsAnswered = 0
+        var usingFailsafe = false
         val started = System.currentTimeMillis()
         val done: Boolean get() = answered >= streamAddons.size
         val subsDone: Boolean get() = subsAnswered >= subAddons.size
+        private val type = type
+        private val id = id
 
-        init {
-            streamAddons.forEach { a ->
+        private fun ask(list: List<app.stremiolite.Addon>) {
+            list.forEach { a ->
                 val url = a.base + "/stream/" + Net.enc(type) + "/" + Net.enc(id) + ".json"
                 App.async({ JSONObject(Http.get(url, timeoutMs = 10_000)) }) { r ->
                     answered++
@@ -42,13 +47,24 @@ object Play {
                             val o = arr.optJSONObject(i) ?: continue
                             val link = o.optString("url")
                             if (link.startsWith("http") && o.optJSONObject("behaviorHints")?.optJSONObject("proxyHeaders") == null) {
-                                found += StreamParse.parse(o, link, StreamParse.shortName(a.name), found.size)
+                                StreamParse.addUnique(found, StreamParse.parse(o, link, StreamParse.shortName(a.name), found.size))
                             }
                         }
                     }.onFailure { e -> notes += "${StreamParse.shortName(a.name)}: ${Net.describe(e)}" }
+                    // AIOStreams has answered with nothing playable: ask the fail-safes now.
+                    if (done && !usingFailsafe && tiers.second.isNotEmpty() && !StreamParse.hasPlayable(found)) {
+                        usingFailsafe = true
+                        streamAddons += tiers.second
+                        notes += tiers.first.joinToString(", ") { StreamParse.shortName(it.name) } + " gave nothing: showing your fail-safes (" + tiers.second.joinToString(", ") { StreamParse.shortName(it.name) } + ")"
+                        ask(tiers.second)
+                    }
                     onChange()
                 }
             }
+        }
+
+        init {
+            ask(streamAddons)
             subAddons.forEach { a ->
                 val url = a.base + "/subtitles/" + Net.enc(type) + "/" + Net.enc(id) + ".json"
                 App.async({ JSONObject(Http.get(url, timeoutMs = 8_000)) }) { r ->
@@ -216,8 +232,9 @@ object Play {
                     App.async({ app.stremiolite.StreamCheck.broken(st.url) }) { r -> if (r.getOrDefault(false)) { broken += st; build() } }
                 }
             }
+            val star = scored.firstOrNull { it.second != null && it.first !in broken }?.first
             scored.forEach { (st, score) ->
-                rows += Row(st.summary + if (score == null) "  (${Best.whyOut(st)})" else "", (if (st in broken) "✗ no video · " else "") + (if (st.langs.isNotEmpty()) st.langs + " · " else "") + st.addon, action = {
+                rows += Row((if (st === star) "★ " else "") + st.summary + if (score == null) "  (${Best.whyOut(st)})" else "", (if (st in broken) "✗ no video · " else "") + (if (st.langs.isNotEmpty()) st.langs + " · " else "") + st.addon, action = {
                     App.toast("Checking the stream…")
                     App.async({ app.stremiolite.StreamCheck.broken(st.url) }) { ok ->
                         if (ok.getOrDefault(false)) App.toast("That release has no playable video. Pick another.")

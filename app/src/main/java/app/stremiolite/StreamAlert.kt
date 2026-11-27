@@ -24,16 +24,20 @@ object StreamAlert {
             val was = problem(app)
             val now = r.getOrNull() ?: ""
             p.edit().putLong("streamCheckAt", System.currentTimeMillis()).putString("streamProblem", now).apply()
-            if (now.isNotEmpty() && was.isEmpty()) Ntfy.send(app, "Streams aren't working: $now")
+            if (now.isNotEmpty() && was.isEmpty()) Ntfy.send(app, (if (Health.usingFailsafe(now)) "AIOStreams isn't working (your fail-safes are covering): " else "Streams aren't working: ") + Health.problemText(now))
             if (now != was) changed()
         }
     }
 
     fun homeRow(app: MainActivity): Row? {
-        val p = problem(app).ifEmpty { return null }
-        return Row("⚠ Streams aren't working. Press OK to see why", "►", opens = {
-            Screen("Streams aren't working", listOf(
+        val raw = problem(app).ifEmpty { return null }
+        val covered = Health.usingFailsafe(raw)
+        val p = Health.problemText(raw)
+        val title = if (covered) "AIOStreams isn't working: using your fail-safes" else "Streams aren't working"
+        return Row("⚠ $title. Press OK to see why", "►", opens = {
+            Screen(title, listOfNotNull(
                 Row(p),
+                if (covered) Row("You can still watch: Play best uses your fail-safe streams until it's fixed.") else null,
                 Row(""),
                 Row("Check everything", "►", opens = { HealthScreen.screen(app) }),
                 Row("Set up your streams again", "►", opens = { StreamsSetup.screen(app) }),
