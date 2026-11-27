@@ -53,6 +53,10 @@ val themes = listOf(
 /** "Label               value" lines, like the Android app. */
 fun info(label: String, value: String) = "${label.padEnd(18)} $value"
 
+/** A label and a long value over several rows, the value's later lines lined up under its first. */
+fun infoRows(label: String, value: String, columns: Int): List<Row> =
+    app.stremiolite.wrapWords(value, maxOf(16, columns - 20)).mapIndexed { i, l -> Row(info(if (i == 0) label else "", l)) }
+
 /** The terminal, the screen stack, and a main loop that also runs background results. */
 object App {
     private val stack = mutableListOf<Screen>()

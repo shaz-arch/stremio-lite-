@@ -139,6 +139,8 @@ object SetupWizard {
         ) else listOf(
             Row("Your streams come from AIOStreams with your debrid services (step 2)."),
             Row("Create my streams", "►", opens = { StreamsSetup.screen(app) }),
+        ) + listOf(
+            Row("Fail-safe: Torrentio, used only if AIOStreams fails", if (Home.allAddons().any { Failsafe.isTorrentio(it) }) "✓ added  ►" else "add  ►", opens = { StreamsSetup.screen(app) }),
         )
         "home" -> listOf(
             Row("Live TV on Home", if (Settings.liveTv(app)) "◄ Shown ►" else "◄ Hidden ►", action = { Settings.flip(app, "liveTv", true); Home.redraw(); refresh() }),
@@ -178,7 +180,7 @@ object SetupWizard {
         val rows = mutableListOf(Row("All done. Where everything lives:"), Row("────────────────────"))
         STEPS.forEach { (id, name) -> rows += Row(info(name, status(app, id))) }
         rows += Row("────────────────────")
-        rows += Row("Keys: Settings › Your keys.  Rows and streams: Settings › Rows & streams.")
+        rows += Row("Keys: Settings › Your keys.  Rows and streams: Settings › Configuration.")
         rows += Row("Back to Settings", action = { app.back(); app.back() })
         return Screen("Set up Stremonino", rows)
     }

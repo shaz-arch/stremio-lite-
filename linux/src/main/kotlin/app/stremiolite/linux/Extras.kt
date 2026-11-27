@@ -375,7 +375,7 @@ object Addons {
             App.push(status)
             App.async({ Stremio.installAddon(key, link, stickRows) }) { r ->
                 status.rows = r.fold(
-                    { name -> listOf(Row("Installed: $name"), Row("Your rows reload on Home.")) },
+                    { name -> listOf(Row("Installed: $name"), Row("Your rows and add-ons are reloading.")) },
                     { e -> listOf(Row("Couldn't install: " + if (e is Stremio.ApiError) e.message else Net.describe(e))) },
                 )
                 if (r.isSuccess) { File(Store.dir, "addons.json").delete(); Home.forget(); Home.load(force = true) }
@@ -621,6 +621,8 @@ object Share {
                 Row("Copy the config file link", action = { Clipboard.copyOrShow(STREAMS_CONFIG_FILE, "Config file link") }),
                 Row("Copy the AIOStreams page link", action = { Clipboard.copyOrShow(STREAMS_CONFIGURE, "AIOStreams page link") }),
                 Row("Install my stream add-on by link", "►", action = { Addons.askInstall(false) }),
+                Row("────────────────────"),
+                Row("Easier: set up my streams for me", "with the fail-safe  ►", opens = { StreamsSetup.screen() }),
             ),
         )
         s.qr = qrLines(STREAMS_CONFIG_FILE)
@@ -690,7 +692,8 @@ object AppShare {
             Row("Copy all the links", "►", action = { Clipboard.copyOrShow(app.stremiolite.AppLinks.message(), "Links") }),
             Row("──── Android phone, Fire Stick, Android TV ────"),
             link("Android app", app.stremiolite.AppLinks.ANDROID),
-            Row(info("In Downloader, type", app.stremiolite.AppLinks.ANDROID.removePrefix("https://"))),
+            Row(info("Downloader code", app.stremiolite.AppLinks.DOWNLOADER_CODE)),
+            Row(info("Or type in Downloader", app.stremiolite.AppLinks.ANDROID.removePrefix("https://"))),
             Row("──── Linux ────"),
             link("Linux app", app.stremiolite.AppLinks.LINUX),
             Row(info("Run it with", "java -jar stremonino-linux.jar")),

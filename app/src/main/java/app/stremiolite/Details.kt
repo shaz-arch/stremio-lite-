@@ -166,6 +166,7 @@ object Details {
             rows += Row("Play best", "►", opens = { Streams.playBest(app, f.type, w.videoId, title, f.runtime, w, 0) })
         }
         rows += Row("Choose a stream", opens = { Streams.screen(app, f.type, w.videoId, title, w, at) })
+        TvRemote.sendRow(app, f, v)?.let { rows += it }
         if (app.isPhone) rows += Row("Download", if (Offline.has(app, w.videoId)) "in Downloads  ►" else "►", opens = { if (Offline.has(app, w.videoId)) Offline.screen(app) else Offline.chooseScreen(app, w, title) })
         return rows
     }
@@ -181,7 +182,6 @@ object Details {
             app.refreshTop()
         })
         rows += BasketList.row(app, f)
-        TvRemote.sendRow(app, f)?.let { rows += it }
         // The next dated thing (a coming episode, or the film's release) into the phone's calendar.
         val nextEp = if (f.type == "series") Releases.upcoming(f, 3650).firstOrNull() else null
         when {
@@ -341,19 +341,24 @@ object Details {
             rows += libraryRows(app, f)
             rows += Row("────────────────────")
         }
+        // Your own history with it first, then the details.
+        DetailExtras.history(History.infos(app).firstOrNull { it.id == f.id }).let { h ->
+            h.forEach { (k, v) -> rows += Row(info(k, v)) }
+            if (h.isNotEmpty()) rows += Row("────────────────────")
+        }
+        val cols = app.columns()
 
         rows += Row(info("Type", if (isShow) "Series" else if (collection) "Collection" else Catalogs.typeLabel(f.type).removeSuffix("s")))
         if (f.year.isNotBlank()) rows += Row(info("Year", f.year))
         val scores = Ratings.known(f.id)
-        if (scores != null && (scores.scores.isNotEmpty() || scores.overall > 0)) Ratings.lines(scores, Settings.ratingsConfig(app), maxOf(24, app.columns() - 20)).forEachIndexed { i, l -> rows += Row(info(if (i == 0) "Ratings" else "", l)) }
+        if (scores != null && (scores.scores.isNotEmpty() || scores.overall > 0)) Ratings.lines(scores, Settings.ratingsConfig(app), maxOf(12, cols - (if (narrow) 13 else 22) - 2)).forEachIndexed { i, l -> rows += Row(info(if (i == 0) "Ratings" else "", l)) }
         else if (f.rating.isNotBlank()) rows += Row(info("IMDb rating", "★ ${f.rating}"))
         Ratings.ageLine(f.certification, scores).takeIf { it.isNotEmpty() }?.let { rows += Row(info("Age rating", it)) }
         if (f.runtime.isNotBlank()) rows += Row(info("Runtime", f.runtime))
-        if (f.genres.isNotEmpty()) rows += Row(info("Genres", f.genres.joinToString(", ")))
-        if (f.director.isNotEmpty()) rows += Row(info("Director", f.director.take(3).joinToString(", ")))
-        if (f.cast.isNotEmpty()) rows += Row(info("Cast", f.cast.take(4).joinToString(", ")))
-        DetailExtras.facts(f, DetailExtras.today()).filter { it.first != "Age rating" }.forEach { (k, v) -> rows += Row(info(k, v)) }
-        DetailExtras.history(History.infos(app).firstOrNull { it.id == f.id }).forEach { (k, v) -> rows += Row(info(k, v)) }
+        if (f.genres.isNotEmpty()) rows += infoRows("Genres", f.genres.joinToString(", "), cols)
+        if (f.director.isNotEmpty()) rows += infoRows("Director", f.director.take(3).joinToString(", "), cols)
+        if (f.cast.isNotEmpty()) rows += infoRows("Cast", f.cast.take(4).joinToString(", "), cols)
+        DetailExtras.facts(f, DetailExtras.today()).filter { it.first != "Age rating" }.forEach { (k, v) -> rows += infoRows(k, v, cols) }
         if (f.imdbUrl.isNotBlank()) rows += LinkOut.row(app, "IMDb page", "IMDb: ${f.name}", f.imdbUrl)
         Trailers.row(app, f)?.let { rows += it }
         rows += watchRows(app, f)
@@ -476,7 +481,6 @@ object Details {
         val label = epLabel(v)
         fun build(): List<Row> {
             val rows = playRows(app, f, v, "${f.name} $label").toMutableList()
-            TvRemote.sendRow(app, f, v)?.let { rows += it }
             if (upcoming(v.released)) CalendarExport.row(app, "${f.name} $label", v.released, "Stremonino: ${f.name}")?.let { rows += it }
             rows += Row("────────────────────")
             rows += Row(info("Episode", "$seasonName, episode ${v.episode}"))

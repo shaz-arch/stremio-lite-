@@ -243,6 +243,8 @@ object Share {
                 Row("Open the config file", action = { open(app, STREAMS_CONFIG_FILE) }),
                 Row("Open the AIOStreams page", action = { open(app, STREAMS_CONFIGURE) }),
                 Row("Install my stream add-on by link", "►", action = { Home.askInstall(app, false) }),
+                Row("────────────────────"),
+                Row("Easier: set up my streams for me", "with the fail-safe  ►", opens = { StreamsSetup.screen(app) }),
             ),
         )
         s.image = Qr.make(STREAMS_CONFIG_FILE)

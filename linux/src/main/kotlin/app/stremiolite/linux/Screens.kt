@@ -719,6 +719,7 @@ object Details {
             rows += Row("Play best$what", "►", opens = { Play.best(f.type, w.videoId, t, w, 0) })
         }
         rows += Row("Choose a stream", opens = { Play.list(f.type, w.videoId, t, w, at) })
+        TvRemote.sendRow(f, v)?.let { rows += it }
         rows += Row("Download", if (Offline.has(w.videoId)) "in Downloads  ►" else "►", opens = { if (Offline.has(w.videoId)) Offline.screen() else Offline.chooseScreen(w, t) })
         return rows
     }
@@ -754,18 +755,23 @@ object Details {
             rows += libraryRows(f)
             rows += Row("────────────────────")
         }
+        // Your own history with it first, then the details.
+        DetailExtras.history(Lib.info(f.id)).let { h ->
+            h.forEach { (k, v) -> rows += Row(info(k, v)) }
+            if (h.isNotEmpty()) rows += Row("────────────────────")
+        }
+        val cols = App.columns()
         rows += Row(info("Type", if (collection) "Collection" else if (f.type == "movie") "Movie" else if (f.type == "series") "Series" else f.type))
         if (f.year.isNotBlank()) rows += Row(info("Year", f.year))
         val scores = app.stremiolite.Ratings.known(f.id)
-        if (scores != null && (scores.scores.isNotEmpty() || scores.overall > 0)) app.stremiolite.Ratings.lines(scores, Prefs.ratingsConfig(), maxOf(24, App.columns() - 24)).forEachIndexed { i, l -> rows += Row(info(if (i == 0) "Ratings" else "", l)) }
+        if (scores != null && (scores.scores.isNotEmpty() || scores.overall > 0)) app.stremiolite.Ratings.lines(scores, Prefs.ratingsConfig(), maxOf(16, cols - 20)).forEachIndexed { i, l -> rows += Row(info(if (i == 0) "Ratings" else "", l)) }
         else if (f.rating.isNotBlank()) rows += Row(info("IMDb rating", "★ ${f.rating}"))
         app.stremiolite.Ratings.ageLine(f.certification, scores).takeIf { it.isNotEmpty() }?.let { rows += Row(info("Age rating", it)) }
         if (f.runtime.isNotBlank()) rows += Row(info("Runtime", f.runtime))
-        if (f.genres.isNotEmpty()) rows += Row(info("Genres", f.genres.joinToString(", ")))
-        if (f.director.isNotEmpty()) rows += Row(info("Director", f.director.joinToString(", ")))
-        if (f.cast.isNotEmpty()) rows += Row(info("Cast", f.cast.take(5).joinToString(", ")))
-        DetailExtras.facts(f, DetailExtras.today()).filter { it.first != "Age rating" }.forEach { (k, v) -> rows += Row(info(k, v)) }
-        DetailExtras.history(Lib.info(f.id)).forEach { (k, v) -> rows += Row(info(k, v)) }
+        if (f.genres.isNotEmpty()) rows += infoRows("Genres", f.genres.joinToString(", "), cols)
+        if (f.director.isNotEmpty()) rows += infoRows("Director", f.director.joinToString(", "), cols)
+        if (f.cast.isNotEmpty()) rows += infoRows("Cast", f.cast.take(5).joinToString(", "), cols)
+        DetailExtras.facts(f, DetailExtras.today()).filter { it.first != "Age rating" }.forEach { (k, v) -> rows += infoRows(k, v, cols) }
         if (f.imdbUrl.isNotBlank()) rows += Row("IMDb page", "opens browser  ►", action = { WebLink.open(f.imdbUrl) })
         Trailers.row(f)?.let { rows += it }
         rows += watchRows(f)
@@ -816,7 +822,6 @@ object Details {
             App.toast(if (added) "Added to favourites" + (if (f.type == "series") ": following new episodes" else "") else "Removed from favourites")
         })
         rows += BasketList.row(f)
-        TvRemote.sendRow(f)?.let { rows += it }
         rows += lib
         NextList.row(f)?.let { rows += it }
         if (f.type == "series") {
@@ -997,7 +1002,6 @@ object Details {
             val rows = mutableListOf<Row>()
             if (upcoming(v)) rows += Row("Not out yet: ${v.released}")
             rows += playRows(f, v)
-            TvRemote.sendRow(f, v)?.let { rows += it }
             rows += Row("────────────────────")
             if (v.title.isNotBlank()) rows += Row(v.title)
             if (v.released.isNotBlank()) rows += Row(info("Released", v.released))

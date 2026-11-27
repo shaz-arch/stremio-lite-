@@ -6,9 +6,12 @@ object AppLinks {
     const val ANDROID = BASE + "stremonino.apk"
     const val LINUX = BASE + "stremonino-linux.jar"
     const val PAGE = "https://github.com/shaz-arch/stremio-lite-/releases/latest"
+    /** The Downloader app's short code for the Android app (Fire Stick, Android TV). */
+    const val DOWNLOADER_CODE = "4200313"
 
     fun message(): String = "Stremonino, a simple Stremio app:\n" +
         "Android phone, Fire Stick or Android TV: $ANDROID\n" +
+        "On a Fire Stick, in the Downloader app just type the code $DOWNLOADER_CODE\n" +
         "Linux (needs Java 17): $LINUX\n" +
         "Sign in with your own Stremio account."
 }

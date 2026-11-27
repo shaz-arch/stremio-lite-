@@ -453,11 +453,11 @@ object Home {
                 app.push(status)
                 Net.async({ Stremio.installAddon(key, link, stickRows) }) { r ->
                     status.rows = r.fold(
-                        { name -> listOf(Row("Installed: $name"), Row("Your rows will reload on Home.")) },
+                        { name -> listOf(Row("Installed: $name"), Row("Your rows and add-ons are reloading.")) },
                         { e -> listOf(Row("Couldn't install: " + if (e is Stremio.ApiError) e.message else Net.describe(e))) },
                     )
                     app.refresh(status)
-                    if (r.isSuccess) { forget() }
+                    if (r.isSuccess) { forget(); reload() }
                 }
             }
             .setNegativeButton("Cancel", null), input, "Add-on link")
@@ -508,7 +508,7 @@ object Home {
 
     private fun openInBrowser(app: MainActivity, url: String) {
         LinkOut.open(app, url)
-        app.toast("For AIOMetadata: Load Configuration, your password, change things, Save. Then Reload here.")
+        app.toast("For AIOMetadata: Load Configuration, your password, change things, Save. Then Settings › Reload my rows and add-ons.")
     }
 
     private fun copy(app: MainActivity, text: String, what: String) =
@@ -580,3 +580,9 @@ object Home {
 var narrow = false
 
 fun info(label: String, value: String) = "${label.padEnd(if (narrow) 13 else 22)} $value"
+
+/** A label and a long value over several rows, the value's later lines lined up under its first. */
+fun infoRows(label: String, value: String, columns: Int): List<Row> {
+    val width = maxOf(12, columns - (if (narrow) 13 else 22) - 2)
+    return wrapWords(value, width).mapIndexed { i, l -> Row(info(if (i == 0) label else "", l)) }
+}
