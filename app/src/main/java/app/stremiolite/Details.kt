@@ -166,6 +166,7 @@ object Details {
             rows += Row("Play best", "►", opens = { Streams.playBest(app, f.type, w.videoId, title, f.runtime, w, 0) })
         }
         rows += Row("Choose a stream", opens = { Streams.screen(app, f.type, w.videoId, title, w, at) })
+        if (app.isPhone) rows += Row("⇩ Download", if (Offline.has(app, w.videoId)) "in Downloads  ►" else "►", opens = { if (Offline.has(app, w.videoId)) Offline.screen(app) else Offline.chooseScreen(app, w, title) })
         return rows
     }
 
@@ -315,6 +316,7 @@ object Details {
                 }
                 rows += Row(name, "$count  ►", opens = { episodes(app, f, name, eps) })
             }
+            if (app.isPhone) rows += Row("⇩ Download episodes", "choose  ►", opens = { Offline.episodesScreen(app, f) { v -> watchFor(f, v) } })
         } else if (f.videos.isNotEmpty()) {
             // A film collection: each part is a film of its own, in release order, with ✓ on the ones watched.
             val marks = History.marks(app)

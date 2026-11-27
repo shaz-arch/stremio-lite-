@@ -243,6 +243,7 @@ object Home {
             // Same order and wording as the phone and stick.
             if (Prefs.liveTv && !KidsGuard.hides()) rows += Row("Live TV", Live.homeDetail(), opens = { Live.screen() })
             Drives.homeRow()?.let { rows += it }
+            Offline.homeRow()?.let { rows += it }
             if (KidsGuard.locked()) rows += Row("Games", "►", opens = { GamesScreen.screen() })
             if (Prefs.newsOn && !KidsGuard.hides()) {
                 rows += Row("News", "film & TV headlines  ►", opens = { Feeds.news() })
@@ -262,6 +263,7 @@ object Home {
         rebuild = { build() }
         s = Screen("Stremonino", listOf(Row("Loading…")), tag = Profiles.current()?.name ?: "Linux")
         s.onShow = {
+            Offline.kick()
             if (addons == null) {
                 runCatching { Stremio.parseAddons(Store.file("addons.json").readText()) }.onSuccess { addons = it }
                 load()
@@ -713,6 +715,7 @@ object Details {
             rows += Row("Play best$what", "►", opens = { Play.best(f.type, w.videoId, t, w, 0) })
         }
         rows += Row("Choose a stream", opens = { Play.list(f.type, w.videoId, t, w, at) })
+        rows += Row("⇩ Download", if (Offline.has(w.videoId)) "in Downloads  ►" else "►", opens = { if (Offline.has(w.videoId)) Offline.screen() else Offline.chooseScreen(w, t) })
         return rows
     }
 
@@ -728,6 +731,7 @@ object Details {
                 val left = eps.count { it.id !in done && !upcoming(it) }
                 rows += Row("Season $n", (if (left == 0) "✓ " else "") + "${eps.size} episodes  ►", opens = { episodes(f, n, eps) })
             }
+            rows += Row("⇩ Download episodes", "choose  ►", opens = { Offline.episodesScreen(f, { v -> watchFor(f, v) }, { v -> upcoming(v) }) })
         } else if (f.videos.isNotEmpty()) {
             // A film collection: each part is a film of its own, in release order, with ✓ on the ones watched.
             rows += Row("Films in this collection: ${f.videos.size}")
@@ -1050,6 +1054,7 @@ object Settings {
                 }),
                 Row("──── Drives ────"),
                 Drives.settingsRow(),
+                Offline.settingsRow(),
                 Row("──── Home ────"),
                 Row("Live TV on Home", "◄ ${if (Prefs.liveTv) "Shown" else "Hidden"} ►", action = {
                     Prefs.liveTv = !Prefs.liveTv; Prefs.syncOut(); Home.redraw(); build()

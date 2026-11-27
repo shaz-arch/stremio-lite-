@@ -104,9 +104,11 @@ object LocalFiles {
         private var indexAt = 0L
         val port get() = socket?.localPort ?: 0
 
-        @Synchronized fun start(port: Int = 8781): Int {
+        /** [loopback]: only this device can reach it (downloads), not the rest of the Wi-Fi. */
+        @Synchronized fun start(port: Int = 8781, loopback: Boolean = false): Int {
             socket?.takeIf { !it.isClosed }?.let { return it.localPort }
-            val s = runCatching { ServerSocket(port) }.getOrElse { ServerSocket(0) }
+            val at = if (loopback) java.net.InetAddress.getByName("127.0.0.1") else null
+            val s = runCatching { ServerSocket(port, 50, at) }.getOrElse { ServerSocket(0, 50, at) }
             socket = s
             Thread {
                 while (!s.isClosed) {
@@ -118,6 +120,9 @@ object LocalFiles {
         }
 
         fun stop() { runCatching { socket?.close() }; socket = null }
+
+        /** Look at the folders again on the next request (a download has just finished). */
+        @Synchronized fun rescan() { indexAt = 0 }
 
         @Synchronized private fun files(): Map<String, File> {
             if (System.currentTimeMillis() - indexAt > 60_000) { index = all(roots()).associateBy { id(it) }; indexAt = System.currentTimeMillis() }
@@ -150,6 +155,13 @@ object LocalFiles {
                     a.put(JSONObject().put("id", id(f)).put("name", f.name).put("folder", folder).put("size", f.length()).put("modified", f.lastModified()))
                 }
                 send("200 OK", "application/json; charset=utf-8", a.toString().toByteArray()); return
+            }
+            // A saved subtitle next to a video (same name, .srt).
+            if (rest.startsWith("s/")) {
+                val v = files()[rest.removePrefix("s/").substringBefore('/')]
+                val srt = v?.let { File(it.parentFile, it.nameWithoutExtension + ".srt") }?.takeIf { it.isFile }
+                if (srt == null) send("404 Not Found", "text/plain", ByteArray(0)) else send("200 OK", "application/x-subrip; charset=utf-8", srt.readBytes())
+                return
             }
             if (!rest.startsWith("v/")) { send("404 Not Found", "text/plain", ByteArray(0)); return }
             val f = files()[rest.removePrefix("v/").substringBefore('/')] ?: run { send("404 Not Found", "text/plain", ByteArray(0)); return }

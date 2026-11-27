@@ -553,7 +553,7 @@ object Settings {
                 Row("Set up Stremonino", "step by step  ►", opens = { SetupWizard.screen(app) }),
                 Row("──── Playback ────"), playerRow, langRow, subsAddonRow(app), nextRow, skipRow, SleepTimer.row(app),
                 Row("──── Alerts ────"), followRow, ntfyRow,
-                Row("──── Drives ────"), Drives.settingsRow(app),
+                Row("──── Drives ────"), Drives.settingsRow(app), *listOfNotNull(Offline.settingsRow(app)).toTypedArray(),
                 Row("──── Home ────"),
                 liveRow, newsRow, comingRow, sleepHomeRow,
                 Row("Arrange your Index", "►", opens = { Arrange.screen(app) }),

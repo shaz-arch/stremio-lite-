@@ -318,6 +318,7 @@ object History {
             w.nextVideoId != null -> items += Item(w.id, w.type, w.name, w.year, w.nextVideoId, w.nextLabel ?: "", 0, 0, true, now)
         }
         if (done) {
+            Offline.watched(c, w.videoId)
             log.removeAll { it.id == w.id && (it.label == w.label || it.label == "watched on another device") }
             log.add(0, Finished(w.id, w.type, w.name, w.year, w.label, now))
         }

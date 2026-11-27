@@ -244,6 +244,7 @@ object After {
         val slept = r.launched > 0 && Sleep.stoppedSince(r.launched)
         val done = !slept && LibraryItems.finished(r.pos, r.dur)
         Lib.record(w, r.pos, r.dur, positionKnown = true, done = done)
+        if (done) Offline.watched(w.videoId)
         Home.redraw()
         if (slept) { App.toast("Sleep timer: stopped at ${clock(r.pos)}"); return }
         val next = w.nextVideoId

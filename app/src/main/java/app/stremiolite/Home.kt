@@ -84,7 +84,7 @@ object Home {
         val games = Row("Games", "►", opens = { GamesScreen.screen(app) })
         fun tools() = listOf(Row("──── App ────")) +
             (if (Settings.liveTv(app) && !KidsGuard.hides(app)) listOf(Row("Live TV", Live.homeDetail(app), opens = { Live.screen(app) })) else emptyList()) +
-            listOfNotNull(Drives.homeRow(app)) +
+            listOfNotNull(Drives.homeRow(app), Offline.homeRow(app)) +
             (if (KidsGuard.hides(app)) emptyList() else if (Settings.newsOn(app)) news else emptyList()) +
             (if (KidsGuard.locked(app)) listOf(games) else emptyList()) + appRows()
 
