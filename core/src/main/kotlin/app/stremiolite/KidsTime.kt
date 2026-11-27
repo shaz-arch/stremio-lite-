@@ -54,7 +54,7 @@ object KidsTime {
     fun blocked(s: KidsLock.State, profileId: String?, raw: String?, now: Calendar = Calendar.getInstance()): String? {
         if (!s.isLocked(profileId) || overridden(raw, day(now))) return null
         if (isBedtime(s, now)) return "It's bedtime (from ${clock(s.bedtime)} until ${clock(s.wake)})"
-        if (s.dailyMins > 0 && used(raw, day(now)) >= s.dailyMins * 60_000L) return "Today's ${dailyLabel(s.dailyMins).removeSuffix(" a day")} are used up"
+        if (s.dailyMins > 0 && used(raw, day(now)) >= s.dailyMins * 60_000L) return "Today's watch time (${dailyLabel(s.dailyMins).removeSuffix(" a day")}) is used up"
         return null
     }
 
