@@ -719,7 +719,7 @@ object Details {
             rows += Row("Play best$what", "►", opens = { Play.best(f.type, w.videoId, t, w, 0) })
         }
         rows += Row("Choose a stream", opens = { Play.list(f.type, w.videoId, t, w, at) })
-        rows += Row("⇩ Download", if (Offline.has(w.videoId)) "in Downloads  ►" else "►", opens = { if (Offline.has(w.videoId)) Offline.screen() else Offline.chooseScreen(w, t) })
+        rows += Row("Download", if (Offline.has(w.videoId)) "in Downloads  ►" else "►", opens = { if (Offline.has(w.videoId)) Offline.screen() else Offline.chooseScreen(w, t) })
         return rows
     }
 
@@ -735,7 +735,7 @@ object Details {
                 val left = eps.count { it.id !in done && !upcoming(it) }
                 rows += Row("Season $n", (if (left == 0) "✓ " else "") + "${eps.size} episodes  ►", opens = { episodes(f, n, eps) })
             }
-            rows += Row("⇩ Download episodes", "choose  ►", opens = { Offline.episodesScreen(f, { v -> watchFor(f, v) }, { v -> upcoming(v) }) })
+            rows += Row("Download episodes", "choose  ►", opens = { Offline.episodesScreen(f, { v -> watchFor(f, v) }, { v -> upcoming(v) }) })
         } else if (f.videos.isNotEmpty()) {
             // A film collection: each part is a film of its own, in release order, with ✓ on the ones watched.
             rows += Row("Films in this collection: ${f.videos.size}")
@@ -757,14 +757,14 @@ object Details {
         rows += Row(info("Type", if (collection) "Collection" else if (f.type == "movie") "Movie" else if (f.type == "series") "Series" else f.type))
         if (f.year.isNotBlank()) rows += Row(info("Year", f.year))
         val scores = app.stremiolite.Ratings.known(f.id)
-        if (scores != null && scores.line.isNotEmpty()) rows += Row(info("Ratings", scores.line))
+        if (scores != null && scores.line.isNotEmpty()) app.stremiolite.Ratings.lines(scores, maxOf(24, App.columns() - 24)).forEachIndexed { i, l -> rows += Row(info(if (i == 0) "Ratings" else "", l)) }
         else if (f.rating.isNotBlank()) rows += Row(info("IMDb rating", "★ ${f.rating}"))
         if (scores != null && scores.age.isNotEmpty()) rows += Row(info("Age rating", scores.age))
         if (f.runtime.isNotBlank()) rows += Row(info("Runtime", f.runtime))
         if (f.genres.isNotEmpty()) rows += Row(info("Genres", f.genres.joinToString(", ")))
         if (f.director.isNotEmpty()) rows += Row(info("Director", f.director.joinToString(", ")))
         if (f.cast.isNotEmpty()) rows += Row(info("Cast", f.cast.take(5).joinToString(", ")))
-        DetailExtras.facts(f, DetailExtras.today()).forEach { (k, v) -> rows += Row(info(k, v)) }
+        DetailExtras.facts(f, DetailExtras.today()).filter { !(it.first == "Age rating" && scores?.age?.isNotEmpty() == true) }.forEach { (k, v) -> rows += Row(info(k, v)) }
         DetailExtras.history(Lib.info(f.id)).forEach { (k, v) -> rows += Row(info(k, v)) }
         if (f.imdbUrl.isNotBlank()) rows += Row("IMDb page", "opens browser  ►", action = { WebLink.open(f.imdbUrl) })
         Trailers.row(f)?.let { rows += it }

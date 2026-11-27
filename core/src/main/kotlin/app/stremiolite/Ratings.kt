@@ -14,6 +14,17 @@ object Ratings {
     private const val KEEP_MS = 12 * 3_600_000L
     private val cache = ConcurrentHashMap<String, Pair<Long, Result>>()
 
+    /** The scores in lines of about [width] characters, so they wrap whole rather than being cut off. */
+    fun lines(r: Result, width: Int): List<String> {
+        val out = mutableListOf<String>()
+        var cur = ""
+        for (p in r.line.split(" · ")) {
+            cur = if (cur.isEmpty()) p else if (cur.length + 3 + p.length <= width) "$cur · $p" else { out += cur; p }
+        }
+        if (cur.isNotEmpty()) out += cur
+        return out
+    }
+
     fun known(id: String): Result? = cache[id]?.takeIf { System.currentTimeMillis() - it.first < KEEP_MS }?.second
 
     /** Blocking; only IMDb ids (tt…). An empty result if MDBList has nothing. */

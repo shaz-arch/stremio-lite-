@@ -10,7 +10,7 @@ object DetailExtras {
     fun facts(f: Full, today: String): List<Pair<String, String>> = buildList {
         if (f.released.isNotBlank()) add("Released" to f.released)
         if (f.certification.isNotBlank()) add("Age rating" to f.certification)
-        if (f.country.isNotBlank()) add("Country" to f.country)
+        if (f.country.isNotBlank()) add("Country" to f.country.split(',').joinToString(", ") { c -> c.trim().let { if (it.length <= 3) it.uppercase() else it.replaceFirstChar { ch -> ch.uppercase() } } })
         if (f.language.isNotBlank()) add("Language" to f.language)
         if (f.writers.isNotEmpty()) add("Writers" to f.writers.take(3).joinToString(", "))
         if (f.awards.isNotBlank()) add("Awards" to f.awards)
