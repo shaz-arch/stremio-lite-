@@ -211,7 +211,7 @@ object Streams {
             }
             subRow.detail = subs.line()
             // In Play best's order: its score for this device first (★ = what it would pick), then the rest.
-            val mins = Best.minutes(watch?.runtime) ?: if (type == "movie") 110.0 else 45.0
+            val mins = watch?.runtime?.let { Best.minutes(it) } ?: if (type == "movie") 110.0 else 45.0
             val scores = fetch.found.associateWith { Best.score(it, mins) }
             val sorted = fetch.found.sortedWith(
                 compareBy<Stream>({ if (scores[it] != null) 0 else 1 }, { -(scores[it] ?: 0.0) }, { if (it.cached == false) 1 else 0 }, { -it.rank }, { it.order })
