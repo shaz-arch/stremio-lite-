@@ -709,7 +709,7 @@ object Details {
         val at = Lib.resumeAt(f.id, w.videoId)
         val t = title(f, v)
         val rows = mutableListOf<Row>()
-        val what = if (v != null) " ${MetaParse.epLabel(v)}" else ""
+        val what = if (v != null) " ${MetaParse.epLabel(v)}" + (if (v.title.isNotBlank()) "  ${v.title}" else "") else ""
         if (at > 0) {
             rows += Row("Resume$what from ${clock(at)}", "►", opens = { Play.best(f.type, w.videoId, t, w, at) })
             rows += Row("Play$what from the start", opens = { Play.best(f.type, w.videoId, t, w, 0) })

@@ -96,7 +96,7 @@ object Home {
             sleepRow.detail = Sleep.summary() + "  ►"
             screen.tag = Profiles.current(app)?.name ?: ""
             val rows = mutableListOf<Row>()
-            if (list != null) rows += homeRows(app, list)
+            if (list != null) rows += Timings.time("· Browse rows") { homeRows(app, list) }
             status.label = when {
                 loading && list == null -> "Loading your rows…"
                 loadError != null && list == null -> "Couldn't load your rows: $loadError"
@@ -109,11 +109,11 @@ object Home {
             if (expired) status.label = "Your sign-in has expired. Press OK to sign in again"
             if (status.label.isNotEmpty()) rows.add(0, status)
             // Search, then what you're watching and what you've saved, then the catalogue rows.
-            val cw = History.continueWatching(app)
-            val lib = History.library(app)
+            val cw = Timings.time("· Continue watching") { History.continueWatching(app) }
+            val lib = Timings.time("· Favourites") { History.library(app) }
             // One line at the top for each kind of news: a film ready to watch, then an update.
             var top = 0
-            if (Settings.onHome(app, "notices")) {
+            if (Settings.onHome(app, "notices")) Timings.time("· Notices") {
                 NewEpisodes.homeRow(app)?.let { rows.add(0, it); top++ }
                 Waiting.homeRow(app)?.let { rows.add(0, it); top++ }
             }
@@ -129,24 +129,24 @@ object Home {
             ) + listOfNotNull(
                 search.takeIf { !KidsGuard.hides(app) && Settings.onHome(app, "search") },
                 Row("Continue watching", if (cw.isEmpty()) "nothing yet" else "${cw.size}  ►", opens = { continueScreen(app) }).takeIf { Settings.onHome(app, "continue") },
-                Row("Next watch", NextList.summary(app), opens = { NextList.screen(app) }).takeIf { Settings.onHome(app, "next") },
-                Row("Ready", Ready.summary(app), opens = { Ready.screen(app) }).takeIf { Settings.onHome(app, "ready") },
-                Row("Waiting", Waiting.summary(app), opens = { Waiting.screen(app) }).takeIf { Settings.onHome(app, "waiting") },
-                Row("Calendar", NewEpisodes.weekCount()?.let { if (it == 0) "nothing this week  ►" else "$it this week  ►" } ?: "", opens = { NewEpisodes.calendar(app) }).takeIf { Settings.onHome(app, "calendar") },
-                Row("Watched", History.watched(app).size.let { if (it == 0) "" else "$it  ►" }, opens = { watchedScreen(app) }).takeIf { Settings.onHome(app, "watched") },
+                Row("Next watch", Timings.time("· Next watch") { NextList.summary(app) }, opens = { NextList.screen(app) }).takeIf { Settings.onHome(app, "next") },
+                Row("Ready", Timings.time("· Ready") { Ready.summary(app) }, opens = { Ready.screen(app) }).takeIf { Settings.onHome(app, "ready") },
+                Row("Waiting", Timings.time("· Waiting") { Waiting.summary(app) }, opens = { Waiting.screen(app) }).takeIf { Settings.onHome(app, "waiting") },
+                Row("Calendar", Timings.time("· Calendar") { NewEpisodes.weekCount() }?.let { if (it == 0) "nothing this week  ►" else "$it this week  ►" } ?: "", opens = { NewEpisodes.calendar(app) }).takeIf { Settings.onHome(app, "calendar") },
+                Row("Watched", Timings.time("· Watched") { History.watched(app).size }.let { if (it == 0) "" else "$it  ►" }, opens = { watchedScreen(app) }).takeIf { Settings.onHome(app, "watched") },
                 Row("Favourites", if (lib.isEmpty()) "empty" else "${lib.size}  ►", opens = { libraryScreen(app) }).takeIf { Settings.onHome(app, "favourites") },
-                Row("Basket", BasketList.summary(app), opens = { BasketList.screen(app) }).takeIf { Settings.onHome(app, "basket") },
-            ) + ForYouUi.homeRows(app) + listOf(
+                Row("Basket", Timings.time("· Basket") { BasketList.summary(app) }, opens = { BasketList.screen(app) }).takeIf { Settings.onHome(app, "basket") },
+            ) + Timings.time("· For you") { ForYouUi.homeRows(app) } + listOf(
                 Row("──── Browse ────"),
             ))
-            screen.rows = rows + tools()
+            screen.rows = rows + Timings.time("· App lines") { tools() }
             // Open on Search, not on the "Watching" header above it.
             if (!placed) { placed = true; screen.moveTo = screen.rows.indexOf(search).takeIf { it >= 0 } ?: (screen.rows.indexOfFirst { it.label == "──── Watching ────" } + 1).takeIf { it in 1 until screen.rows.size } ?: 0 }
             app.refresh(screen)
         }
         var firstDrawn = false
         fun rebuild() = Pass.run { Timings.time("Home redraw") { rebuildNow() } }.also {
-            if (!firstDrawn && addons != null) { firstDrawn = true; Timings.record("Start-up to Home", System.currentTimeMillis() - MainActivity.startedAt) }
+            if (!firstDrawn && addons != null) { firstDrawn = true; Timings.record("Opening to your rows", System.currentTimeMillis() - MainActivity.startedAt) }
         }
         // Several checks often finish together: one redraw a moment later, read fresh.
         var queued = false

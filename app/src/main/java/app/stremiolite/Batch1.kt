@@ -160,7 +160,8 @@ object ForYouUi {
         val recent = infos.filter { it.lastWatched > 0 }.sortedByDescending { it.lastWatched }.map { ForYou.Seed(it.id, it.type, it.name) }
         val favs = infos.filter { it.inLibrary }.sortedByDescending { it.updated }.map { ForYou.Seed(it.id, it.type, it.name) }
         val exclude = (infos.filter { it.filmWatched || it.continuing || Following.started(it) }.map { it.id } + NextList.ids(app)).toSet()
-        Net.async({ ForYou.build(key, recent, favs, exclude) }) { r ->
+        val avoid = if (force) have?.top?.map { it.id }?.toSet().orEmpty() else emptySet()
+        Net.async({ ForYou.build(key, recent, favs, exclude, avoid = avoid) }) { r ->
             building = false
             r.getOrNull()?.let { res -> result = res; prefs(app).edit().putString("forYou", ForYou.json(res)).apply() }
             done()
@@ -182,8 +183,9 @@ object ForYouUi {
         return rows
     }
 
-    private fun list(app: MainActivity, title: String, picks: List<ForYou.Pick>, refreshRow: Boolean = false): Screen {
+    private fun list(app: MainActivity, title: String, first: List<ForYou.Pick>, refreshRow: Boolean = false): Screen {
         lateinit var s: Screen
+        var picks = first
         fun build(): List<Row> {
             val marks = History.marks(app)
             val rows = picks.map { p ->
@@ -193,7 +195,11 @@ object ForYouUi {
             }.toMutableList()
             if (refreshRow) {
                 rows += Row("────────────────────")
-                rows += Row("Refresh suggestions", action = { app.toast("Finding new suggestions…"); refresh(app, force = true) { app.toast("Suggestions updated"); Home.redraw() } })
+                rows += Row("Refresh suggestions", action = { app.toast("Finding new suggestions…"); refresh(app, force = true) {
+                    current(app)?.top?.let { picks = it }
+                    s.rows = build(); s.moveTo = 0; app.refresh(s)
+                    app.toast("Suggestions updated"); Home.redraw()
+                } })
             }
             return rows
         }

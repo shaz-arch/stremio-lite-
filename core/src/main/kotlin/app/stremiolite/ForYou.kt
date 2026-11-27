@@ -44,7 +44,7 @@ object ForYou {
      * Blocking. [recent] newest first; [exclude] is what you've watched, started or lined up.
      * Up to [rows] "Because you watched" rows.
      */
-    fun build(key: String, recent: List<Seed>, favourites: List<Seed>, exclude: Set<String>, rows: Int = 3): Result {
+    fun build(key: String, recent: List<Seed>, favourites: List<Seed>, exclude: Set<String>, rows: Int = 3, avoid: Set<String> = emptySet()): Result {
         val seeds = recent.take(6)
         val got = seeds.associateWith { recs(key, it) }
         // Favourites you've also watched lately still count (their lists are already fetched).
@@ -61,7 +61,9 @@ object ForYou {
                 score[k] = (score[k] ?: 0.0) + (1.0 / (1 + i * 0.15)) * (1.0 / (1 + si * 0.1))
             }
         }
-        val top = score.entries.sortedByDescending { it.value }.asSequence().map { pick(key, byKey.getValue(it.key)) }.filter(::ok).take(PER_ROW + 8).toList()
+        // Refresh suggestions: titles not in the last list first, the rest only to fill it.
+        val ranked = score.entries.sortedByDescending { it.value }.asSequence().map { pick(key, byKey.getValue(it.key)) }.filter(::ok).take(PER_ROW * 3).toList()
+        val top = (ranked.filter { it.id !in avoid } + ranked.filter { it.id in avoid }).take(PER_ROW + 8)
         val shown = top.map { it.id }.toMutableSet()
         val because = seeds.filter { got[it].orEmpty().isNotEmpty() }.take(rows).map { s ->
             s to got.getValue(s).asSequence().map { pick(key, it) }.filter { ok(it) }.take(PER_ROW).toList()

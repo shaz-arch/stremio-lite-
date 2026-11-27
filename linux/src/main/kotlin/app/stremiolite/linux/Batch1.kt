@@ -132,7 +132,8 @@ object ForYouUi {
         val recent = infos.filter { it.lastWatched > 0 }.sortedByDescending { it.lastWatched }.map { app.stremiolite.ForYou.Seed(it.id, it.type, it.name) }
         val favs = infos.filter { it.inLibrary }.sortedByDescending { it.updated }.map { app.stremiolite.ForYou.Seed(it.id, it.type, it.name) }
         val exclude = (infos.filter { it.filmWatched || it.continuing || app.stremiolite.Following.started(it) }.map { it.id } + NextList.ids()).toSet()
-        App.async({ F.build(key, recent, favs, exclude) }) { r ->
+        val avoid = if (force) have?.top?.map { it.id }?.toSet().orEmpty() else emptySet()
+        App.async({ F.build(key, recent, favs, exclude, avoid = avoid) }) { r ->
             building = false
             r.getOrNull()?.let { res -> result = res; Prefs.forYou = F.json(res) }
             done()
@@ -154,15 +155,26 @@ object ForYouUi {
         return rows
     }
 
-    private fun list(title: String, picks: List<app.stremiolite.ForYou.Pick>, refreshRow: Boolean = false): Screen {
-        val rows = picks.map { p ->
-            Row(app.stremiolite.Marks.title(Catalogs.mark(p.id, p.type), p.name) + if (p.year.isNotEmpty()) " (${p.year})" else "", MetaParse.typeLabel(p.type) + "  ►",
-                opens = { Details.screenFor(p.id, p.type, p.name) }, play = { BasketList.toggle(p.id, p.type, p.name, p.year) })
-        }.toMutableList()
-        if (refreshRow) {
-            rows += Row("────────────────────")
-            rows += Row("Refresh suggestions", action = { App.toast("Finding new suggestions…"); refresh(true) { App.toast("Suggestions updated"); Home.redraw() } })
+    private fun list(title: String, first: List<app.stremiolite.ForYou.Pick>, refreshRow: Boolean = false): Screen {
+        lateinit var s: Screen
+        fun rowsFor(picks: List<app.stremiolite.ForYou.Pick>): List<Row> {
+            val rows = picks.map { p ->
+                Row(app.stremiolite.Marks.title(Catalogs.mark(p.id, p.type), p.name) + if (p.year.isNotEmpty()) " (${p.year})" else "", MetaParse.typeLabel(p.type) + "  ►",
+                    opens = { Details.screenFor(p.id, p.type, p.name) }, play = { BasketList.toggle(p.id, p.type, p.name, p.year) })
+            }.toMutableList()
+            if (refreshRow) {
+                rows += Row("────────────────────")
+                rows += Row("Refresh suggestions", action = {
+                    App.toast("Finding new suggestions…")
+                    refresh(true) {
+                        current()?.top?.let { s.rows = rowsFor(it); s.moveTo = 0; App.refresh() }
+                        App.toast("Suggestions updated"); Home.redraw()
+                    }
+                })
+            }
+            return rows
         }
-        return Screen(title, rows)
+        s = Screen(title, rowsFor(first))
+        return s
     }
 }

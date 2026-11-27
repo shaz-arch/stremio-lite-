@@ -19,7 +19,7 @@ object Timings {
     private fun fmt(ms: Long) = if (ms < 1_000) "$ms ms" else String.format(java.util.Locale.UK, "%.1f s", ms / 1000.0)
 
     /** (what, "last 120 ms · slowest 400 ms · 12×") in the order first seen. */
-    @Synchronized fun lines(): List<Pair<String, String>> = all.map { (k, t) ->
+    @Synchronized fun lines(): List<Pair<String, String>> = all.entries.sortedBy { if (it.key.startsWith("·")) 1 else 0 }.map { (k, t) ->
         k to (if (t.count == 1) fmt(t.last) else "last ${fmt(t.last)} · slowest ${fmt(t.slowest)} · ${t.count}×")
     }
 }

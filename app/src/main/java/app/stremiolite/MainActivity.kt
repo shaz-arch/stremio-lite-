@@ -34,7 +34,7 @@ class MainActivity : Activity() {
     private lateinit var adapter: RowAdapter
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        if (startedAt == 0L) startedAt = System.currentTimeMillis()
+        startedAt = System.currentTimeMillis()
         super.onCreate(savedInstanceState)
         Guide.dir = java.io.File(cacheDir, "guides")
         AgeRatings.dir = filesDir
