@@ -44,6 +44,13 @@
                 <data android:scheme="stremonino" android:host="share" />
                 <data android:scheme="stremiolean" android:host="share" />
             </intent-filter>
+            <!-- An add-on page's Install button (stremio://…/manifest.json) can install into Stremonino. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="stremio" />
+            </intent-filter>
             <!-- Coming back from Google's file picker (My Drive videos) -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />

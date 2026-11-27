@@ -216,6 +216,8 @@ class Addon(
     val catalogs: List<Catalog>,
     private val resourceRules: List<Resource> = emptyList(),
     private val idPrefixes: List<String>? = null,
+    /** Lists of other add-ons it offers (Stremio's Community catalogue, stremio-addons.net…). */
+    val addonCatalogs: List<Catalog> = emptyList(),
 ) {
     class Catalog(val type: String, val id: String, val name: String, val required: List<String>, val extras: List<String> = emptyList()) {
         /** A catalogue that can be searched with nothing else required. */
@@ -280,6 +282,11 @@ class Addon(
                 catalogs = catalogs,
                 resourceRules = rules,
                 idPrefixes = m.optJSONArray("idPrefixes")?.strings(),
+                addonCatalogs = m.optJSONArray("addonCatalogs").orEmpty().let { arr ->
+                    (0 until arr.length()).mapNotNull { i -> arr.optJSONObject(i) }.map { c ->
+                        Catalog(c.optString("type"), c.optString("id"), c.optString("name").ifEmpty { c.optString("id") }, emptyList())
+                    }
+                },
             )
         }
 

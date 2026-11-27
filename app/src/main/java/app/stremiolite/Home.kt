@@ -423,6 +423,7 @@ object Home {
                 listOf(
                     Row("────────────────────"),
                     Row("Check connections again", action = { checkAll() }),
+                    FinderUi.row(app),
                     Row("Install or replace an add-on by link", "►", action = { askInstall(app, false) }),
                     Row("Add stick rows (an index config just for this app)", "►", action = { askInstall(app, true) }),
                 ),

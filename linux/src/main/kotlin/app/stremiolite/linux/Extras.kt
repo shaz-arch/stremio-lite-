@@ -356,6 +356,7 @@ object Addons {
             listOf(summary, Row("────────────────────")) + rows.map { it.second } + listOf(
                 Row("────────────────────"),
                 Row("Check connections again", action = { checkAll() }),
+                FinderUi.row(),
                 Row("Install or replace an add-on by link", "►", action = { askInstall(false) }),
                 Row("Add stick rows (an index config just for this app)", "►", action = { askInstall(true) }),
             ),
@@ -737,5 +738,74 @@ object StreamAlert {
                 Row("Check again now", action = { App.toast("Checking your streams…"); maybe(force = true) { Home.redraw(); App.toast(if (Prefs.streamProblem.isEmpty()) "Streams are working again" else "Still not working") } }),
             ))
         })
+    }
+}
+
+/** Settings › Your add-ons › Find add-ons: browse add-on lists, set one up on its page, install it. */
+object FinderUi {
+    private const val SITE_ADDON = "https://stremio-addons.net/addons/stremio-addons.net"
+
+    fun row() = Row("Find add-ons", "community lists  ►", opens = { screen() })
+
+    fun screen(): Screen {
+        val sources = app.stremiolite.AddonFinder.sources(Home.all())
+        val rows = mutableListOf<Row>()
+        if (sources.isEmpty()) rows += Row("None of your add-ons offer an add-on list.")
+        else {
+            rows += Row("Search every list", "►", action = { App.ask("Search add-ons") { q -> q?.trim()?.takeIf { it.isNotEmpty() }?.let { App.push(results(sources, it)) } } })
+            rows += Row("──── Lists ────")
+            sources.forEach { s -> rows += Row(s.label, "►", opens = { results(listOf(s), "") }) }
+        }
+        rows += Row("────────────────────")
+        rows += Row("Add the stremio-addons.net list", "opens browser  ►", action = { WebLink.open(SITE_ADDON) })
+        return Screen("Find add-ons", rows)
+    }
+
+    private fun installed(id: String) = Home.all().any { it.id == id }
+
+    private fun results(sources: List<app.stremiolite.AddonFinder.Source>, query: String): Screen {
+        lateinit var s: Screen
+        s = Screen(if (query.isBlank()) sources.singleOrNull()?.label ?: "Add-ons" else "Add-ons: $query", listOf(Row("Loading…")))
+        var started = false
+        s.onShow = {
+            if (!started) {
+                started = true
+                App.async({ sources.flatMap { runCatching { app.stremiolite.AddonFinder.list(it) }.getOrDefault(emptyList()) }.distinctBy { it.transportUrl } }) { r ->
+                    val all = r.getOrDefault(emptyList()).filter { app.stremiolite.AddonFinder.matches(it, query) }
+                    val rows = mutableListOf<Row>()
+                    if (sources.size == 1 && query.isBlank()) rows += Row("Search this list", "►", action = { App.ask("Search add-ons") { q -> q?.trim()?.takeIf { it.isNotEmpty() }?.let { App.push(results(sources, it)) } } })
+                    if (all.isEmpty()) rows += Row(if (r.isFailure) "Couldn't load the list." else "Nothing found.")
+                    all.forEach { e -> rows += Row((if (installed(e.id)) "✓ " else "") + e.name, e.what.ifEmpty { "►" }, opens = { entry(e) }) }
+                    s.rows = rows; App.refresh()
+                }
+            }
+        }
+        return s
+    }
+
+    private fun entry(e: app.stremiolite.AddonFinder.Entry): Screen {
+        val rows = mutableListOf<Row>()
+        val cols = App.columns()
+        if (installed(e.id)) rows += Row("✓ Installed on your account")
+        if (e.configurable || e.configurationRequired) {
+            rows += Row((if (e.configurationRequired) "1. " else "") + "Set it up on its page", "opens browser  ►", action = { WebLink.open(e.configureUrl) })
+            rows += Row((if (e.configurationRequired) "2. " else "") + "Then paste its install link", "►", action = { Addons.askInstall(false) })
+        }
+        if (!e.configurationRequired) rows += Row(if (e.configurable) "Install as it is" else "Install", "►", action = { install(e.transportUrl) })
+        rows += Row("────────────────────")
+        if (e.what.isNotEmpty()) rows += infoRows("Gives", e.what, cols)
+        if (e.version.isNotEmpty()) rows += Row(info("Version", e.version))
+        rows += Row(info("Server", runCatching { java.net.URL(e.transportUrl).host }.getOrDefault("")))
+        if (e.description.isNotEmpty()) { rows += Row("────────────────────"); MetaParse.wrap(e.description, cols).forEach { rows += Row(it) } }
+        return Screen(e.name, rows)
+    }
+
+    private fun install(link: String) {
+        val key = Account.authKey ?: run { App.toast("Sign in first"); return }
+        App.toast("Installing…")
+        App.async({ app.stremiolite.Stremio.installAddon(key, link) }) { r ->
+            r.onSuccess { name -> App.toast("Installed: $name"); File(Store.dir, "addons.json").delete(); Home.forget(); Home.load(force = true) }
+                .onFailure { e -> App.toast("Couldn't install: " + if (e is app.stremiolite.Stremio.ApiError) e.message else Net.describe(e)) }
+        }
     }
 }
