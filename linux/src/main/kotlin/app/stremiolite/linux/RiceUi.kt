@@ -11,7 +11,7 @@ object RiceUi {
             rebuild()
         }),
         Row("Your own colours", (if (Prefs.theme == Look.OWN && !Prefs.termColours) "in use  " else "") + "►", opens = { colours() }),
-        Row("Lines, frame, banner and bars", "►", opens = { style() }),
+        Row("Lines and bars", "►", opens = { style() }),
     )
 
     private fun set(c: Rice.Config) { Prefs.rice = c; Prefs.syncOut() }
@@ -23,8 +23,6 @@ object RiceUi {
             fun onOff(b: Boolean) = if (b) "◄ On ►" else "◄ Off ►"
             s.rows = listOf(
                 Row("Lines", "◄ ${c.line.name} ►", action = { set(c.with(lines = Rice.next(c.lines, Rice.LINES.size))); build() }),
-                Row("Frame round the screen", "◄ ${Rice.FRAMES[c.frame.coerceIn(0, Rice.FRAMES.lastIndex)].name} ►", action = { set(c.with(frame = Rice.next(c.frame, Rice.FRAMES.size))); build() }),
-                Row("Banner on Home", "◄ ${Rice.BANNERS[c.banner.coerceIn(0, Rice.BANNERS.lastIndex)]} ►", action = { set(c.with(banner = Rice.next(c.banner, Rice.BANNERS.size))); build() }),
                 Row("────────────────────"),
                 Row("Title bar shows", if (c.path) "◄ The whole path (⌂ › …) ►" else "◄ This screen ►", action = { set(c.with(path = !c.path)); build() }),
                 Row("Line counter (3/12)", onOff(c.counter), action = { set(c.with(counter = !c.counter)); build() }),
@@ -35,7 +33,7 @@ object RiceUi {
             )
             App.refresh()
         }
-        s = Screen("Lines, frame, banner and bars", emptyList())
+        s = Screen("Lines and bars", emptyList())
         build()
         return s
     }

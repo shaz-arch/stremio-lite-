@@ -417,10 +417,8 @@ class MainActivity : Activity() {
             // Ricing: the whole way here (⌂ › Settings › Look), its start cut off if too long.
             if (rice.path && stack.size > 1) append((listOf("⌂") + stack.drop(1).map { it.title }).joinToString(" › ").uppercase())
             else append(screen.title.uppercase())
-            if (screen.tag.isNotEmpty()) append("   [").append(screen.tag).append(']')
         }
         titleView.ellipsize = if (rice.path) android.text.TextUtils.TruncateAt.START else android.text.TextUtils.TruncateAt.END
-        RiceLook.applyBars(this, findViewById(R.id.banner), stack.size == 1, Look.theme(this), Look.size(this).sp)
         adapter.rows = screen.rows
         adapter.notifyDataSetChanged()
         screen.moveTo = null
@@ -433,7 +431,8 @@ class MainActivity : Activity() {
     private fun updateCounter(position: Int) {
         val count = adapter.count
         val rice = Look.rice(this)
-        counterView.text = if (count == 0 || !rice.counter) "" else "${position + 1}/$count"
+        // The profile (or the screen's tag) beside the counter: "SR │ 3/12".
+        counterView.text = Rice.right(stack.lastOrNull()?.tag.orEmpty(), if (count == 0 || !rice.counter) "" else "${position + 1}/$count", rice)
         // What ▶ does on this line: add to basket, play, or nothing.
         val row = stack.lastOrNull()?.rows?.getOrNull(position)
         findViewById<TextView>(R.id.footer).text = if (!rice.hints) "" else

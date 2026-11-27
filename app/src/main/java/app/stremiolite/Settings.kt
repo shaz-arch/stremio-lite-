@@ -650,7 +650,7 @@ object Settings {
                 Row("──── Look ────"),
                 lookRow, themeRow,
                 Row("Your own colours", (if (prefs(app).getInt("theme", 0) == Look.OWN) "in use  " else "") + "►", opens = { RiceUi.colours(app) }),
-                Row("Lines, frame, banner and bars", "►", opens = { RiceUi.style(app) }),
+                Row("Lines and bars", "►", opens = { RiceUi.style(app) }),
                 sizeRow, clockRow, watchedRow,
                 Row("Ratings", "which scores, order  ►", opens = { ratingsScreen(app) }),
                 Row("──── Configuration ────"),

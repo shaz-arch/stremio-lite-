@@ -12,8 +12,6 @@ object RiceUi {
             fun redo(n: Rice.Config) { set(app, n); s.rows = build(); app.refresh(s) }
             return listOf(
                 Row("Lines", "◄ ${c.line.name} ►", action = { redo(c.with(lines = Rice.next(c.lines, Rice.LINES.size))) }),
-                Row("Frame round the screen", "◄ ${Rice.FRAMES[c.frame.coerceIn(0, Rice.FRAMES.lastIndex)].name} ►", action = { redo(c.with(frame = Rice.next(c.frame, Rice.FRAMES.size))) }),
-                Row("Banner on Home", "◄ ${Rice.BANNERS[c.banner.coerceIn(0, Rice.BANNERS.lastIndex)]} ►", action = { redo(c.with(banner = Rice.next(c.banner, Rice.BANNERS.size))) }),
                 Row("────────────────────"),
                 Row("Title bar shows", if (c.path) "◄ The whole path ►" else "◄ This screen ►", action = { redo(c.with(path = !c.path)) }),
                 Row("Line counter (3/12)", onOff(c.counter), action = { redo(c.with(counter = !c.counter)) }),
@@ -23,7 +21,7 @@ object RiceUi {
                 Row("Back to the plain look", action = { redo(Rice.Config()); app.toast("Plain look") }),
             )
         }
-        s = Screen("Lines, frame, banner and bars", build())
+        s = Screen("Lines and bars", build())
         return s
     }
 

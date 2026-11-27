@@ -3,7 +3,7 @@ package app.stremiolite
 import org.json.JSONObject
 
 /**
- * Settings › Look › Ricing: your own colours, line and frame style, a banner on Home, and what the
+ * Settings › Look: your own colours, the line style, and what the
  * top and bottom bars show. Shared through the account like the theme (unless the look is kept to
  * one device).
  */
@@ -11,20 +11,8 @@ object Rice {
     class Lines(val name: String, val rule: Char, val ascii: Boolean = false)
     val LINES = listOf(Lines("Single ─", '─'), Lines("Double ═", '═'), Lines("Heavy ━", '━'), Lines("Dotted ┄", '┄'), Lines("ASCII -", '-', ascii = true))
 
-    class Frame(val name: String, val tl: Char, val tr: Char, val bl: Char, val br: Char, val h: Char, val v: Char)
-    val FRAMES = listOf(
-        Frame("Off", ' ', ' ', ' ', ' ', ' ', ' '),
-        Frame("Square ┌┐", '┌', '┐', '└', '┘', '─', '│'),
-        Frame("Rounded ╭╮", '╭', '╮', '╰', '╯', '─', '│'),
-        Frame("Double ╔╗", '╔', '╗', '╚', '╝', '═', '║'),
-        Frame("Heavy ┏┓", '┏', '┓', '┗', '┛', '━', '┃'),
-    )
-    private val ASCII_FRAME = Frame("ASCII", '+', '+', '+', '+', '-', '|')
-
-    val BANNERS = listOf("Off", "Box letters", "Spaced")
-
     class Config(
-        val lines: Int = 0, val frame: Int = 0, val banner: Int = 0,
+        val lines: Int = 0,
         /** Title bar: the whole way here (⌂ › Settings › Look) instead of just this screen. */
         val path: Boolean = false,
         val counter: Boolean = true,
@@ -34,17 +22,18 @@ object Rice {
         val hints: Boolean = true,
     ) {
         val line get() = LINES.getOrElse(lines) { LINES[0] }
-        val box get() = if (frame <= 0) null else if (line.ascii) ASCII_FRAME else FRAMES.getOrElse(frame) { null }
-        fun json(): String = JSONObject().put("lines", lines).put("frame", frame).put("banner", banner).put("path", path)
+        /** Between the profile (or a screen's tag) and the line counter. */
+        val divider get() = if (line.ascii) "|" else "│"
+        fun json(): String = JSONObject().put("lines", lines).put("path", path)
             .put("counter", counter).put("clockTop", clockTop).put("hints", hints).toString()
-        fun with(lines: Int = this.lines, frame: Int = this.frame, banner: Int = this.banner, path: Boolean = this.path,
+        fun with(lines: Int = this.lines, path: Boolean = this.path,
                  counter: Boolean = this.counter, clockTop: Boolean = this.clockTop, hints: Boolean = this.hints) =
-            Config(lines, frame, banner, path, counter, clockTop, hints)
+            Config(lines, path, counter, clockTop, hints)
     }
 
     fun read(raw: String?): Config {
         val o = raw?.let { runCatching { JSONObject(it) }.getOrNull() } ?: return Config()
-        return Config(o.optInt("lines"), o.optInt("frame"), o.optInt("banner"), o.optBoolean("path"),
+        return Config(o.optInt("lines"), o.optBoolean("path"),
             o.optBoolean("counter", true), o.optBoolean("clockTop"), o.optBoolean("hints", true))
     }
 
@@ -58,26 +47,6 @@ object Rice {
     }
 
     fun next(n: Int, size: Int) = (n + 1) % size
-
-    // ---- the Home banner ------------------------------------------------------------------------
-
-    private val BOX = mapOf(
-        'S' to listOf("╔═╗", "╚═╗", "╚═╝"),
-        'T' to listOf("╔╦╗", " ║ ", " ╩ "),
-        'R' to listOf("╦═╗", "╠╦╝", "╩╚═"),
-        'E' to listOf("╔═╗", "║╣ ", "╚═╝"),
-        'M' to listOf("╔╦╗", "║║║", "╩ ╩"),
-        'O' to listOf("╔═╗", "║ ║", "╚═╝"),
-        'N' to listOf("╔╗╔", "║║║", "╝╚╝"),
-        'I' to listOf("╦", "║", "╩"),
-    )
-
-    /** The banner's lines (empty when off). ASCII lines get the plain one. */
-    fun banner(c: Config, word: String = "STREMONINO"): List<String> = when {
-        c.banner <= 0 -> emptyList()
-        c.banner == 1 && !c.line.ascii -> (0..2).map { i -> word.map { BOX[it]?.get(i) ?: " " }.joinToString("") }
-        else -> listOf(word.toList().joinToString(" "))
-    }
 
     // ---- your own colours -----------------------------------------------------------------------
 
@@ -94,6 +63,10 @@ object Rice {
             NAMES.zip(list).forEach { (n, v) -> append(n.padEnd(11)).append(v).append('\n') }
         }
     }
+
+    /** The right of the title bar: "SR │ 3/12" (profile or tag, then the counter). */
+    fun right(tag: String, counter: String, c: Config): String =
+        listOf(tag, counter).filter { it.isNotEmpty() }.joinToString("  ${c.divider}  ")
 
     /** The parts, as named in the theme file, and as shown in Settings. */
     val NAMES = listOf("background", "text", "dim", "title", "bar", "bar_text")

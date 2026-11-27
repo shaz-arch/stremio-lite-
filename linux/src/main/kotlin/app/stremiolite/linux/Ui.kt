@@ -301,7 +301,6 @@ object App {
         val t = Look.theme()
         val rice = Prefs.rice
         val rule = rice.line.rule
-        val box = rice.box
         val size = term.terminalSize
         val w = size.columns
         val h = size.rows
@@ -321,45 +320,21 @@ object App {
         val topClock = if (rice.clockTop) clock else ""
         val bottomClock = if (rice.clockTop) "" else clock
 
-        // Title (or the whole path) and counter
+        // Title (or the whole path); on the right the profile (or the screen's tag) │ counter
         val counter = if (s.rows.isEmpty() || !rice.counter) "" else "${s.pos + 1}/${s.rows.size}"
-        val right = listOf(topClock, counter).filter { it.isNotEmpty() }.joinToString("  ")
+        val right = listOf(topClock, Rice.right(s.tag, counter, rice)).filter { it.isNotEmpty() }.joinToString("  ")
         val name = if (rice.path && stack.size > 1) (listOf("⌂") + stack.drop(1).map { it.title }).joinToString(" › ") else s.title
-        val title = name.uppercase() + if (s.tag.isNotEmpty()) "   [${s.tag}]" else ""
-        val titleW = inner - width(right) - 2 - (if (box != null) 4 else 0)
-        val shownTitle = if (rice.path) fitEnd(title, titleW) else fit(title, titleW)
-
-        // The frame (if any): title in the top edge, clock in the bottom edge.
-        val listTop0: Int
-        val ruleY: Int
-        val footY: Int
-        if (box != null) {
-            g.foregroundColor = t.bar
-            g.putString(0, 0, box.tl + box.h.toString().repeat((w - 2).coerceAtLeast(0)) + box.tr)
-            g.putString(0, h - 1, box.bl + box.h.toString().repeat((w - 2).coerceAtLeast(0)) + box.br)
-            for (y in 1 until h - 1) { g.putString(0, y, box.v.toString()); g.putString(w - 1, y, box.v.toString()) }
-            g.foregroundColor = t.title
-            g.putString(left, 0, " $shownTitle ")
-            if (right.isNotEmpty()) { g.foregroundColor = t.dim; g.putString(w - 3 - width(right), 0, " $right ") }
-            listTop0 = 1; ruleY = h - 3; footY = h - 2
-        } else {
-            g.foregroundColor = t.title
-            g.putString(left, 0, shownTitle)
-            g.foregroundColor = t.dim
-            if (right.isNotEmpty()) g.putString(w - 2 - width(right), 0, right)
-            g.foregroundColor = t.bar
-            g.putString(left, 1, rule.toString().repeat(inner.coerceAtLeast(0)))
-            listTop0 = 2; ruleY = h - 2; footY = h - 1
-        }
-
-        // The banner, on Home, when there's room
-        var listTop = listTop0
-        val banner = if (stack.size == 1) Rice.banner(rice) else emptyList()
-        if (banner.isNotEmpty() && h >= banner.size + 14) {
-            g.foregroundColor = t.title
-            banner.forEachIndexed { i, l -> g.putString((w - width(l)).coerceAtLeast(0) / 2, listTop + i, l) }
-            listTop += banner.size + 1
-        }
+        val title = name.uppercase()
+        val titleW = inner - width(right) - 2
+        g.foregroundColor = t.title
+        g.putString(left, 0, if (rice.path) fitEnd(title, titleW) else fit(title, titleW))
+        g.foregroundColor = t.dim
+        if (right.isNotEmpty()) g.putString(w - 2 - width(right), 0, right)
+        g.foregroundColor = t.bar
+        g.putString(left, 1, rule.toString().repeat(inner.coerceAtLeast(0)))
+        val listTop = 2
+        val ruleY = h - 2
+        val footY = h - 1
 
         // QR code beside the list, when there's room
         val qr = s.qr
@@ -411,13 +386,10 @@ object App {
 
         // Footer: keys (or a prompt / message) and the clock
         g.foregroundColor = t.bar
-        if (box != null) {
-            val (l, r) = when (box.v) { '║' -> '╠' to '╣'; '┃' -> '┣' to '┫'; '|' -> '+' to '+'; else -> '├' to '┤' }
-            g.putString(0, ruleY, l + box.h.toString().repeat((w - 2).coerceAtLeast(0)) + r)
-        } else g.putString(left, ruleY, rule.toString().repeat(inner.coerceAtLeast(0)))
+        g.putString(left, ruleY, rule.toString().repeat(inner.coerceAtLeast(0)))
         val p = prompt
         val msg = toast?.first
-        val clockW = if (bottomClock.isEmpty() || box != null) 0 else width(bottomClock) + 2
+        val clockW = if (bottomClock.isEmpty()) 0 else width(bottomClock) + 2
         when {
             p != null -> {
                 if (t.reverse) g.enableModifiers(SGR.REVERSE) else g.backgroundColor = t.bar
@@ -441,8 +413,7 @@ object App {
         }
         if (p == null && bottomClock.isNotEmpty()) {
             g.foregroundColor = t.dim
-            if (box != null) g.putString(w - 3 - width(bottomClock), h - 1, " $bottomClock ")
-            else g.putString(w - 2 - width(bottomClock), footY, bottomClock)
+            g.putString(w - 2 - width(bottomClock), footY, bottomClock)
         }
         term.refresh()
     }
