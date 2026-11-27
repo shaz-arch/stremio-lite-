@@ -757,7 +757,7 @@ object Details {
         rows += Row(info("Type", if (collection) "Collection" else if (f.type == "movie") "Movie" else if (f.type == "series") "Series" else f.type))
         if (f.year.isNotBlank()) rows += Row(info("Year", f.year))
         val scores = app.stremiolite.Ratings.known(f.id)
-        if (scores != null && scores.line.isNotEmpty()) app.stremiolite.Ratings.lines(scores, maxOf(24, App.columns() - 24)).forEachIndexed { i, l -> rows += Row(info(if (i == 0) "Ratings" else "", l)) }
+        if (scores != null && scores.line.isNotEmpty()) app.stremiolite.Ratings.lines(scores, Prefs.ratingsConfig(), maxOf(24, App.columns() - 24)).forEachIndexed { i, l -> rows += Row(info(if (i == 0) "Ratings" else "", l)) }
         else if (f.rating.isNotBlank()) rows += Row(info("IMDb rating", "★ ${f.rating}"))
         app.stremiolite.Ratings.ageLine(f.certification, scores).takeIf { it.isNotEmpty() }?.let { rows += Row(info("Age rating", it)) }
         if (f.runtime.isNotBlank()) rows += Row(info("Runtime", f.runtime))
@@ -1001,6 +1001,11 @@ object Details {
             rows += Row("────────────────────")
             if (v.title.isNotBlank()) rows += Row(v.title)
             if (v.released.isNotBlank()) rows += Row(info("Released", v.released))
+            app.stremiolite.Ratings.knownEpisode(v.id)?.let { rows += Row(info("Rating", app.stremiolite.Ratings.episodeLine(it, Prefs.ratingsConfig()))) }
+            if (Prefs.tmdbKey.isNotBlank() && !app.stremiolite.Ratings.triedEpisode(v.id)) {
+                val key = Prefs.tmdbKey
+                App.async({ app.stremiolite.Ratings.episode(key, v.id) }) { r -> if (r.getOrNull() != null && App.isTop(s)) s.onShow?.invoke() }
+            }
             if (v.id in Lib.watchedEpisodes(f.id, MetaParse.stremioOrder(f))) rows += Row("Remove from watched", action = {
                 Lib.unwatch(f.id, f.type, v.id, MetaParse.stremioOrder(f))
                 App.toast("${MetaParse.epLabel(v)} is no longer marked as watched")
@@ -1074,6 +1079,7 @@ object Settings {
                 Row("Arrange your Index", "►", opens = { Arrange.screen() }),
                 Row("Hide rows", "►", opens = { rowsScreen() }),
                 Row("──── Look ────"),
+                Row("Ratings", "which scores, order  ►", opens = { ratingsScreen() }),
                 Row("Theme, text size and clock", "◄ ${if (Prefs.lookLocal) "This computer only" else "Same on all devices"} ►", action = {
                     Prefs.lookLocal = !Prefs.lookLocal
                     if (!Prefs.lookLocal) Prefs.syncOut()
@@ -1668,6 +1674,38 @@ fun homeLines(): Screen {
         App.refresh()
     }
     s = Screen("Show on Home", emptyList())
+    s.onShow = { build() }
+    return s
+}
+
+/** Settings › Ratings: which scores, in what order, vote counts, percentages. */
+fun ratingsScreen(): Screen {
+    lateinit var s: Screen
+    fun name(k: String) = app.stremiolite.Ratings.SOURCES.firstOrNull { it.first == k }?.second ?: k
+    fun build() {
+        val c = Prefs.ratingsConfig()
+        val rows = mutableListOf(
+            Row("Vote counts", "◄ ${if (c.votes) "On" else "Off"} ►", action = { Prefs.setRatings(votes = !c.votes); build() }),
+            Row("Show as percentages", "◄ ${if (c.percent) "On" else "Off"} ►", action = { Prefs.setRatings(percent = !c.percent); build() }),
+            Row("──── Shown, in this order ────"),
+        )
+        c.order.forEachIndexed { i, k ->
+            rows += Row("${i + 1}. ${name(k)}", "►", opens = {
+                Screen(name(k), listOfNotNull(
+                    if (i > 0) Row("Move up", action = { Prefs.setRatings(order = c.order.toMutableList().also { java.util.Collections.swap(it, i, i - 1) }); App.back() }) else null,
+                    if (i < c.order.size - 1) Row("Move down", action = { Prefs.setRatings(order = c.order.toMutableList().also { java.util.Collections.swap(it, i, i + 1) }); App.back() }) else null,
+                    Row("Hide", action = { Prefs.setRatings(order = c.order - k); App.back() }),
+                ))
+            })
+        }
+        val hidden = app.stremiolite.Ratings.SOURCES.map { it.first }.filter { it !in c.order }
+        if (hidden.isNotEmpty()) {
+            rows += Row("──── Not shown ────")
+            hidden.forEach { k -> rows += Row(name(k), "add  ►", action = { Prefs.setRatings(order = c.order + k); build() }) }
+        }
+        s.rows = rows; App.refresh()
+    }
+    s = Screen("Ratings", emptyList())
     s.onShow = { build() }
     return s
 }

@@ -345,7 +345,7 @@ object Details {
         rows += Row(info("Type", if (isShow) "Series" else if (collection) "Collection" else Catalogs.typeLabel(f.type).removeSuffix("s")))
         if (f.year.isNotBlank()) rows += Row(info("Year", f.year))
         val scores = Ratings.known(f.id)
-        if (scores != null && scores.line.isNotEmpty()) Ratings.lines(scores, maxOf(24, app.columns() - 20)).forEachIndexed { i, l -> rows += Row(info(if (i == 0) "Ratings" else "", l)) }
+        if (scores != null && scores.line.isNotEmpty()) Ratings.lines(scores, Settings.ratingsConfig(app), maxOf(24, app.columns() - 20)).forEachIndexed { i, l -> rows += Row(info(if (i == 0) "Ratings" else "", l)) }
         else if (f.rating.isNotBlank()) rows += Row(info("IMDb rating", "★ ${f.rating}"))
         Ratings.ageLine(f.certification, scores).takeIf { it.isNotEmpty() }?.let { rows += Row(info("Age rating", it)) }
         if (f.runtime.isNotBlank()) rows += Row(info("Runtime", f.runtime))
@@ -481,6 +481,7 @@ object Details {
             rows += Row("────────────────────")
             rows += Row(info("Episode", "$seasonName, episode ${v.episode}"))
             if (v.released.isNotBlank()) rows += Row(info("Released", v.released + if (upcoming(v.released)) " (upcoming)" else ""))
+            Ratings.knownEpisode(v.id)?.let { rows += Row(info("Rating", Ratings.episodeLine(it, Settings.ratingsConfig(app)))) }
             mark(app, v).takeIf { it.isNotEmpty() }?.let { rows += Row(info("Watched", if (it == "✓") "yes ✓" else it)) }
             if (mark(app, v) == "✓") rows += Row("Remove from watched", action = {
                 History.unwatch(app, f.id, f.type, v.id, label, stremioOrder(f))
@@ -498,6 +499,10 @@ object Details {
             screen.rows = build()
             app.refresh(screen)
             Net.later(1_500, Runnable { if (app.isTop(screen)) Streams.prefetch(app, f.type, v.id) })
+            val tmdb = Settings.tmdbKey(app)
+            if (tmdb.isNotBlank() && !Ratings.triedEpisode(v.id)) Net.async({ Ratings.episode(tmdb, v.id) }) { r ->
+                if (r.getOrNull() != null && app.isTop(screen)) { screen.rows = build(); app.refresh(screen) }
+            }
         }
         return screen
     }

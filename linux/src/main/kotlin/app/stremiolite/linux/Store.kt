@@ -214,6 +214,16 @@ object Prefs {
     var streamCheckAt: Long
         get() = data().optLong("streamCheckAt", 0)
         set(v) { data().put("streamCheckAt", v); save() }
+    fun ratingsConfig() = app.stremiolite.Ratings.Config(
+        app.stremiolite.Ratings.Config.orderOf(data().optString("ratingsOrder", "").ifEmpty { null }),
+        data().optBoolean("ratingsVotes", false), data().optBoolean("ratingsPercent", false),
+    )
+    fun setRatings(order: List<String>? = null, votes: Boolean? = null, percent: Boolean? = null) {
+        order?.let { data().put("ratingsOrder", it.joinToString(",")) }
+        votes?.let { data().put("ratingsVotes", it) }
+        percent?.let { data().put("ratingsPercent", it) }
+        save(); syncOut()
+    }
     var sleepOnHome: Boolean
         get() = data().optBoolean("sleepOnHome", false)
         set(v) { data().put("sleepOnHome", v); save() }
@@ -336,7 +346,7 @@ object Prefs {
     private const val SYNC_ID = "stremiolite:settings"
 
     /** Shared settings this build knows; one this computer has never had is always taken from the account. */
-    private val SHARED = listOf("theme", "subLang", "autoNext", "clock", "hideWatched", "layout", "autoFollow", "liveTv", "playlists", "liveFavs", "liveGuide", "liveFreeHide", "newsOn", "comingOn", "sleepOnHome", "homeHidden", "newsFeeds", "newsHide", "tmdbKey", "watchRegion", "geminiKey")
+    private val SHARED = listOf("theme", "subLang", "autoNext", "clock", "hideWatched", "layout", "autoFollow", "liveTv", "playlists", "liveFavs", "liveGuide", "liveFreeHide", "newsOn", "comingOn", "sleepOnHome", "homeHidden", "ratingsOrder", "ratingsVotes", "ratingsPercent", "newsFeeds", "newsHide", "tmdbKey", "watchRegion", "geminiKey")
     /** Synced with your own devices, but never sent to someone else with "Share my setup". */
     private val NOT_SHARED = setOf("playlists", "liveFavs", "liveGuide", "tmdbKey", "geminiKey")
     /** The look: shared by default, or kept to this computer ("lookLocal", which itself never syncs). */

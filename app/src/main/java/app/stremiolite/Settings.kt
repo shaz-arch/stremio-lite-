@@ -59,7 +59,7 @@ object Settings {
 
     private const val SYNC_ID = "stremiolite:settings"
     private val INT_KEYS = listOf("subLang", "theme", "clock", "textSize")
-    private val BOOL_KEYS = listOf("autoNext", "hideWatched", "autoFollow", "liveTv", "newsOn", "comingOn", "sleepOnHome")
+    private val BOOL_KEYS = listOf("autoNext", "hideWatched", "autoFollow", "liveTv", "newsOn", "comingOn", "sleepOnHome", "ratingsVotes", "ratingsPercent")
     /** The look: shared by default, or kept to this device ("lookLocal", which itself never syncs). */
     private val LOOK_KEYS = setOf("theme", "clock", "textSize")
 
@@ -77,6 +77,7 @@ object Settings {
         // Your Home layout (Show on Home) is the same on every device.
         o.put("homeHidden", JSONArray(hiddenOnHome(c).toList()))
         p.getString("layout", null)?.let { o.put("layout", it) }
+        p.getString("ratingsOrder", null)?.let { o.put("ratingsOrder", it) }
         return o
     }
 
@@ -88,6 +89,7 @@ object Settings {
         val theirs = o.optJSONArray("hiddenRows")?.let { a -> (0 until a.length()).map { a.optString(it) }.toSet() } ?: emptySet()
         e.putStringSet("hiddenRows", hiddenRows(c) + theirs + alsoHide)
         if (o.has("layout")) e.putString("layout", o.optString("layout"))
+        if (o.has("ratingsOrder")) e.putString("ratingsOrder", o.optString("ratingsOrder"))
         e.apply()
         syncOut(c)
     }
@@ -166,6 +168,7 @@ object Settings {
         val e = p.edit()
         INT_KEYS.forEach { k -> if (o.has(k) && shares(c, k)) e.putInt(k, o.optInt(k)) }
         BOOL_KEYS.forEach { k -> if (o.has(k)) e.putBoolean(k, o.optBoolean(k)) }
+        if (o.has("ratingsOrder")) e.putString("ratingsOrder", o.optString("ratingsOrder"))
         if (o.has("layout")) e.putString("layout", o.optString("layout"))
         o.optJSONArray("homeHidden")?.let { a -> e.putStringSet("homeHidden", (0 until a.length()).map { a.optString(it) }.toSet()) }
         if (o.has("playlists")) e.putString("playlists", o.optString("playlists"))
@@ -224,6 +227,45 @@ object Settings {
     fun newsOn(c: Context) = prefs(c).getBoolean("newsOn", true)
     fun comingOn(c: Context) = prefs(c).getBoolean("comingOn", true)
     fun sleepOnHome(c: Context) = prefs(c).getBoolean("sleepOnHome", false)
+
+    fun ratingsConfig(c: Context) = Ratings.Config(
+        Ratings.Config.orderOf(prefs(c).getString("ratingsOrder", null)),
+        prefs(c).getBoolean("ratingsVotes", false), prefs(c).getBoolean("ratingsPercent", false),
+    )
+
+    private fun setRatingsOrder(c: Context, order: List<String>) { prefs(c).edit().putString("ratingsOrder", order.joinToString(",")).apply(); syncOut(c) }
+
+    /** Settings › Ratings: which scores, in what order, vote counts, percentages. */
+    fun ratingsScreen(app: MainActivity): Screen {
+        lateinit var s: Screen
+        fun name(k: String) = Ratings.SOURCES.firstOrNull { it.first == k }?.second ?: k
+        fun build(): List<Row> {
+            val c = ratingsConfig(app)
+            val rows = mutableListOf(
+                Row("Vote counts", "◄ ${if (c.votes) "On" else "Off"} ►", action = { flip(app, "ratingsVotes", false); s.rows = build(); app.refresh(s) }),
+                Row("Show as percentages", "◄ ${if (c.percent) "On" else "Off"} ►", action = { flip(app, "ratingsPercent", false); s.rows = build(); app.refresh(s) }),
+                Row("──── Shown, in this order ────"),
+            )
+            c.order.forEachIndexed { i, k ->
+                rows += Row("${i + 1}. ${name(k)}", "►", opens = {
+                    Screen(name(k), listOfNotNull(
+                        if (i > 0) Row("Move up", action = { setRatingsOrder(app, c.order.toMutableList().also { java.util.Collections.swap(it, i, i - 1) }); app.back() }) else null,
+                        if (i < c.order.size - 1) Row("Move down", action = { setRatingsOrder(app, c.order.toMutableList().also { java.util.Collections.swap(it, i, i + 1) }); app.back() }) else null,
+                        Row("Hide", action = { setRatingsOrder(app, c.order - k); app.back() }),
+                    ))
+                })
+            }
+            val hidden = Ratings.SOURCES.map { it.first }.filter { it !in c.order }
+            if (hidden.isNotEmpty()) {
+                rows += Row("──── Not shown ────")
+                hidden.forEach { k -> rows += Row(name(k), "add  ►", action = { setRatingsOrder(app, c.order + k); s.rows = build(); app.refresh(s) }) }
+            }
+            return rows
+        }
+        s = Screen("Ratings", build())
+        s.onShow = { s.rows = build(); app.refresh(s) }
+        return s
+    }
 
     /** Every line on Home you can show or hide (Settings › Home › Show on Home), by section. */
     private val HOME_LINES = listOf(
@@ -601,6 +643,7 @@ object Settings {
                 Row("Hide rows", "►", opens = { rowsScreen(app) }),
                 Row("──── Look ────"),
                 lookRow, themeRow, sizeRow, clockRow, watchedRow,
+                Row("Ratings", "which scores, order  ►", opens = { ratingsScreen(app) }),
                 Row("──── Configuration ────"),
                 Row("Set up Stremonino", "step by step  ►", opens = { SetupWizard.screen(app) }),
                 Row("Reload my rows and add-ons", action = { Home.reload(); app.toast("Reloading your rows and add-ons…") }),
