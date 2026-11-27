@@ -350,8 +350,9 @@ object Home {
         fun build(): List<Row> {
             val list = History.watched(app)
             val stats = Row("Your stats", "►", opens = { statsScreen(app) })
-            if (list.isEmpty()) return listOf(stats, Row("Empty."))
-            return listOf(stats) + list.map { f ->
+            val search = Row("Search my history", "►", action = { HistorySearch.start(app) })
+            if (list.isEmpty()) return listOf(search, stats, Row("Empty."))
+            return listOf(search, stats) + list.map { f ->
                 val detail = listOf(f.label.substringBefore(' ').takeIf { it.startsWith("S") } ?: f.label, if (f.time > 0) day.format(java.util.Date(f.time)) else "")
                     .filter { it.isNotBlank() }.joinToString("   ")
                 Row(f.name, detail, opens = { watchedEntry(app, f) })

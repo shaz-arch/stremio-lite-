@@ -74,6 +74,10 @@ object Prefs {
     private fun data() = cache ?: Store.readJson("settings.json").also { cache = it }
     private fun save() = Store.writeJson("settings.json", data())
 
+    /** Everything here, for Settings › Backup (not the sync bookkeeping). */
+    fun backupJson(): JSONObject = JSONObject(data().toString()).also { o -> app.stremiolite.Backup.SKIP.forEach { o.remove(it) } }
+    fun restoreJson(o: JSONObject) { val d = data(); o.keys().forEach { k -> d.put(k, o.get(k)) }; save() }
+
     var theme: Int
         get() = data().optInt("theme", 0)
         set(v) { data().put("theme", v); save() }

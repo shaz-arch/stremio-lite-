@@ -868,3 +868,111 @@ object KeyDropUi {
         }
     }
 }
+
+/** Settings › Backup ([app.stremiolite.Backup]): this computer's own settings, locked with your passphrase, kept on your account. */
+object BackupUi {
+    private val B = app.stremiolite.Backup
+    private const val KIND = "linux"
+    private fun saved() = B.read(Lib.raw(B.ID)?.toString(), KIND)
+    private fun day(ms: Long) = java.text.SimpleDateFormat("d MMM", java.util.Locale.UK).format(java.util.Date(ms))
+
+    fun row() = Row("Back up this computer's settings", (saved()?.let { "saved " + day(it.at) + "  " } ?: "") + "►", opens = { screen() })
+
+    fun screen(): Screen {
+        lateinit var s: Screen
+        fun build() {
+            val b = saved()
+            val rows = mutableListOf<Row>()
+            rows += Row(if (b == null) "Back up now" else "Back up again (replaces the last one)", action = { backUp { build() } })
+            if (b != null) {
+                rows += Row(info("Last backup", day(b.at) + ", from " + b.device))
+                rows += Row("Restore from the backup", action = { restore(b) })
+                rows += Row("Delete the backup", action = { Lib.put(B.record(Lib.raw(B.ID)?.toString(), KIND, null)); App.toast("Backup deleted"); build() })
+            }
+            rows += Row("────────────────────")
+            rows += Row("Your keys, kids lock, drives, player and other settings only this computer has.")
+            rows += Row("Locked with a passphrase only you know: forget it and the backup can't be opened.")
+            s.rows = rows; App.refresh()
+        }
+        s = Screen("Backup", emptyList())
+        build()
+        s.onShow = { Lib.pull { build() } }
+        return s
+    }
+
+    private fun backUp(done: () -> Unit) {
+        if (Account.authKey == null) { App.toast("Sign in first"); return }
+        App.ask("Passphrase (8 or more characters)", hidden = true) { a ->
+            if (a == null) return@ask
+            if (a.length < B.MIN_PASS) { App.toast("At least ${B.MIN_PASS} characters"); return@ask }
+            App.ask("Same again", hidden = true) { b ->
+                if (b == null) return@ask
+                if (a != b) { App.toast("The two didn't match"); return@ask }
+                val all = org.json.JSONObject().put("settings", Prefs.backupJson())
+                KidsGuard.rawState()?.let { all.put("kidslock", it) }
+                App.toast("Locking it…")
+                App.async({ B.seal(all.toString(), a) }) { r ->
+                    r.onSuccess { blob ->
+                        val host = runCatching { java.net.InetAddress.getLocalHost().hostName }.getOrDefault("computer")
+                        Lib.put(B.record(Lib.raw(B.ID)?.toString(), KIND, app.stremiolite.Backup.Saved(System.currentTimeMillis(), host, blob)))
+                        App.toast("✓ Backed up to your account"); done()
+                    }.onFailure { App.toast("Couldn't back up: ${it.message}") }
+                }
+            }
+        }
+    }
+
+    private fun restore(b: app.stremiolite.Backup.Saved) {
+        App.ask("Passphrase", hidden = true) { p ->
+            if (p == null) return@ask
+            App.toast("Unlocking…")
+            App.async({ B.open(b.blob, p) ?: throw IllegalArgumentException() }) { r ->
+                r.onSuccess { plain ->
+                    val all = org.json.JSONObject(plain)
+                    all.optJSONObject("settings")?.let { Prefs.restoreJson(it) }
+                    all.optString("kidslock").takeIf { it.isNotEmpty() }?.let { KidsGuard.restoreRaw(it) }
+                    App.toast("✓ Restored"); Home.load(force = true); App.resetTo(Home.screen())
+                }.onFailure { App.toast("Wrong passphrase") }
+            }
+        }
+    }
+}
+
+/** Watched › Search my history: anything played on this account (any device), by name. */
+object HistorySearch {
+    fun start() {
+        App.ask("Search my history") { q ->
+            val t = q?.trim().orEmpty(); if (t.isEmpty()) return@ask
+            val day = java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.UK)
+            val found = app.stremiolite.HistoryMatch.find(Lib.infos(), t)
+            val rows = if (found.isEmpty()) listOf(Row("Nothing you've played matches \"$t\".")) else found.map { i ->
+                val d = listOfNotNull(if (i.type == "series") "show" else "film", i.lastWatched.takeIf { it > 0 }?.let { day.format(java.util.Date(it)) }).joinToString("   ")
+                Row(i.name, "$d  ►", opens = { Details.screenFor(i.id, i.type, i.name) })
+            }
+            App.push(Screen("History: $t", rows))
+        }
+    }
+}
+
+/** Settings › About › What's new, and once after each update. */
+object WhatsNewUi {
+    fun screen(): Screen {
+        val rows = mutableListOf<Row>()
+        app.stremiolite.WhatsNew.upTo(Updates.current).forEach { n ->
+            rows += Row("──── Build ${n.build} ────")
+            n.lines.forEach { l -> app.stremiolite.wrapWords(l, App.columns() - 4).forEachIndexed { i, part -> rows += Row((if (i == 0) "• " else "  ") + part) } }
+        }
+        if (rows.isEmpty()) rows += Row("Nothing noted yet.")
+        return Screen("What's new", rows)
+    }
+
+    /** After an update (not a first run): the notes once. */
+    fun maybeShow() {
+        val o = Store.readJson("whatsnew.json")
+        val seen = o.optInt("seen", 0); val now = Updates.current
+        if (now <= 0) return
+        Store.writeJson("whatsnew.json", o.put("seen", now))
+        if (seen == 0 || seen >= now || app.stremiolite.WhatsNew.since(seen, now).isEmpty()) return
+        App.push(screen())
+    }
+}

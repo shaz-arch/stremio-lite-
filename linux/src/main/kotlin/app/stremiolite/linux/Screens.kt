@@ -358,8 +358,9 @@ object Home {
         fun build() {
             val list = Watched.list()
             val stats = Row("Your stats", "►", opens = { statsScreen() })
-            s.rows = if (list.isEmpty()) listOf(stats, Row("Empty."))
-            else listOf(stats) + list.map { e ->
+            val search = Row("Search my history", "►", action = { HistorySearch.start() })
+            s.rows = if (list.isEmpty()) listOf(search, stats, Row("Empty."))
+            else listOf(search, stats) + list.map { e ->
                 val detail = listOf(e.label, if (e.time > 0) day.format(java.util.Date(e.time)) else "").filter { it.isNotBlank() }.joinToString("   ")
                 Row(e.name, "$detail  ►", opens = { watchedEntry(e) })
             }
@@ -1131,9 +1132,11 @@ object Settings {
                 Row("Share Stremonino", "download links  ►", opens = { AppShare.screen() }),
                 Row("Export my setup to another account", "►", opens = { Share.screen() }),
                 Row("Import a setup from another account", "►", opens = { Share.importScreen() }),
+                BackupUi.row(),
                 Row("──── About ────"),
                 Row(info("App version", "build ${Updates.current}")),
                 Row("Check for updates", action = { Updates.checkNow() }),
+                Row("What's new", "►", opens = { WhatsNewUi.screen() }),
                 Row("Checks", "►", opens = { Screen("Checks", listOf(
                     Row("Is everything working?", "check it all  ►", opens = { HealthScreen.screen() }),
                     Row("Device check", "►", opens = { DeviceCheck.screen() }),

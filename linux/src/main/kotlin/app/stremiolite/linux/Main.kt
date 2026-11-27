@@ -14,6 +14,7 @@ fun main(args: Array<String>) {
     SpeedCheck.apply()
     TvRemote.start()
     MyFiles.Share.keepUp()
+    if (Account.authKey != null && Profiles.all().size <= 1) App.later(300) { WhatsNewUi.maybeShow() }
     App.run(
         when {
             Profiles.all().size > 1 -> Profiles.chooser()

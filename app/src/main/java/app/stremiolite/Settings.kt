@@ -665,9 +665,11 @@ object Settings {
                 Row("Share Stremonino", "download links  ►", opens = { AppShare.screen(app) }),
                 Row("Export my setup to another account", "►", opens = { Share.screen(app) }),
                 Row("Import a setup from another account", "►", opens = { Share.importScreen(app) }),
+                BackupUi.row(app),
                 Row("──── About ────"),
                 Row(info("App version", BuildConfig.VERSION_NAME)),
                 updateRow,
+                Row("What's new", "►", opens = { WhatsNewUi.screen(BuildConfig.VERSION_CODE) }),
                 Row("Checks", "►", opens = { Screen("Checks", listOf(
                     Row("Is everything working?", "check it all  ►", opens = { HealthScreen.screen(app) }),
                     Row("Device check", "►", opens = { DemoMenus.deviceCheck(app) }),

@@ -16,6 +16,8 @@ object KidsGuard {
     }
 
     fun locked() = state().isLocked(Profiles.current()?.id)
+    fun rawState(): String? = runCatching { file().readText() }.getOrNull()
+    fun restoreRaw(raw: String) = save(KidsLock.read(raw))
     fun ageLimited() = state().let { it.isLocked(Profiles.current()?.id) && it.maxAge > 0 }
     fun allows(id: String) = state().allows(Profiles.current()?.id, app.stremiolite.AgeRatings.of(id.substringBefore(':')))
     fun hides() = state().let { it.isLocked(Profiles.current()?.id) && it.hideExtras }

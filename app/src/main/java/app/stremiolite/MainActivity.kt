@@ -108,6 +108,7 @@ class MainActivity : Activity() {
         Share.open(this, intent?.data)
         DriveUi.back(this, intent?.data)
         FinderUi.open(this, intent?.data)
+        if (Account.authKey(this) != null) WhatsNewUi.maybeShow(this)
     }
 
     /** A "Share my setup" link opened while the app was already running. */
