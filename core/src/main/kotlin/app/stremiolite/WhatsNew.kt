@@ -8,6 +8,9 @@ object WhatsNew {
     class Note(val build: Int, val lines: List<String>)
 
     val NOTES = listOf(
+        Note(259, listOf(
+            "Updates install straight from the app (no browser or Downloader): allow Stremonino to install apps the first time.",
+        )),
         Note(258, listOf(
             "Search my history (under Watched): anything you've played, on any device.",
             "Backup: keep this device's own settings (keys, kids lock, drives) on your account, locked with your passphrase.",

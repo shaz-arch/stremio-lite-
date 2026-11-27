@@ -114,6 +114,7 @@ class MainActivity : Activity() {
     /** A "Share my setup" link opened while the app was already running. */
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
+        if (Updates.status(this, intent)) return
         setIntent(intent)
         Share.open(this, intent.data)
         DriveUi.back(this, intent.data)
