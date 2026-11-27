@@ -48,7 +48,8 @@ object Play {
                         if (arr != null) for (i in 0 until arr.length()) {
                             val o = arr.optJSONObject(i) ?: continue
                             val link = o.optString("url")
-                            StreamParse.webLink(o, a)?.let { web -> if (links.none { it.second == web.second }) links += web; continue }
+                            val web = StreamParse.webLink(o, a)
+                            if (web != null) { if (links.none { it.second == web.second }) links += web; continue }
                             // A YouTube video by its id: mpv plays those itself (with yt-dlp).
                             val yt = o.optString("ytId").takeIf { link.isBlank() && it.isNotBlank() && "mpv" in Prefs.player }
                             val use = if (yt != null) "https://www.youtube.com/watch?v=$yt" else link
