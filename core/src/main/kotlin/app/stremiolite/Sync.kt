@@ -153,6 +153,12 @@ object Sync {
         }.getOrDefault(emptySet())
     }
 
+    /** How many episodes a watched field marks (without needing the episode list). */
+    fun watchedCount(field: String?): Int {
+        if (field.isNullOrBlank() || field == "null") return 0
+        return runCatching { inflate(B64.decode(field.substring(field.lastIndexOf(':') + 1))).sumOf { Integer.bitCount(it.toInt() and 0xFF) } }.getOrDefault(0)
+    }
+
     fun encodeWatched(watched: Set<String>, ids: List<String>): String {
         val bytes = ByteArray((ids.size + 7) / 8)
         var lastSet = -1

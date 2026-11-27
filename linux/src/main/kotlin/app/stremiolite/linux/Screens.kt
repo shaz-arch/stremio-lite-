@@ -256,7 +256,7 @@ object Home {
             // Setup items (add-ons, export/import, device check, about) live inside Settings.
             rows += Row("Settings", "►", action = { KidsGuard.guard { App.push(Settings.screen()) } })
             rows += Row("──── Profile ────")
-            rows += Row(Profiles.current()?.name ?: "…", if (KidsGuard.locked()) "current · locked" else "current")
+            rows += Row(Profiles.current()?.name ?: "…", if (KidsGuard.locked()) "current · locked" + (KidsGuard.timeSummary()?.let { " · $it" } ?: "") else "current")
             rows += Row("Switch profile", "►", action = { KidsGuard.guard { App.push(Profiles.chooser()) } })
             rows += Row("Sign out of this profile", action = { KidsGuard.guard { App.push(signOut()) } })
             s.rows = rows
@@ -357,8 +357,9 @@ object Home {
         val day = java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.UK)
         fun build() {
             val list = Watched.list()
-            s.rows = if (list.isEmpty()) listOf(Row("Empty."))
-            else list.map { e ->
+            val stats = Row("Your stats", "►", opens = { statsScreen() })
+            s.rows = if (list.isEmpty()) listOf(stats, Row("Empty."))
+            else listOf(stats) + list.map { e ->
                 val detail = listOf(e.label, if (e.time > 0) day.format(java.util.Date(e.time)) else "").filter { it.isNotBlank() }.joinToString("   ")
                 Row(e.name, "$detail  ►", opens = { watchedEntry(e) })
             }
@@ -368,6 +369,15 @@ object Home {
         build()
         s.onShow = { build(); Lib.pull { build() } }
         return s
+    }
+
+    /** Watched › Your stats: time and counts from the account (all devices), and your most-watched. */
+    private fun statsScreen(): Screen {
+        val st = app.stremiolite.WatchStats.compute(Lib.infos())
+        val rows = st.lines.map { Row(info(it.first, it.second)) }.toMutableList()
+        if (st.shows.isNotEmpty()) { rows += Row("── Most-watched shows ──"); st.shows.forEach { t -> rows += Row(t.name, t.detail + "  ►", opens = { Details.screenFor(t.id, t.type, t.name) }) } }
+        if (st.films.isNotEmpty()) { rows += Row("── Films watched again ──"); st.films.forEach { t -> rows += Row(t.name, t.detail + "  ►", opens = { Details.screenFor(t.id, t.type, t.name) }) } }
+        return Screen("Your stats", rows)
     }
 
     /** One finished film or episode: open it, or take it off the watched list (here and on the account). */
@@ -986,7 +996,7 @@ object Details {
                     info?.continuing == true && info.videoId == v.id -> "► "
                     else -> "  "
                 }
-                val when_ = if (upcoming(v)) "out ${v.released}" else v.released
+                val when_ = listOf(if (upcoming(v)) "out ${v.released}" else v.released, app.stremiolite.Ratings.episodeShort(v.id, Prefs.ratingsConfig())).filter { it.isNotEmpty() }.joinToString("   ")
                 Row(mark + MetaParse.epLabel(v) + "  " + v.title, when_ + "  ►", opens = { episode(f, v) }, play = {
                     val w = watchFor(f, v)
                     App.push(Play.best(f.type, w.videoId, title(f, v), w, Lib.resumeAt(f.id, w.videoId)))
@@ -996,6 +1006,9 @@ object Details {
         build()
         s.onShow = { build(); App.refresh() }
         s.key = "eps:${f.id}:$season"
+        val tmdb = Prefs.tmdbKey
+        if (tmdb.isNotBlank() && f.id.startsWith("tt") && !app.stremiolite.Ratings.triedSeason(f.id, season))
+            App.async({ app.stremiolite.Ratings.season(tmdb, f.id, season) }) { r -> if (r.getOrNull() == true) { build(); if (App.isTop(s)) App.refresh() } }
         return s
     }
 

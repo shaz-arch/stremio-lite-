@@ -55,7 +55,8 @@ object Home {
     fun screen(app: MainActivity): Screen {
         // Just the profile's name (the email stays in Switch profile).
         fun whoText() = Profiles.current(app)?.name ?: "…"
-        val who = Row(whoText(), if (KidsGuard.locked(app)) "current · locked" else "current")
+        fun whoDetail() = if (KidsGuard.locked(app)) "current · locked" + (KidsGuard.timeSummary(app)?.let { " · $it" } ?: "") else "current"
+        val who = Row(whoText(), whoDetail())
         val addonsRow = Row("Your add-ons", "", opens = { addonList(app) })
         val status = Row("")
         lateinit var screen: Screen
@@ -94,7 +95,7 @@ object Home {
             val list = addons
             addonsRow.detail = if (list != null) "${list.size}  ►" else ""
             who.label = whoText()
-            who.detail = if (KidsGuard.locked(app)) "current · locked" else "current"
+            who.detail = whoDetail()
             sleepRow.detail = Sleep.summary() + "  ►"
             screen.tag = Profiles.current(app)?.name ?: ""
             val rows = mutableListOf<Row>()
@@ -348,8 +349,9 @@ object Home {
         val day = java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.UK)
         fun build(): List<Row> {
             val list = History.watched(app)
-            if (list.isEmpty()) return listOf(Row("Empty."))
-            return list.map { f ->
+            val stats = Row("Your stats", "►", opens = { statsScreen(app) })
+            if (list.isEmpty()) return listOf(stats, Row("Empty."))
+            return listOf(stats) + list.map { f ->
                 val detail = listOf(f.label.substringBefore(' ').takeIf { it.startsWith("S") } ?: f.label, if (f.time > 0) day.format(java.util.Date(f.time)) else "")
                     .filter { it.isNotBlank() }.joinToString("   ")
                 Row(f.name, detail, opens = { watchedEntry(app, f) })
@@ -361,6 +363,22 @@ object Home {
             History.pull(app) { screen.rows = build(); app.refresh(screen) }
         }
         return screen
+    }
+
+    /** Watched › Your stats: time and counts from the account (all devices), and your most-watched. */
+    private fun statsScreen(app: MainActivity): Screen {
+        lateinit var s: Screen
+        fun open(t: WatchStats.Top) = Details.screenFor(app, t.id, t.type, t.name, "") ?: Screen(t.name, listOf(Row("Your add-ons are still loading. Try again in a moment.")))
+        fun build(): List<Row> {
+            val st = WatchStats.compute(History.infos(app))
+            val rows = st.lines.map { Row(info(it.first, it.second)) }.toMutableList()
+            if (st.shows.isNotEmpty()) { rows += Row("── Most-watched shows ──"); st.shows.forEach { t -> rows += Row(t.name, t.detail + "  ►", opens = { open(t) }) } }
+            if (st.films.isNotEmpty()) { rows += Row("── Films watched again ──"); st.films.forEach { t -> rows += Row(t.name, t.detail + "  ►", opens = { open(t) }) } }
+            return rows
+        }
+        s = Screen("Your stats", build())
+        s.onShow = { s.rows = build(); app.refresh(s) }
+        return s
     }
 
     private fun shortName(name: String) = name.substringBefore('|').trim().take(18)

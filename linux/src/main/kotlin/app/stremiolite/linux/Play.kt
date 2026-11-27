@@ -374,6 +374,11 @@ object Player {
     }
 
     fun play(url: String, title: String, sub: Sub?, startAt: Long, video: String = "", done: (Result) -> Unit) {
+        // A locked profile at bedtime, or with today's time used up: only with the parent PIN.
+        if (KidsGuard.blockedNow() != null) {
+            KidsGuard.checkTime { play(url, title, sub, startAt, video, done) }
+            return
+        }
         // Play on a TV instead (Settings): the TV plays the link itself.
         if (Prefs.castDlna && url.startsWith("http") && !url.contains("127.0.0.1")) { App.push(Cast.screen(url, title)); done(Result(0, 0, false, "cast")); return }
         val cmd = Prefs.player
@@ -413,6 +418,10 @@ object Player {
         current = proc
         this.title = title
         Sleep.started(startAt, launched)
+        // Bedtime or the end of today's time: the player is closed then.
+        KidsGuard.leftNow()?.let { left ->
+            App.later(left + 1_000) { if (current === proc && proc.isAlive) { App.toast(KidsGuard.blockedNow() ?: "Time's up for today"); proc.destroy() } }
+        }
         val posMs = java.util.concurrent.atomic.AtomicLong(0)
         val durMs = java.util.concurrent.atomic.AtomicLong(0)
         if (isMpv) {
@@ -481,6 +490,7 @@ object Player {
                 else -> "it closed straight away"
             }
             if (current === proc) current = null
+            KidsGuard.addTime(ran)
             val slept = Sleep.stoppedSince(launched)
             // Players other than mpv don't report a position: use the time it ran.
             val pos = if (slept && p <= 0) Sleep.reached() else p

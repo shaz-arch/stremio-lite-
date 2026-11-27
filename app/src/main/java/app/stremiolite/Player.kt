@@ -52,6 +52,11 @@ object Player {
             activity.toast("Not allowed on this profile (" + (AgeRatings.of(watch.id)?.ifBlank { null } ?: "not rated yet") + ")")
             return
         }
+        // A locked profile at bedtime, or with today's time used up: only with the parent PIN.
+        if (KidsGuard.blockedNow(activity) != null) {
+            KidsGuard.checkTime(activity) { play(activity, url, title, subs, force, watch, startAt) }
+            return
+        }
         // A YouTube video: VLC can't play those reliably, so a YouTube app does.
         YouTube.idOf(url)?.let { id -> openYouTube(activity, id, title); return }
         // Skip intros: an episode played from the start begins after an opening recap or intro.
@@ -105,6 +110,7 @@ object Player {
                 activity.startActivityForResult(intent, REQUEST_PLAY)
                 activity.playerOpen = true
                 Sleep.started(startAt)
+                KidsGuard.arm(activity)
                 return
             } catch (e: ActivityNotFoundException) {
                 // try the next way
@@ -117,6 +123,7 @@ object Player {
             activity.startActivityForResult(Intent.createChooser(viewIntent(), "Play with"), REQUEST_PLAY)
             activity.playerOpen = true
             Sleep.started(startAt)
+            KidsGuard.arm(activity)
         } catch (e: ActivityNotFoundException) {
             activity.toast("No video player found. Install VLC from the Appstore.")
         }

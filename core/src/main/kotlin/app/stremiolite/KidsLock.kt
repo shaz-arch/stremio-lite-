@@ -12,18 +12,32 @@ import java.security.SecureRandom
  * A forgotten PIN is cleared by signing in with the locked profile's own Stremio password.
  */
 object KidsLock {
-    /** [maxAge]: the oldest age rating a locked profile may see and play (0 = no limit). */
-    class State(val salt: String, val hash: String, val locked: Set<String>, val hideExtras: Boolean, val maxAge: Int = 0) {
+    /**
+     * [maxAge]: the oldest age rating a locked profile may see and play (0 = no limit).
+     * [bedtime]/[wake]: minutes past midnight between which nothing plays (bedtime -1 = off).
+     * [dailyMins]: how long a locked profile may watch each day (0 = no limit).
+     */
+    class State(
+        val salt: String, val hash: String, val locked: Set<String>, val hideExtras: Boolean, val maxAge: Int = 0,
+        val bedtime: Int = -1, val wake: Int = 7 * 60, val dailyMins: Int = 0,
+    ) {
         val hasPin get() = hash.isNotEmpty()
         fun isLocked(profileId: String?) = hasPin && profileId != null && profileId in locked
         fun matches(pin: String) = hasPin && hashOf(pin, salt) == hash
-        fun lock(id: String) = State(salt, hash, locked + id, hideExtras, maxAge)
-        fun unlock(id: String) = State(salt, hash, locked - id, hideExtras, maxAge)
-        fun withHide(on: Boolean) = State(salt, hash, locked, on, maxAge)
-        fun withAge(age: Int) = State(salt, hash, locked, hideExtras, age)
-        fun withPin(pin: String): State { val s = newSalt(); return State(s, hashOf(pin, s), locked, hideExtras, maxAge) }
+        private fun copy(salt: String = this.salt, hash: String = this.hash, locked: Set<String> = this.locked, hide: Boolean = hideExtras,
+                         maxAge: Int = this.maxAge, bedtime: Int = this.bedtime, wake: Int = this.wake, dailyMins: Int = this.dailyMins) =
+            State(salt, hash, locked, hide, maxAge, bedtime, wake, dailyMins)
+        fun lock(id: String) = copy(locked = locked + id)
+        fun unlock(id: String) = copy(locked = locked - id)
+        fun withHide(on: Boolean) = copy(hide = on)
+        fun withAge(age: Int) = copy(maxAge = age)
+        fun withBedtime(at: Int) = copy(bedtime = at)
+        fun withWake(at: Int) = copy(wake = at)
+        fun withDaily(mins: Int) = copy(dailyMins = mins)
+        fun withPin(pin: String): State { val s = newSalt(); return copy(salt = s, hash = hashOf(pin, s)) }
         fun json(): String = JSONObject().put("salt", salt).put("hash", hash)
-            .put("locked", JSONArray(locked.toList())).put("hide", hideExtras).put("maxAge", maxAge).toString()
+            .put("locked", JSONArray(locked.toList())).put("hide", hideExtras).put("maxAge", maxAge)
+            .put("bedtime", bedtime).put("wake", wake).put("daily", dailyMins).toString()
 
         /** Whether [profileId] may see and play a title rated [rating] ("" or null: not known yet). */
         fun allows(profileId: String?, rating: String?): Boolean {
@@ -38,7 +52,8 @@ object KidsLock {
     fun read(raw: String?): State {
         val o = raw?.let { runCatching { JSONObject(it) }.getOrNull() } ?: return NONE
         val ids = o.optJSONArray("locked")?.let { a -> (0 until a.length()).map { a.optString(it) }.filter { it.isNotEmpty() }.toSet() } ?: emptySet()
-        return State(o.optString("salt"), o.optString("hash"), ids, o.optBoolean("hide", true), o.optInt("maxAge", 0))
+        return State(o.optString("salt"), o.optString("hash"), ids, o.optBoolean("hide", true), o.optInt("maxAge", 0),
+            o.optInt("bedtime", -1), o.optInt("wake", 7 * 60), o.optInt("daily", 0))
     }
 
     /** The age-limit choices, in order (0 = off). */

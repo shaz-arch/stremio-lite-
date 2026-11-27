@@ -127,6 +127,8 @@ class MainActivity : Activity() {
         if (requestCode != Player.REQUEST_PLAY) return
         playerOpen = false
         val (watch, launched) = History.takePending(this)
+        KidsGuard.disarm()
+        if (launched > 0) KidsGuard.addTime(this, System.currentTimeMillis() - launched)
         val extras = data?.extras
         fun num(vararg keys: String): Long? = keys.firstNotNullOfOrNull { k -> (extras?.get(k) as? Number)?.toLong() }
         // Closed by the sleep timer: the player may not say where it got to, so use the time it ran.

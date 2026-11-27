@@ -28,6 +28,47 @@ object KidsGuard {
     /** Search, Live TV and News are hidden right now. */
     fun hides(c: Context) = state(c).let { it.isLocked(Profiles.current(c)?.id) && it.hideExtras }
 
+    // ---- bedtime and the daily limit ([KidsTime]) -------------------------------------------------
+
+    private fun timeKey(c: Context) = "time_" + (Profiles.current(c)?.id ?: "")
+    private fun timeRaw(c: Context) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(timeKey(c), null)
+    private fun putTime(c: Context, v: String) { c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(timeKey(c), v).apply() }
+
+    fun blockedNow(c: Context) = KidsTime.blocked(state(c), Profiles.current(c)?.id, timeRaw(c))
+    fun timeSummary(c: Context) = KidsTime.summary(state(c), Profiles.current(c)?.id, timeRaw(c))
+    fun addTime(c: Context, ms: Long) { if (locked(c)) putTime(c, KidsTime.add(timeRaw(c), ms)) }
+
+    /** Plays [then] now, or (at bedtime, or the day's time used up) after the parent PIN, which allows the rest of today. */
+    fun checkTime(app: MainActivity, then: () -> Unit) {
+        val why = blockedNow(app) ?: return then()
+        app.toast(why)
+        askPin(app, "$why. Parent PIN to allow today") { putTime(app, KidsTime.withOverride(timeRaw(app))); then() }
+    }
+
+    private var stopper: Runnable? = null
+
+    /** While the player is open: closes it when bedtime comes or the day's time runs out. */
+    fun arm(app: MainActivity) {
+        stopper?.let { Net.cancel(it) }; stopper = null
+        val left = KidsTime.leftMs(state(app), Profiles.current(app)?.id, timeRaw(app)) ?: return
+        val r = Runnable {
+            stopper = null
+            if (!app.playerOpen) return@Runnable
+            app.toast(blockedNow(app) ?: "Time's up for today")
+            runCatching { app.finishActivity(Player.REQUEST_PLAY) }
+            Net.later(3_000, Runnable {
+                if (app.playerOpen) runCatching {
+                    app.startActivity(android.content.Intent(app, MainActivity::class.java)
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                }
+            })
+        }
+        stopper = r
+        Net.later(left + 1_000, r)
+    }
+
+    fun disarm() { stopper?.let { Net.cancel(it) }; stopper = null }
+
     /** Runs [then] straight away, or after the parent PIN if this profile is locked. */
     fun guard(app: MainActivity, then: () -> Unit) {
         if (!locked(app)) then() else askPin(app, "Parent PIN", then)
@@ -133,6 +174,23 @@ object KidsGuard {
                         val now = state(app).maxAge
                         val next = KidsLock.AGES[(KidsLock.AGES.indexOf(now).coerceAtLeast(0) + 1) % KidsLock.AGES.size]
                         save(app, state(app).withAge(next)); app.toast("Age limit: " + KidsLock.ageLabel(next)); screen.rows = build(); app.refresh(screen)
+                    }
+                })
+                rows += Row("Bedtime in locked profiles", KidsTime.bedtimeLabel(s) + "  ►", action = {
+                    askPin(app, "Parent PIN") {
+                        val next = KidsTime.next(KidsTime.BEDTIMES, state(app).bedtime)
+                        save(app, state(app).withBedtime(next)); app.toast("Bedtime: " + KidsTime.bedtimeLabel(state(app))); screen.rows = build(); app.refresh(screen)
+                    }
+                })
+                if (s.bedtime >= 0) rows += Row("Allowed again from", KidsTime.clock(s.wake) + "  ►", action = {
+                    askPin(app, "Parent PIN") {
+                        save(app, state(app).withWake(KidsTime.next(KidsTime.WAKES, state(app).wake))); screen.rows = build(); app.refresh(screen)
+                    }
+                })
+                rows += Row("Daily watch limit in locked profiles", KidsTime.dailyLabel(s.dailyMins) + "  ►", action = {
+                    askPin(app, "Parent PIN") {
+                        val next = KidsTime.next(KidsTime.DAILY, state(app).dailyMins)
+                        save(app, state(app).withDaily(next)); app.toast("Daily limit: " + KidsTime.dailyLabel(next)); screen.rows = build(); app.refresh(screen)
                     }
                 })
                 rows += Row("Change the parent PIN", action = {

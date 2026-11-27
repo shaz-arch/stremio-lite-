@@ -835,11 +835,11 @@ object KeyDropUi {
     private fun receive(): Screen {
         val status = Row("Starting…")
         val s = Screen("Receive keys", listOf(status, Row("On the other device (signed in to this account): Settings › Your keys › Send my keys to another device.")))
-        val ip = LocalFiles.lanAddress()
+        val ip = app.stremiolite.LocalFiles.lanAddress()
         if (Account.authKey == null) { status.label = "Sign in first."; return s }
         if (ip == null) { status.label = "Not on a network: connect to the same Wi-Fi as the other device."; return s }
         receiver?.stop()
-        val r = K.Receiver { o ->
+        val r = app.stremiolite.KeyDrop.Receiver { o: org.json.JSONObject ->
             App.post {
                 if (o.optString("tmdb").isNotBlank()) { Prefs.tmdbKey = o.optString("tmdb"); o.optString("region").takeIf { it.isNotBlank() }?.let { Prefs.watchRegion = it } }
                 app.stremiolite.StreamSetup.parseKeys(o.optString("debrid")).takeIf { it.isNotEmpty() }?.let { Prefs.debridKeys = it }
@@ -850,7 +850,7 @@ object KeyDropUi {
             }
         }.also { receiver = it }
         val port = r.start()
-        Lib.put(K.record(Lib.raw(K.ID)?.toString(), K.Offer("http://$ip:$port/k", r.token, "computer", System.currentTimeMillis())))
+        Lib.put(K.record(Lib.raw(K.ID)?.toString(), app.stremiolite.KeyDrop.Offer("http://$ip:$port/k", r.token, "computer", System.currentTimeMillis())))
         status.label = "Waiting for 5 minutes for your keys…"
         return s
     }

@@ -453,6 +453,7 @@ object Details {
     }
 
     private fun episodes(app: MainActivity, f: Full, seasonName: String, eps: List<Video>): Screen {
+        val rc = Settings.ratingsConfig(app)
         fun build() = eps.map { v ->
             val num = "E" + v.episode.toString().padStart(2, '0')
             val title = v.title.ifEmpty { "Episode ${v.episode}" }
@@ -462,7 +463,7 @@ object Details {
                 else -> v.released
             }
             Row(
-                "$num  $title", listOf(mark(app, v), date).filter { it.isNotEmpty() }.joinToString("   "),
+                "$num  $title", listOf(mark(app, v), date, Ratings.episodeShort(v.id, rc)).filter { it.isNotEmpty() }.joinToString("   "),
                 opens = { episode(app, f, seasonName, v) },
                 play = {
                     app.push(Streams.playBest(app, f.type, v.id, "${f.name} ${epLabel(v)}", f.runtime, watchFor(f, v), History.resumeAt(app, v.id)))
@@ -475,6 +476,11 @@ object Details {
         screen.onShow = {
             screen.rows = build()
             app.refresh(screen)
+        }
+        // Episode scores (TMDB), the whole season in one go.
+        val tmdb = Settings.tmdbKey(app); val season = eps.firstOrNull()?.season ?: 0
+        if (tmdb.isNotBlank() && f.id.startsWith("tt") && !Ratings.triedSeason(f.id, season)) Net.async({ Ratings.season(tmdb, f.id, season) }) { r ->
+            if (r.getOrNull() == true) { screen.rows = build(); if (app.isTop(screen)) app.refresh(screen) }
         }
         return screen
     }

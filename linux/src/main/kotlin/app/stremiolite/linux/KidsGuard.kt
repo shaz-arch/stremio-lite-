@@ -20,6 +20,27 @@ object KidsGuard {
     fun allows(id: String) = state().allows(Profiles.current()?.id, app.stremiolite.AgeRatings.of(id.substringBefore(':')))
     fun hides() = state().let { it.isLocked(Profiles.current()?.id) && it.hideExtras }
 
+    // ---- bedtime and the daily limit ([app.stremiolite.KidsTime]) --------------------------------
+
+    private val T = app.stremiolite.KidsTime
+    private fun timeFile() = File(Store.root, "kidstime.json")
+    private fun timeRaw(): String? = runCatching { org.json.JSONObject(timeFile().readText()).optString(Profiles.current()?.id ?: "").ifEmpty { null } }.getOrNull()
+    private fun putTime(v: String) {
+        val o = runCatching { org.json.JSONObject(timeFile().readText()) }.getOrNull() ?: org.json.JSONObject()
+        timeFile().writeText(o.put(Profiles.current()?.id ?: "", v).toString())
+    }
+
+    fun blockedNow() = T.blocked(state(), Profiles.current()?.id, timeRaw())
+    fun timeSummary() = T.summary(state(), Profiles.current()?.id, timeRaw())
+    fun leftNow() = T.leftMs(state(), Profiles.current()?.id, timeRaw())
+    fun addTime(ms: Long) { if (locked()) putTime(T.add(timeRaw(), ms)) }
+
+    /** Runs [then] now, or (bedtime, or the day's time used up) after the parent PIN, which allows the rest of today. */
+    fun checkTime(then: () -> Unit) {
+        val why = blockedNow() ?: return then()
+        askPin("$why. Parent PIN to allow today") { putTime(T.withOverride(timeRaw())); then() }
+    }
+
     /** Runs [then] straight away, or after the parent PIN if this profile is locked. */
     fun guard(then: () -> Unit) { if (!locked()) then() else askPin("Parent PIN (or type forgot)", then) }
 
@@ -90,6 +111,15 @@ object KidsGuard {
                         val next = K.AGES[(K.AGES.indexOf(state().maxAge).coerceAtLeast(0) + 1) % K.AGES.size]
                         save(state().withAge(next)); App.toast("Age limit: " + K.ageLabel(next)); build()
                     }
+                })
+                rows += Row("Bedtime in locked profiles", T.bedtimeLabel(s) + "  ►", action = {
+                    askPin("Parent PIN") { save(state().withBedtime(T.next(T.BEDTIMES, state().bedtime))); App.toast("Bedtime: " + T.bedtimeLabel(state())); build() }
+                })
+                if (s.bedtime >= 0) rows += Row("Allowed again from", T.clock(s.wake) + "  ►", action = {
+                    askPin("Parent PIN") { save(state().withWake(T.next(T.WAKES, state().wake))); build() }
+                })
+                rows += Row("Daily watch limit in locked profiles", T.dailyLabel(s.dailyMins) + "  ►", action = {
+                    askPin("Parent PIN") { val n = T.next(T.DAILY, state().dailyMins); save(state().withDaily(n)); App.toast("Daily limit: " + T.dailyLabel(n)); build() }
                 })
                 rows += Row("Change the parent PIN", action = {
                     askPin("Current PIN") { askNewPin { pin -> save(state().withPin(pin)); App.toast("PIN changed") } }

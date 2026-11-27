@@ -131,6 +131,31 @@ object Ratings {
         return s
     }
 
+    private val seasons = ConcurrentHashMap<String, Long>()
+
+    /** A season's episode list has been asked for lately ("tt…:2"). */
+    fun triedSeason(show: String, season: Int) = seasons["$show:$season"]?.let { System.currentTimeMillis() - it < KEEP_MS } == true
+
+    /** TMDB's scores for a whole season in one call (blocking); fills [knownEpisode] for each. */
+    fun season(tmdbKey: String, show: String, season: Int): Boolean {
+        if (tmdbKey.isBlank() || !show.startsWith("tt")) return false
+        seasons["$show:$season"] = System.currentTimeMillis()
+        val tv = tvIds[show] ?: JSONObject(Http.get("https://api.themoviedb.org/3/find/$show?external_source=imdb_id&api_key=${enc(tmdbKey)}", timeoutMs = 10_000))
+            .optJSONArray("tv_results")?.optJSONObject(0)?.optInt("id")?.takeIf { it > 0 }?.also { tvIds[show] = it } ?: return false
+        val eps = JSONObject(Http.get("https://api.themoviedb.org/3/tv/$tv/season/$season?api_key=${enc(tmdbKey)}", timeoutMs = 12_000)).optJSONArray("episodes") ?: return false
+        val now = System.currentTimeMillis()
+        for (i in 0 until eps.length()) {
+            val e = eps.optJSONObject(i) ?: continue
+            val v = e.optDouble("vote_average"); val n = e.optLong("vote_count")
+            episodes["$show:$season:${e.optInt("episode_number")}"] = now to (if (v.isNaN() || v <= 0 || n <= 0) null else Score(v, n))
+        }
+        return true
+    }
+
+    /** "★8.9" for an episode list (nothing if not known). */
+    fun episodeShort(videoId: String, c: Config): String =
+        knownEpisode(videoId)?.let { s -> "★" + if (c.percent) "${Math.round(s.value * 10)}%" else one(Math.round(s.value * 10) / 10.0) }.orEmpty()
+
     fun episodeLine(s: Score, c: Config): String =
         "TMDB " + (if (c.percent) "${Math.round(s.value * 10)}%" else one(Math.round(s.value * 10) / 10.0)) + if (c.votes) " (${votes(s.votes)} votes)" else ""
 }
