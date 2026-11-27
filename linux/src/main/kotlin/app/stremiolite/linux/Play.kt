@@ -387,7 +387,18 @@ object Player {
             if (sub != null) args += "--sub-file=${sub.url}"
         }
         args += Prefs.playerArgs.split(' ').filter { it.isNotBlank() }
-        args += url
+        // mpv takes special headers itself, for every format (DASH too): give it the real link.
+        val direct = if (isMpv) app.stremiolite.HeaderBridge.lookup(url) else null
+        if (direct != null) {
+            direct.second.forEach { (k, v) ->
+                when {
+                    k.equals("User-Agent", true) -> args += "--user-agent=$v"
+                    k.equals("Referer", true) -> args += "--referrer=$v"
+                    else -> args += "--http-header-fields-append=$k: $v"
+                }
+            }
+            args += direct.first
+        } else args += url
         val launched = System.currentTimeMillis()
         val proc = try {
             ProcessBuilder(args).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start()

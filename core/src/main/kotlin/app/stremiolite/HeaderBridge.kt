@@ -45,6 +45,14 @@ object HeaderBridge {
         return "http://127.0.0.1:${start()}/h/$token/$name"
     }
 
+    /** The real link and its headers behind one of our links, or null (for players that take headers themselves). */
+    fun lookup(wrapped: String): Pair<String, Map<String, String>>? {
+        if (!wrapped.startsWith("http://127.0.0.1:") || "/h/" !in wrapped) return null
+        val token = wrapped.substringAfter("/h/").substringBefore('/')
+        if (wrapped.substringAfter("/h/$token/").startsWith("u/")) return null
+        return synchronized(links) { links[token] }?.let { it.url to it.headers }
+    }
+
     fun headersOf(proxyHeaders: org.json.JSONObject?): Map<String, String> {
         val req = proxyHeaders?.optJSONObject("request") ?: return emptyMap()
         return req.keys().asSequence().associateWith { req.optString(it) }.filterValues { it.isNotEmpty() }
