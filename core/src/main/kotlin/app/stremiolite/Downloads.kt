@@ -71,9 +71,23 @@ object Downloads {
         return within.sortedWith(compareBy<Stream>({ -it.rank }, { if (it.sizeMb > 0) it.sizeMb else Double.MAX_VALUE }, { it.order }))
     }
 
+    /** Anything smaller than this once downloaded is an error clip ("file unavailable"), not the film. */
+    const val MIN_BYTES = 40L * 1024 * 1024
+
+    /** What "⇩ Download" offers: every candidate, the best fit checked to really be a video, and the ones found broken. */
+    class Choice(val found: List<Stream>, val best: Stream?, val broken: Set<Stream>)
+
+    fun choose(addons: List<Addon>, type: String, id: String, minutes: Double, cap: Int): Choice {
+        val found = candidates(StreamParse.fetchAll(addons, type, id), minutes, 4)
+        val broken = mutableSetOf<Stream>()
+        var best: Stream? = null
+        for (s in candidates(found, minutes, cap).take(6)) { if (StreamCheck.broken(s.url)) broken += s else { best = s; break } }
+        return Choice(found, best, broken)
+    }
+
     /** The stream a download takes, checked to really be a video (blocking). */
     fun pick(addons: List<Addon>, type: String, id: String, minutes: Double, cap: Int): Stream? {
-        for (s in candidates(StreamParse.fetchAll(addons, type, id), minutes, cap).take(4)) if (!StreamCheck.broken(s.url)) return s
+        for (s in candidates(StreamParse.fetchAll(addons, type, id), minutes, cap).take(6)) if (!StreamCheck.broken(s.url)) return s
         return null
     }
 

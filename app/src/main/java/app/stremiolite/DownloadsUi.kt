@@ -101,7 +101,12 @@ object Offline {
             val reason = cur.getInt(col(DownloadManager.COLUMN_REASON))
             cur.close()
             when (st) {
-                DownloadManager.STATUS_SUCCESSFUL -> { it.status = Downloads.DONE; it.why = ""; server?.rescan() }
+                DownloadManager.STATUS_SUCCESSFUL -> {
+                    if (File(it.file).length() in 1 until Downloads.MIN_BYTES) {
+                        // An error clip ("file unavailable"), not the film: don't keep it.
+                        File(it.file).delete(); it.status = Downloads.FAILED; it.why = "no playable video in that copy"
+                    } else { it.status = Downloads.DONE; it.why = ""; server?.rescan() }
+                }
                 DownloadManager.STATUS_FAILED -> { it.status = Downloads.FAILED; it.why = if (reason in 400..599) "the link stopped working" else "failed" }
                 DownloadManager.STATUS_PAUSED -> { it.status = Downloads.RUNNING; it.why = when (reason) {
                     DownloadManager.PAUSED_QUEUED_FOR_WIFI -> "waiting for Wi-Fi"
@@ -209,17 +214,25 @@ object Offline {
             if (!started) {
                 started = true
                 val addons = Home.allAddons()
-                Net.async({ Downloads.candidates(StreamParse.fetchAll(addons, w.type, w.videoId), minutes, 4) }) { r ->
-                    val found = r.getOrDefault(emptyList())
-                    val cap = cap(app)
+                val cap = cap(app)
+                Net.async({ Downloads.choose(addons, w.type, w.videoId, minutes, cap) }) { r ->
+                    val c = r.getOrNull()
                     val rows = mutableListOf<Row>()
-                    if (found.isEmpty()) rows += Row("No stream here can be downloaded.")
+                    if (c == null || c.found.isEmpty()) rows += Row("No stream here can be downloaded.")
                     else {
-                        Downloads.candidates(found, minutes, cap).firstOrNull()?.let { best ->
-                            rows += Row("Download the best fit", best.quality + (if (best.size.isNotEmpty()) " · " + best.size else "") + "  ►", action = { start(app, w, title, best); app.back() })
-                        }
+                        val best = c.best
+                        rows += if (best != null) Row("Download the best fit", best.quality + (if (best.size.isNotEmpty()) " · " + best.size else "") + "  ►", action = { start(app, w, title, best); app.back() })
+                        else Row("No good copy checked out: choose one below")
                         rows += Row("──── Or choose a copy (smallest first) ────")
-                        found.forEach { st -> rows += Row(st.summary, st.addon, action = { start(app, w, title, st); app.back() }) }
+                        c.found.forEach { st ->
+                            rows += Row(st.summary, (if (st in c.broken) "✗ no video · " else "") + st.addon, action = {
+                                app.toast("Checking the stream…")
+                                Net.async({ StreamCheck.broken(st.url) }) { b ->
+                                    if (b.getOrDefault(false)) app.toast("That copy has no playable video. Pick another.")
+                                    else { start(app, w, title, st); if (app.isTop(s)) app.back() }
+                                }
+                            })
+                        }
                     }
                     s.rows = rows
                     if (app.isTop(s)) app.refresh(s)
