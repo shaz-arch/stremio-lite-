@@ -140,7 +140,6 @@ object Health {
     const val FAILSAFE_ON = "fail-safe|"
     fun usingFailsafe(problem: String) = problem.startsWith(FAILSAFE_ON)
     fun problemText(problem: String) = problem.removePrefix(FAILSAFE_ON)
-    }
 
     /** Add-ons whose job is giving streams (AIOStreams, Torrentio, Comet…), as opposed to ones that only link out. */
     fun isStreamProvider(a: Addon): Boolean {
