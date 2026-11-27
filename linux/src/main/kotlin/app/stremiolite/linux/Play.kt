@@ -351,10 +351,16 @@ object Player {
         val errors = lines.filter { "][e][" in it || "][f][" in it }.map { it.substringAfter("][e][").substringAfter("][f][").substringAfter("] ").trim() }
         if (errors.isEmpty()) return null
         val all = errors.joinToString(" ").lowercase()
+        // yt-dlp's own complaint, when it ran but YouTube said no.
+        val ytErr = errors.lastOrNull { "ERROR:" in it }?.substringAfter("ERROR:")?.substringAfter("] ")?.trim()
+        val ytdl = "youtube-dl" in all || "yt-dlp" in all || "ytdl" in all
         return when {
+            ytdl && ("not found" in all || "no such file" in all || "not enough permissions" in all) && ytErr == null -> "mpv can't find yt-dlp: sudo pacman -S yt-dlp"
+            ytErr != null && ("sign in" in ytErr.lowercase() || "bot" in ytErr.lowercase()) -> "YouTube wants a sign-in check (see Settings › Player options)"
+            ytErr != null -> "YouTube: " + ytErr.take(90)
             "403" in all || "forbidden" in all -> "the server refused it (403): the link may have expired, try another copy"
             "404" in all || "not found" in all -> "the file wasn't there (404): try another copy"
-            "youtube-dl" in all || "yt-dlp" in all || "ytdl" in all -> "mpv needs yt-dlp for this: sudo pacman -S yt-dlp"
+            ytdl -> "yt-dlp couldn't get it: " + errors.last().take(80)
             "unrecognized file format" in all || "failed to recognize" in all -> "it isn't a video mpv can open"
             "certificate" in all || "tls" in all || "ssl" in all -> "a secure-connection error"
             "timed out" in all || "timeout" in all -> "the connection timed out"
