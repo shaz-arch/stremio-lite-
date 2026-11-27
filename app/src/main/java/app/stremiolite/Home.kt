@@ -71,6 +71,8 @@ object Home {
             // Also fetches your history, follows and waiting list from the account straight away.
             History.pull(app, full = true) { rebuildHome?.invoke() }
             if (!loading) load(app, screen)
+            // After a reload (e.g. streams set up again), check them straight away.
+            Net.later(6_000) { StreamAlert.maybe(app, force = true) { rebuildHome?.invoke() } }
         }
         fun appRows() = (if (Settings.onHome(app, "sleep")) listOf(sleepRow) else emptyList()) + listOf(
             // Setup items (add-ons, export/import, device check, about) live inside Settings.
@@ -117,6 +119,7 @@ object Home {
                 NewEpisodes.homeRow(app)?.let { rows.add(0, it); top++ }
                 Waiting.homeRow(app)?.let { rows.add(0, it); top++ }
             }
+            StreamAlert.homeRow(app)?.let { rows.add(0, it); top++ }
             Updates.available?.let { n ->
                 rows.add(0, Row("Update available: build $n. Press OK to install", "►", action = { Updates.install(app) }))
                 top++
@@ -163,6 +166,7 @@ object Home {
             if (addons != null) rebuild()
             History.pull(app) { rebuildHome?.invoke() }
             Updates.check { rebuildHome?.invoke() }
+            Net.later(3_000) { if (app.isTop(screen)) StreamAlert.maybe(app) { rebuildHome?.invoke() } }
             Waiting.checkSoon(app) { rebuildHome?.invoke() }
             // How fast streams reach this device, for Play best (a few seconds, every 6 hours at most).
             Net.later(8_000) { if (app.isTop(screen)) SpeedCheck.maybe(app) }

@@ -69,8 +69,8 @@ object Health {
             val fits = found.count { Best.score(it, 142.0) != null }
             when {
                 found.isEmpty() && !isStreamProvider(a) -> Outcome(true, "not a stream add-on (fine)")
-                found.isEmpty() -> Outcome(false, "no streams for the test film",
-                    "Check your debrid service is still active and its key is right (Settings › Your streams).")
+                found.isEmpty() -> Outcome(false, "no playable streams for the test film",
+                    runCatching { whyEmpty(a) }.getOrDefault("it didn't answer") + ". If your debrid service is active, set up your streams again (Settings › Your streams).")
                 fits == 0 -> Outcome(false, "${found.size} found, none this device plays well", "All 4K, cam or not ready yet.")
                 else -> Outcome(true, "${found.size} found, $ready ready, $fits fit this device")
             }
@@ -88,6 +88,48 @@ object Health {
         // Your other keys (debrid, MDBList, Gemini), each with its own service.
         list += keys
         return list
+    }
+
+    /** What a stream add-on actually sent for the test film when nothing playable came back, in a line. */
+    fun whyEmpty(a: Addon): String {
+        val arr = JSONObject(Http.get(a.base + "/stream/movie/$TEST_ID.json", timeoutMs = 20_000)).optJSONArray("streams")
+            ?: return "${StreamParse.shortName(a.name)} sent nothing back"
+        if (arr.length() == 0) return "${StreamParse.shortName(a.name)} sent an empty list"
+        var torrent = 0; var headers = 0; var noLink = 0
+        var said: String? = null
+        val trouble = Regex("(?i)error|invalid|fail|expired|unauthori|denied|decrypt|limit|key|config|password")
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            val link = o.optString("url")
+            when {
+                link.startsWith("http") && o.optJSONObject("behaviorHints")?.optJSONObject("proxyHeaders") != null -> headers++
+                link.startsWith("http") -> {}
+                o.has("infoHash") -> torrent++
+                else -> noLink++
+            }
+            val text = listOf("name", "title", "description").joinToString(" ") { o.optString(it) }.replace(Regex("\\s+"), " ").trim()
+            if (said == null && trouble.containsMatchIn(text)) said = text.take(140)
+        }
+        return listOfNotNull(
+            said?.let { "${StreamParse.shortName(a.name)} says: \"$it\"" },
+            if (torrent > 0) "$torrent torrent-only links (your debrid service isn't being used)" else null,
+            if (headers > 0) "$headers need special headers" else null,
+            if (noLink > 0 && said == null) "$noLink with no link" else null,
+        ).joinToString("; ").ifEmpty { "nothing this app can play" }
+    }
+
+    /**
+     * The quiet check before you sit down (blocking): null when streams work, or why not. Says nothing
+     * when the internet itself is down, and asks twice so one slow answer isn't an alarm.
+     */
+    fun streamProblem(addons: List<Addon>): String? {
+        val streamers = addons.filter { !it.isLocal && it.supports("stream", "movie", TEST_ID) && isStreamProvider(it) }
+        if (streamers.isEmpty()) return null
+        if (runCatching { Http.get("https://api.strem.io/", timeoutMs = 10_000, allowErrors = true) }.isFailure) return null
+        if (StreamParse.fetchAll(streamers, "movie", TEST_ID).isNotEmpty()) return null
+        Thread.sleep(5_000)
+        if (StreamParse.fetchAll(streamers, "movie", TEST_ID).isNotEmpty()) return null
+        return streamers.joinToString("; ") { a -> runCatching { whyEmpty(a) }.getOrDefault("${StreamParse.shortName(a.name)} didn't answer") }
     }
 
     /** Add-ons whose job is giving streams (AIOStreams, Torrentio, Comet…), as opposed to ones that only link out. */

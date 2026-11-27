@@ -116,9 +116,9 @@ object Waiting {
     fun following(c: Context) = NewEpisodes.followedNow(c)
 
     /** Episodes of [show] you've watched, from the account plus this device. */
-    fun watchedOf(c: Context, show: Full, infos: Map<String, LibraryItems.Info>): Set<String> {
+    fun watchedOf(c: Context, show: Full, infos: Map<String, LibraryItems.Info>): Set<String> = Pass.memo("watched:" + show.id) {
         val order = MetaParse.stremioOrder(show)
-        return (infos[show.id]?.let { Sync.decodeWatched(it.watchedField, order) } ?: emptySet()) +
+        (infos[show.id]?.let { Sync.decodeWatched(it.watchedField, order) } ?: emptySet()) +
             show.videos.filter { History.progress(c, it.id)?.done == true }.map { it.id }
     }
 
@@ -334,7 +334,7 @@ object Waiting {
     /** Shows that matter in Following: not the ended ones you've finished, nor ended favourites you never chose. */
     private fun shownShows(c: Context): List<Full> {
         val ids = following(c).map { it.first }.toSet()
-        val infos = History.infos(c).associateBy { it.id }
+        val infos = History.infosById(c)
         val chosen = Follow.chosen(c)
         return NewEpisodes.shows().filter { sh ->
             if (sh.id !in ids) return@filter false

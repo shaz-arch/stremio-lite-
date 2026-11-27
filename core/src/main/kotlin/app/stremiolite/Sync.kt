@@ -119,8 +119,19 @@ object Sync {
     // ---- watched episodes: "anchorVideoId:anchorLength:base64(zlib(bits))" -----------------
 
     /** The ids marked watched, given the show's episode ids in Stremio's order (season, episode, release). */
+    /** Decoding is the same answer for the same inputs, so recent ones are kept (never out of date). */
+    private val decoded = object : LinkedHashMap<String, Set<String>>(64, 0.75f, true) {
+        override fun removeEldestEntry(e: MutableMap.MutableEntry<String, Set<String>>?) = size > 300
+    }
+
     fun decodeWatched(field: String?, ids: List<String>): Set<String> {
         if (field.isNullOrBlank() || field == "null" || ids.isEmpty()) return emptySet()
+        val k = field + "|" + ids.size + "|" + ids.hashCode()
+        synchronized(decoded) { decoded[k]?.let { return it } }
+        return decodeNow(field, ids).also { r -> synchronized(decoded) { decoded[k] = r } }
+    }
+
+    private fun decodeNow(field: String, ids: List<String>): Set<String> {
         return runCatching {
             val last = field.lastIndexOf(':')
             val prev = field.lastIndexOf(':', last - 1)

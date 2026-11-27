@@ -223,8 +223,11 @@ object NewEpisodes {
      * watching or followed for every episode get each one that's news; shows followed for seasons,
      * only a new season. Not shows already lined up in Next watch.
      */
-    fun isNews(c: Context, alsoFollowed: Collection<String> = emptyList()): (Full, Video) -> Boolean {
-        val infos = History.infos(c).associateBy { it.id }
+    fun isNews(c: Context, alsoFollowed: Collection<String> = emptyList()): (Full, Video) -> Boolean =
+        if (alsoFollowed.isEmpty()) Pass.memo("isNews") { isNewsNow(c, alsoFollowed) } else isNewsNow(c, alsoFollowed)
+
+    private fun isNewsNow(c: Context, alsoFollowed: Collection<String>): (Full, Video) -> Boolean {
+        val infos = History.infosById(c)
         val cont = History.continueWatching(c).mapTo(HashSet()) { it.id }
         val followed = Waiting.following(c).mapTo(HashSet()) { it.first } + alsoFollowed
         val next = NextList.ids(c)

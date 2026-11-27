@@ -208,6 +208,12 @@ object Prefs {
         }
         syncOut()
     }
+    var streamProblem: String
+        get() = data().optString("streamProblem", "")
+        set(v) { data().put("streamProblem", v); save() }
+    var streamCheckAt: Long
+        get() = data().optLong("streamCheckAt", 0)
+        set(v) { data().put("streamCheckAt", v); save() }
     var sleepOnHome: Boolean
         get() = data().optBoolean("sleepOnHome", false)
         set(v) { data().put("sleepOnHome", v); save() }

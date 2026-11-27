@@ -194,6 +194,7 @@ object Home {
                 NewEpisodes.homeRow()?.let { rows += it }
             }
             Updates.homeRow()?.let { rows += it }
+            StreamAlert.homeRow()?.let { rows.add(0, it) }
             // A notice you've just opened has gone: back to Search, not the line that moved up.
             if (rows.size < notices) placed = false
             notices = rows.size
@@ -273,6 +274,7 @@ object Home {
             App.later(8_000) { if (App.isTop(s)) SpeedCheck.maybe() }
             Lib.pull { build() }
             Updates.check { build() }
+            App.later(3_000) { if (App.isTop(s)) StreamAlert.maybe { build() } }
             if (!NewEpisodes.fresh()) App.later(4_000) { if (addons != null) NewEpisodes.load { build() } }
             build()
         }
@@ -293,7 +295,7 @@ object Home {
                 addons = list
                 error = null
                 runCatching { Store.file("addons.json").writeText(json) }
-                if (force) Lib.pull(full = true) { rebuild?.invoke() }
+                if (force) { Lib.pull(full = true) { rebuild?.invoke() }; StreamAlert.maybe(force = true) { rebuild?.invoke() } }
             }.onFailure { e ->
                 error = if (e is Stremio.ApiError) e.message else Net.describe(e)
                 if (e is Stremio.ApiError && e.message?.contains("session", true) == true) {

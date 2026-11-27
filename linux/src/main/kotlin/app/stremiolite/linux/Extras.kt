@@ -701,3 +701,34 @@ object AppShare {
         return s
     }
 }
+
+/** Checks quietly that your streams still work, so a broken stream add-on shows on Home before you sit down. */
+object StreamAlert {
+    private var running = false
+
+    fun maybe(force: Boolean = false, changed: () -> Unit) {
+        val wait = if (Prefs.streamProblem.isEmpty()) 3 * 3_600_000L else 10 * 60_000L
+        if (running || (!force && System.currentTimeMillis() - Prefs.streamCheckAt < wait)) return
+        val addons = Home.all(); if (addons.isEmpty()) return
+        running = true
+        App.async({ app.stremiolite.Health.streamProblem(addons) }) { r ->
+            running = false
+            val was = Prefs.streamProblem
+            val now = r.getOrNull() ?: ""
+            Prefs.streamCheckAt = System.currentTimeMillis(); Prefs.streamProblem = now
+            if (now != was) changed()
+        }
+    }
+
+    fun homeRow(): Row? {
+        val p = Prefs.streamProblem.ifEmpty { return null }
+        return Row("⚠ Streams aren't working. Enter to see why", "►", opens = {
+            Screen("Streams aren't working", p.chunked(maxOf(40, App.columns() - 8)).map { Row(it) } + listOf(
+                Row(""),
+                Row("Check everything", "►", opens = { HealthScreen.screen() }),
+                Row("Set up your streams again", "►", opens = { StreamsSetup.screen() }),
+                Row("Check again now", action = { App.toast("Checking your streams…"); maybe(force = true) { Home.redraw(); App.toast(if (Prefs.streamProblem.isEmpty()) "Streams are working again" else "Still not working") } }),
+            ))
+        })
+    }
+}

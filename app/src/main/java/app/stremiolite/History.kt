@@ -400,6 +400,8 @@ object History {
     }
 
     /** Every title record on the account, read (for following: which shows you've started). */
+    fun infosById(c: Context): Map<String, LibraryItems.Info> = Pass.memo("infosById") { infos(c).associateBy { it.id } }
+
     fun infos(c: Context): List<LibraryItems.Info> = Pass.memo("infos") {
         ensure(c)
         remote.values.mapNotNull { runCatching { LibraryItems.read(JSONObject(it)) }.getOrNull() }.filter { it.type != "other" }
