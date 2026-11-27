@@ -445,9 +445,9 @@ object Look {
     private fun ownTheme(k: app.stremiolite.Rice.Colours) = Theme("Your own", c(k.bg), c(k.text), c(k.dim), c(k.title), c(k.bar), c(k.barText))
 
     /** kitty's own palette: its background (see-through if kitty is), text, color8, color3 and color4; the cursor line reversed. */
-    private val terminalTheme = com.googlecode.lanterna.TextColor.ANSI.let { a ->
-        Theme("Terminal colours", a.DEFAULT, a.DEFAULT, a.BLACK_BRIGHT, a.YELLOW, a.BLUE, a.DEFAULT, reverse = true)
-    }
+    private val terminalTheme = Theme("Terminal colours", com.googlecode.lanterna.TextColor.ANSI.DEFAULT, com.googlecode.lanterna.TextColor.ANSI.DEFAULT,
+        com.googlecode.lanterna.TextColor.ANSI.BLACK_BRIGHT, com.googlecode.lanterna.TextColor.ANSI.YELLOW, com.googlecode.lanterna.TextColor.ANSI.BLUE,
+        com.googlecode.lanterna.TextColor.ANSI.DEFAULT, reverse = true)
 
     // ---- the theme file (~/.config/stremonino/theme.conf) ----------------------------------------
 
