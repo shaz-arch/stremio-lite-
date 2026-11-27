@@ -345,6 +345,24 @@ object Player {
         return true
     }
 
+    /** What mpv's log says went wrong, in plain words where we know it, or its own last error line. */
+    private fun mpvSaid(log: File): String? {
+        val lines = runCatching { log.readLines() }.getOrNull() ?: return null
+        val errors = lines.filter { "][e][" in it || "][f][" in it }.map { it.substringAfter("][e][").substringAfter("][f][").substringAfter("] ").trim() }
+        if (errors.isEmpty()) return null
+        val all = errors.joinToString(" ").lowercase()
+        return when {
+            "403" in all || "forbidden" in all -> "the server refused it (403): the link may have expired, try another copy"
+            "404" in all || "not found" in all -> "the file wasn't there (404): try another copy"
+            "youtube-dl" in all || "yt-dlp" in all || "ytdl" in all -> "mpv needs yt-dlp for this: sudo pacman -S yt-dlp"
+            "unrecognized file format" in all || "failed to recognize" in all -> "it isn't a video mpv can open"
+            "certificate" in all || "tls" in all || "ssl" in all -> "a secure-connection error"
+            "timed out" in all || "timeout" in all -> "the connection timed out"
+            "vo" in all && "init" in all -> "mpv couldn't open a video window"
+            else -> "mpv said: " + errors.last().take(90)
+        }
+    }
+
     fun play(url: String, title: String, sub: Sub?, startAt: Long, video: String = "", done: (Result) -> Unit) {
         // Play on a TV instead (Settings): the TV plays the link itself.
         if (Prefs.castDlna && url.startsWith("http") && !url.contains("127.0.0.1")) { App.push(Cast.screen(url, title)); done(Result(0, 0, false, "cast")); return }
@@ -352,9 +370,12 @@ object Player {
         val isMpv = File(cmd).name.startsWith("mpv")
         val sock = File(System.getProperty("java.io.tmpdir"), "stremonino-mpv-${ProcessHandle.current().pid()}.sock")
         sock.delete()
+        // mpv's own log of this play, so a failure can say what actually went wrong.
+        val log = File(System.getProperty("java.io.tmpdir"), "stremonino-mpv-${ProcessHandle.current().pid()}.log")
+        log.delete()
         val args = mutableListOf(cmd)
         if (isMpv) {
-            args += listOf("--no-terminal", "--force-window=immediate", "--input-ipc-server=${sock.path}", "--force-media-title=$title", "--save-position-on-quit=no")
+            args += listOf("--no-terminal", "--force-window=immediate", "--input-ipc-server=${sock.path}", "--force-media-title=$title", "--save-position-on-quit=no", "--log-file=${log.path}")
             if (startAt > 0) args += "--start=${startAt / 1000}"
             if (sub != null) args += "--sub-file=${sub.url}"
         }
@@ -431,8 +452,10 @@ object Player {
             val p = posMs.get()
             val d = durMs.get()
             val failed = isMpv && ((d in 1..119_999) || (ran < 15_000 && p < 5_000))
+            val said = if (isMpv) mpvSaid(log) else null
             val why = when {
                 d in 1..119_999 -> "it was a short error clip"
+                said != null -> said
                 code != 0 && ran < 15_000 -> "the player stopped with an error"
                 else -> "it closed straight away"
             }
