@@ -86,6 +86,8 @@ object Streams {
         var hiddenHeaders = 0
         /** AIOStreams gave nothing playable, so the fail-safes were asked. */
         var usingFailsafe = false
+        /** Web pages rather than videos ("open in browser", ratings pages): shown as links, never played. */
+        val links = mutableListOf<Pair<String, String>>()
         val done: Boolean get() = answered >= addons.size
         private var timed = false
         private val type = type
@@ -102,7 +104,9 @@ object Streams {
                             val o = arr.optJSONObject(i) ?: continue
                             val hints = o.optJSONObject("behaviorHints")
                             val link = o.optString("url")
+                            val web = StreamParse.webLink(o, a)
                             when {
+                                web != null -> if (links.none { it.second == web.second }) links += web
                                 link.isBlank() || !link.startsWith("http") ->
                                     if (o.has("infoHash")) hiddenTorrent++
                                 else -> StreamParse.addUnique(found, StreamParse.parse(o, link, shortName(a.name), found.size))
@@ -218,6 +222,7 @@ object Streams {
             val star = sorted.firstOrNull { scores[it] != null && it !in broken }
             val rows = mutableListOf(summary, subRow)
             fetch.failsafeLine()?.let { rows += Row(it) }
+            fetch.links.forEach { (label, url) -> rows += LinkOut.row(app, "↗ $label", label, url) }
             fetch.hiddenLine()?.let { rows += Row(it) }
             fetch.notes.forEach { rows += Row(it) }
             rows += Row("────────────────────")

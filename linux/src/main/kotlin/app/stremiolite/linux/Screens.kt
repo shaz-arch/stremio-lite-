@@ -756,7 +756,10 @@ object Details {
         }
         rows += Row(info("Type", if (collection) "Collection" else if (f.type == "movie") "Movie" else if (f.type == "series") "Series" else f.type))
         if (f.year.isNotBlank()) rows += Row(info("Year", f.year))
-        if (f.rating.isNotBlank()) rows += Row(info("IMDb rating", "★ ${f.rating}"))
+        val scores = app.stremiolite.Ratings.known(f.id)
+        if (scores != null && scores.line.isNotEmpty()) rows += Row(info("Ratings", scores.line))
+        else if (f.rating.isNotBlank()) rows += Row(info("IMDb rating", "★ ${f.rating}"))
+        if (scores != null && scores.age.isNotEmpty()) rows += Row(info("Age rating", scores.age))
         if (f.runtime.isNotBlank()) rows += Row(info("Runtime", f.runtime))
         if (f.genres.isNotEmpty()) rows += Row(info("Genres", f.genres.joinToString(", ")))
         if (f.director.isNotEmpty()) rows += Row(info("Director", f.director.joinToString(", ")))
@@ -786,6 +789,14 @@ object Details {
         return listOf(head) + allowed.map { p ->
             Row(Marks.title(Catalogs.mark(p.id, p.type), p.name) + if (p.year.isNotEmpty()) " (${p.year})" else "", MetaParse.typeLabel(p.type) + "  ►",
                 opens = { screenFor(p.id, p.type, p.name) }, play = { BasketList.toggle(p.id, p.type, p.name, p.year) })
+        }
+    }
+
+    private fun lookUpRatings(f: Full, s: Screen) {
+        val key = Prefs.mdblistKey
+        if (key.isBlank() || !f.id.startsWith("tt") || app.stremiolite.Ratings.known(f.id) != null) return
+        App.async({ app.stremiolite.Ratings.load(key, f.type, f.id) }) { r ->
+            if (r.getOrNull() != null && App.inStack(s)) { s.rows = rows(f); if (App.isTop(s)) App.refresh() }
         }
     }
 
@@ -889,14 +900,14 @@ object Details {
             // Picks up where you got to on another device (resume point, watched marks).
             Lib.pull(force = System.currentTimeMillis() - Lib.lastPull > 15_000) { full?.let { f -> if (App.isTop(s)) { s.rows = rows(f); App.refresh() } } }
             val f = full
-            if (f != null) { s.rows = rows(f); App.refresh(); lookUpWatch(f, s); lookUpSimilar(f, s) }
+            if (f != null) { s.rows = rows(f); App.refresh(); lookUpWatch(f, s); lookUpSimilar(f, s); lookUpRatings(f, s) }
             else if (!started) {
                 started = true
                 App.async({ fetch(from, item.type, item.id) }) { r ->
                     r.onSuccess { loaded ->
                         full = loaded
                         s.rows = rows(loaded)
-                        lookUpWatch(loaded, s); lookUpSimilar(loaded, s)
+                        lookUpWatch(loaded, s); lookUpSimilar(loaded, s); lookUpRatings(loaded, s)
                         if (autoPlay && App.isTop(s)) {
                             val v = mainVideo(loaded)
                             val w = watchFor(loaded, v)

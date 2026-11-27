@@ -61,7 +61,7 @@ object Details {
                 // Back from the player or an episode: redraw so resume points and marks are current.
                 quick.rows = rows(app, f)
                 app.refresh(quick)
-                lookUpWatch(app, f, quick); lookUpSimilar(app, f, quick)
+                lookUpWatch(app, f, quick); lookUpSimilar(app, f, quick); lookUpRatings(app, f, quick)
             } else if (!started) {
                 started = true
                 Net.async({ fetch(from, item.type, item.id) }) { r ->
@@ -69,7 +69,7 @@ object Details {
                         full = loaded
                         if (loaded.videos.isNotEmpty()) History.applyAccountWatched(app, loaded.id, stremioOrder(loaded))
                         quick.rows = rows(app, loaded)
-                        lookUpWatch(app, loaded, quick); lookUpSimilar(app, loaded, quick)
+                        lookUpWatch(app, loaded, quick); lookUpSimilar(app, loaded, quick); lookUpRatings(app, loaded, quick)
                         val target = mainVideo(app, loaded)
                         if (autoPlay && target != null && app.isTop(quick)) {
                             app.refresh(quick)
@@ -344,7 +344,10 @@ object Details {
 
         rows += Row(info("Type", if (isShow) "Series" else if (collection) "Collection" else Catalogs.typeLabel(f.type).removeSuffix("s")))
         if (f.year.isNotBlank()) rows += Row(info("Year", f.year))
-        if (f.rating.isNotBlank()) rows += Row(info("IMDb rating", "★ ${f.rating}"))
+        val scores = Ratings.known(f.id)
+        if (scores != null && scores.line.isNotEmpty()) rows += Row(info("Ratings", scores.line))
+        else if (f.rating.isNotBlank()) rows += Row(info("IMDb rating", "★ ${f.rating}"))
+        if (scores != null && scores.age.isNotEmpty()) rows += Row(info("Age rating", scores.age))
         if (f.runtime.isNotBlank()) rows += Row(info("Runtime", f.runtime))
         if (f.genres.isNotEmpty()) rows += Row(info("Genres", f.genres.joinToString(", ")))
         if (f.director.isNotEmpty()) rows += Row(info("Director", f.director.take(3).joinToString(", ")))
@@ -410,6 +413,15 @@ object Details {
         if (w.link.isNotBlank()) rows += LinkOut.row(app, "All the options", "Where to watch: ${f.name}", w.link)
         rows += Row("Where-to-watch data from JustWatch, via TMDB.")
         return rows
+    }
+
+    /** Review scores and the age rating, from MDBList with your key (kept 12 hours). */
+    private fun lookUpRatings(app: MainActivity, f: Full, screen: Screen) {
+        val key = Settings.mdblistKey(app)
+        if (key.isBlank() || !f.id.startsWith("tt") || Ratings.known(f.id) != null) return
+        Net.async({ Ratings.load(key, f.type, f.id) }) { r ->
+            if (r.getOrNull() != null && app.isTop(screen)) { screen.rows = rows(app, f); app.refresh(screen) }
+        }
     }
 
     /** Looks up Where to watch once the details are in (a quick TMDB call; kept a day). */

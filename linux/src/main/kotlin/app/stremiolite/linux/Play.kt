@@ -30,6 +30,8 @@ object Play {
         var answered = 0
         var subsAnswered = 0
         var usingFailsafe = false
+        /** Web pages rather than videos ("open in browser", ratings pages): shown as links, never played. */
+        val links = mutableListOf<Pair<String, String>>()
         val started = System.currentTimeMillis()
         val done: Boolean get() = answered >= streamAddons.size
         val subsDone: Boolean get() = subsAnswered >= subAddons.size
@@ -46,6 +48,7 @@ object Play {
                         if (arr != null) for (i in 0 until arr.length()) {
                             val o = arr.optJSONObject(i) ?: continue
                             val link = o.optString("url")
+                            StreamParse.webLink(o, a)?.let { web -> if (links.none { it.second == web.second }) links += web; continue }
                             // A YouTube video by its id: mpv plays those itself (with yt-dlp).
                             val yt = o.optString("ytId").takeIf { link.isBlank() && it.isNotBlank() && "mpv" in Prefs.player }
                             val use = if (yt != null) "https://www.youtube.com/watch?v=$yt" else link
@@ -228,6 +231,7 @@ object Play {
             val sub = fetch.chosenSub()
             rows += Row(if (sub != null) "Subtitles: ${Languages.name(sub.lang)} · ${sub.addon}" else if (Prefs.language().codes.isEmpty()) "Subtitles: off" else if (fetch.subsDone) "Subtitles: none found in ${Prefs.language().name}" else "Subtitles: looking…")
             fetch.notes.forEach { rows += Row("  $it") }
+            fetch.links.forEach { (label, url) -> rows += Row("↗ $label", "opens browser  ►", action = { WebLink.open(url) }) }
             rows += Row("────────────────────")
             if (fetch.done && !checking) {
                 checking = true

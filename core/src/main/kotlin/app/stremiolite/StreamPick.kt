@@ -164,6 +164,22 @@ object StreamParse {
         else main to streamAddons.filter { it !in main }
     }
 
+    /**
+     * An entry that's a web page rather than a video (an add-on's "open in browser" link, or a page on
+     * its own site such as a ratings or details page): (label, link), or null for a real stream.
+     */
+    fun webLink(o: JSONObject, addon: Addon): Pair<String, String>? {
+        val label = listOf("name", "title", "description").map { o.optString(it).replace(Regex("\\s+"), " ").trim() }
+            .filter { it.isNotEmpty() }.joinToString(" · ").take(90).ifEmpty { shortName(addon.name) }
+        o.optString("externalUrl").takeIf { it.startsWith("http") && o.optString("url").isBlank() }?.let { return label to it }
+        val url = o.optString("url")
+        if (!url.startsWith("http")) return null
+        val path = url.substringBefore('?').lowercase()
+        val ownSite = runCatching { java.net.URL(url).host == java.net.URL(addon.transportUrl).host }.getOrDefault(false)
+        if (path.endsWith(".html") || path.endsWith(".htm") || (ownSite && (path.contains("/configure") || path.contains("/details")))) return label to url
+        return null
+    }
+
     /** Something here could play now (not waiting to be fetched by the debrid service). */
     fun hasPlayable(found: List<Stream>) = found.any { it.cached != false }
 
@@ -188,7 +204,7 @@ object StreamParse {
             for (i in 0 until arr.length()) {
                 val o = arr.optJSONObject(i) ?: continue
                 val link = o.optString("url")
-                if (link.startsWith("http")) addUnique(found, parse(o, link, shortName(a.name), found.size))
+                if (link.startsWith("http") && webLink(o, a) == null) addUnique(found, parse(o, link, shortName(a.name), found.size))
             }
         }
         return found
