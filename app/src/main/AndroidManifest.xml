@@ -19,6 +19,13 @@
     <queries>
         <package android:name="org.videolan.vlc" />
         <package android:name="com.brouken.player" />
+        <!-- YouTube apps, for YouTube videos (YouTubio). -->
+        <package android:name="com.teamsmart.videomanager.tv" />
+        <package android:name="org.smarttube.stable" />
+        <package android:name="com.liskovsoft.smarttubetv.beta" />
+        <package android:name="com.amazon.firetv.youtube" />
+        <package android:name="com.google.android.youtube.tv" />
+        <package android:name="com.google.android.youtube" />
     </queries>
 
     <application
