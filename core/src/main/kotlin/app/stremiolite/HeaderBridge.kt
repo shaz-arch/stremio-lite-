@@ -12,7 +12,7 @@ import java.net.URLDecoder
 /**
  * Streams that need special request headers (an add-on's behaviorHints.proxyHeaders): VLC and mpv
  * are given a link on this device only, which fetches the real one with those headers added. Live
- * (HLS) playlists are rewritten so every part goes the same way.
+ * (HLS) playlists and DASH manifests are rewritten so every part goes the same way.
  */
 object HeaderBridge {
     private class Link(val url: String, val headers: Map<String, String>)
@@ -77,9 +77,15 @@ object HeaderBridge {
         fun notFound() = out.write("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
         if (!path.startsWith("/h/")) return notFound()
         val parts = path.removePrefix("/h/").split('/')
+        val token = parts.getOrNull(0) ?: return notFound()
         val link = synchronized(links) { links[parts.getOrNull(0)] } ?: return notFound()
         // /h/<token>/u/<part, base64>/<name>: a part of a live playlist.
-        val target = if (parts.getOrNull(1) == "u") runCatching { unb64(URLDecoder.decode(parts.getOrNull(2) ?: "", "UTF-8")) }.getOrNull() ?: return notFound() else link.url
+        // /h/<token>/b/<folder, base64>/<rest>: anything under a DASH base folder (templates, nested folders).
+        val target = when (parts.getOrNull(1)) {
+            "u" -> runCatching { unb64(URLDecoder.decode(parts.getOrNull(2) ?: "", "UTF-8")) }.getOrNull() ?: return notFound()
+            "b" -> runCatching { unb64(URLDecoder.decode(parts.getOrNull(2) ?: "", "UTF-8")) }.getOrNull()?.let { it + parts.drop(3).joinToString("/") } ?: return notFound()
+            else -> link.url
+        }
         val range = lines.firstOrNull { it.startsWith("Range:", true) }?.substringAfter(':')?.trim()
         val up = URL(target).openConnection() as HttpURLConnection
         try {
@@ -92,6 +98,13 @@ object HeaderBridge {
             val code = up.responseCode
             val type = up.getHeaderField("Content-Type").orEmpty()
             val playlist = "mpegurl" in type.lowercase() || up.url.path.lowercase().endsWith(".m3u8")
+            val dash = "dash+xml" in type.lowercase() || up.url.path.lowercase().endsWith(".mpd")
+            if (dash && method != "HEAD" && code < 400) {
+                val text = up.inputStream.use { it.readBytes().toString(Charsets.UTF_8) }
+                val body = (runCatching { Dash.rewrite(text, up.url.toString()) { abs -> folder(token, abs) } }.getOrNull() ?: text).toByteArray(Charsets.UTF_8)
+                out.write(("HTTP/1.1 200 OK\r\nContent-Type: application/dash+xml\r\nContent-Length: ${body.size}\r\nConnection: close\r\n\r\n").toByteArray())
+                out.write(body); out.flush(); return
+            }
             if (playlist && method != "HEAD" && code < 400) {
                 val base = up.url
                 val token = parts[0]
@@ -118,6 +131,17 @@ object HeaderBridge {
             if (method != "HEAD") ((if (code >= 400) up.errorStream else up.inputStream) ?: return).use { copy(it, out) }
             out.flush()
         } finally { up.disconnect() }
+    }
+
+    /**
+     * A link through us for a DASH address that may hold a $template$: the part up to the last "/"
+     * before any "$" becomes a base64 folder, the rest stays as it is so the player can fill it in.
+     */
+    private fun folder(token: String, abs: String): String {
+        val cutAt = abs.indexOf('$').let { d -> if (d < 0) abs.lastIndexOf('/') else abs.lastIndexOf('/', d) }
+        if (cutAt < 0) return abs
+        val dir = abs.substring(0, cutAt + 1)
+        return "http://127.0.0.1:${start()}/h/$token/b/${b64(dir)}/" + abs.substring(cutAt + 1)
     }
 
     private fun copy(i: InputStream, o: OutputStream) {
