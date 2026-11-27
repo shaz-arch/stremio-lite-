@@ -64,7 +64,7 @@ object Waiting {
             .put("_mtime", Sync.iso(System.currentTimeMillis()))
     }
 
-    fun list(c: Context): List<Entry> = parse(History.rawRemote(c, ID))
+    fun list(c: Context): List<Entry> = Pass.memo("waiting") { parse(History.rawRemote(c, ID)) }
 
     /** The list without films that are done with ([WaitRules]); saved back if any left. */
     fun current(c: Context): List<Entry> {

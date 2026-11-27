@@ -619,6 +619,7 @@ object Settings {
                 Row("Checks", "►", opens = { Screen("Checks", listOf(
                     Row("Is everything working?", "check it all  ►", opens = { HealthScreen.screen(app) }),
                     Row("Device check", "►", opens = { DemoMenus.deviceCheck(app) }),
+                    Row("Timings", "►", opens = { Screen("Timings", Timings.lines().ifEmpty { listOf("Nothing timed yet" to "") }.map { (k, v) -> Row(info(k, v)) }) }),
                 )) }),
                 Row("About Stremonino", "►", opens = { DemoMenus.about() }),
             ),

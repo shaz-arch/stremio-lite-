@@ -22,6 +22,8 @@ import android.widget.Toast
  * OK opens a line (pushes a screen), Back pops one, Back on the first screen exits.
  */
 class MainActivity : Activity() {
+    companion object { @JvmStatic var startedAt = 0L }
+
 
     private val stack = mutableListOf<Screen>()
 
@@ -32,6 +34,7 @@ class MainActivity : Activity() {
     private lateinit var adapter: RowAdapter
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        if (startedAt == 0L) startedAt = System.currentTimeMillis()
         super.onCreate(savedInstanceState)
         Guide.dir = java.io.File(cacheDir, "guides")
         AgeRatings.dir = filesDir

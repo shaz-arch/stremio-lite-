@@ -83,6 +83,7 @@ object Streams {
         var hiddenTorrent = 0
         var hiddenHeaders = 0
         val done: Boolean get() = answered >= addons.size
+        private var timed = false
 
         init {
             addons.forEach { a ->
@@ -105,6 +106,7 @@ object Streams {
                     }.onFailure { e ->
                         notes += "${shortName(a.name)}: ${Net.describe(e)}"
                     }
+                    if (done && !timed) { timed = true; Timings.record("Finding streams", System.currentTimeMillis() - started) }
                     onChange()
                 }
             }

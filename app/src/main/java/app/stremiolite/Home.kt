@@ -88,7 +88,7 @@ object Home {
             (if (KidsGuard.hides(app)) emptyList() else if (Settings.newsOn(app)) news else emptyList()) +
             (if (KidsGuard.locked(app)) listOf(games) else emptyList()) + appRows()
 
-        fun rebuild() {
+        fun rebuildNow() {
             val list = addons
             addonsRow.detail = if (list != null) "${list.size}  ►" else ""
             who.label = whoText()
@@ -144,7 +144,14 @@ object Home {
             if (!placed) { placed = true; screen.moveTo = screen.rows.indexOf(search).takeIf { it >= 0 } ?: (screen.rows.indexOfFirst { it.label == "──── Watching ────" } + 1).takeIf { it in 1 until screen.rows.size } ?: 0 }
             app.refresh(screen)
         }
-        rebuildHome = { rebuild() }
+        var firstDrawn = false
+        fun rebuild() = Pass.run { Timings.time("Home redraw") { rebuildNow() } }.also {
+            if (!firstDrawn && addons != null) { firstDrawn = true; Timings.record("Start-up to Home", System.currentTimeMillis() - MainActivity.startedAt) }
+        }
+        // Several checks often finish together: one redraw a moment later, read fresh.
+        var queued = false
+        val soon = Runnable { queued = false; rebuild() }
+        rebuildHome = { if (!queued) { queued = true; Net.later(100, soon) } }
 
         screen = Screen(title = "Stremonino", rows = listOf(Row("Loading your rows…")) + tools(), tag = Profiles.current(app)?.name ?: "")
         screen.onShow = {
@@ -154,16 +161,16 @@ object Home {
             sleepRow.detail = Sleep.summary() + "  ►"
             // Straight away, so a "Ready to watch" line you've just opened goes.
             if (addons != null) rebuild()
-            History.pull(app) { rebuild() }
-            Updates.check { rebuild() }
-            Waiting.checkSoon(app) { rebuild() }
+            History.pull(app) { rebuildHome?.invoke() }
+            Updates.check { rebuildHome?.invoke() }
+            Waiting.checkSoon(app) { rebuildHome?.invoke() }
             // How fast streams reach this device, for Play best (a few seconds, every 6 hours at most).
             Net.later(8_000) { if (app.isTop(screen)) SpeedCheck.maybe(app) }
             // Counts for New episodes and the Calendar: checked quietly once an hour.
             // Saved counts straight away; a fresh check (if the saved one is over an hour old) a little later.
             NewEpisodes.warm(app) {
-                rebuild()
-                if (!NewEpisodes.fresh()) Net.later(4_000) { if (addons != null) NewEpisodes.load(app) { rebuild() } }
+                rebuildHome?.invoke()
+                if (!NewEpisodes.fresh()) Net.later(4_000) { if (addons != null) NewEpisodes.load(app) { rebuildHome?.invoke() } }
             }
             // A shared setup opened before signing in: offer it now.
             Share.takePending()?.let { p -> Net.later(300) { app.push(Share.receive(app, p)) } }

@@ -163,6 +163,7 @@ object History {
 
     private fun save() {
         marks = null
+        Pass.changed()
         Net.cancel(saveTask)
         Net.later(1_500, saveTask)
     }
@@ -219,6 +220,7 @@ object History {
     /** Forgets what's in memory, so the next use loads the (newly chosen) profile's file. */
     fun reset() {
         marks = null
+        Pass.changed()
         Net.cancel(saveTask)
         loaded = false
         videos.clear(); items.clear(); library.clear(); log.clear(); remote.clear(); unsent.clear()
@@ -398,9 +400,9 @@ object History {
     }
 
     /** Every title record on the account, read (for following: which shows you've started). */
-    fun infos(c: Context): List<LibraryItems.Info> {
+    fun infos(c: Context): List<LibraryItems.Info> = Pass.memo("infos") {
         ensure(c)
-        return remote.values.mapNotNull { runCatching { LibraryItems.read(JSONObject(it)) }.getOrNull() }.filter { it.type != "other" }
+        remote.values.mapNotNull { runCatching { LibraryItems.read(JSONObject(it)) }.getOrNull() }.filter { it.type != "other" }
     }
 
     /** The account's copy of one record (e.g. the waiting list), as JSON text. */
@@ -411,6 +413,7 @@ object History {
 
     /** Stores and sends one record exactly as given. */
     fun putRemote(c: Context, item: JSONObject) {
+        Pass.changed()
         ensure(c)
         val id = item.optString("_id")
         remote[id] = item.toString()
@@ -480,6 +483,7 @@ object History {
         val key = Account.authKey(c) ?: return
         if (pulling || (!force && !full && System.currentTimeMillis() - lastPull < PULL_EVERY_MS)) return
         pulling = true
+        val pullStart = System.currentTimeMillis()
         send(c)
         val skip = unsent.toSet()
         val doneIds = videos.filterValues { it.done }.keys.toHashSet()
@@ -513,6 +517,7 @@ object History {
             }
         }) { r ->
             pulling = false
+            Timings.record(if (whole) "Account sync (full)" else "Account sync", System.currentTimeMillis() - pullStart)
             r.onSuccess { m ->
                 lastPull = System.currentTimeMillis()
                 if (whole) fullDone = true
@@ -587,6 +592,7 @@ object History {
         library.clear()
         library += keepLib + m.library.filter { n -> n.id !in unsent && keepLib.none { it.id == n.id } }
         marks = null
+        Pass.changed()
         return sig() != before || progressChanged
     }
 
