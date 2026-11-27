@@ -356,6 +356,7 @@ object Player {
         val ytdl = "youtube-dl" in all || "yt-dlp" in all || "ytdl" in all
         return when {
             ytdl && ("not found" in all || "no such file" in all || "not enough permissions" in all) && ytErr == null -> "mpv can't find yt-dlp: sudo pacman -S yt-dlp"
+            ytErr != null && "unsupported url" in ytErr.lowercase() -> "it's a web page, not a video"
             ytErr != null && ("sign in" in ytErr.lowercase() || "bot" in ytErr.lowercase()) -> "YouTube wants a sign-in check (see Settings › Player options)"
             ytErr != null -> "YouTube: " + ytErr.take(90)
             "403" in all || "forbidden" in all -> "the server refused it (403): the link may have expired, try another copy"

@@ -176,7 +176,8 @@ object StreamParse {
         if (!url.startsWith("http")) return null
         val path = url.substringBefore('?').lowercase()
         val ownSite = runCatching { java.net.URL(url).host == java.net.URL(addon.transportUrl).host }.getOrDefault(false)
-        if (path.endsWith(".html") || path.endsWith(".htm") || (ownSite && (path.contains("/configure") || path.contains("/details")))) return label to url
+        // A page, not a video: any add-on's configure or sign-up page (even on another site), or its own details pages.
+        if (path.endsWith(".html") || path.endsWith(".htm") || path.endsWith("/configure") || path.contains("/configure/") || (ownSite && path.contains("/details"))) return label to url
         return null
     }
 
