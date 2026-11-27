@@ -105,7 +105,6 @@ object Streams {
                             when {
                                 link.isBlank() || !link.startsWith("http") ->
                                     if (o.has("infoHash")) hiddenTorrent++
-                                hints?.optJSONObject("proxyHeaders") != null -> hiddenHeaders++
                                 else -> StreamParse.addUnique(found, StreamParse.parse(o, link, shortName(a.name), found.size))
                             }
                         }

@@ -46,8 +46,11 @@ object Play {
                         if (arr != null) for (i in 0 until arr.length()) {
                             val o = arr.optJSONObject(i) ?: continue
                             val link = o.optString("url")
-                            if (link.startsWith("http") && o.optJSONObject("behaviorHints")?.optJSONObject("proxyHeaders") == null) {
-                                StreamParse.addUnique(found, StreamParse.parse(o, link, StreamParse.shortName(a.name), found.size))
+                            // A YouTube video by its id: mpv plays those itself (with yt-dlp).
+                            val yt = o.optString("ytId").takeIf { link.isBlank() && it.isNotBlank() && "mpv" in Prefs.player }
+                            val use = if (yt != null) "https://www.youtube.com/watch?v=$yt" else link
+                            if (use.startsWith("http")) {
+                                StreamParse.addUnique(found, StreamParse.parse(o, use, StreamParse.shortName(a.name), found.size))
                             }
                         }
                     }.onFailure { e -> notes += "${StreamParse.shortName(a.name)}: ${Net.describe(e)}" }

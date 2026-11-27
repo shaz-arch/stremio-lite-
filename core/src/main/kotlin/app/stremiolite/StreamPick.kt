@@ -105,7 +105,10 @@ object StreamParse {
             bracket?.groupValues?.get(2) == " download" || "⏳" in name || "uncached" in lowerName -> false
             else -> null
         }
-        return Stream(url, addon, quality, tags, size, sizeMb, provider, cached, rank, order, up, audio(up), langs(text, up), seeders(text))
+        // Needs special headers: played through a link on this device that adds them.
+        val headers = HeaderBridge.headersOf(hints?.optJSONObject("proxyHeaders"))
+        val playUrl = if (headers.isEmpty()) url else HeaderBridge.wrap(url, headers)
+        return Stream(playUrl, addon, quality, tags, size, sizeMb, provider, cached, rank, order, up, audio(up), langs(text, up), seeders(text))
     }
     private fun audio(up: String): String {
         val kind = when {
@@ -185,9 +188,7 @@ object StreamParse {
             for (i in 0 until arr.length()) {
                 val o = arr.optJSONObject(i) ?: continue
                 val link = o.optString("url")
-                if (link.startsWith("http") && o.optJSONObject("behaviorHints")?.optJSONObject("proxyHeaders") == null) {
-                    addUnique(found, parse(o, link, shortName(a.name), found.size))
-                }
+                if (link.startsWith("http")) addUnique(found, parse(o, link, shortName(a.name), found.size))
             }
         }
         return found

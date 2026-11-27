@@ -102,7 +102,6 @@ object Health {
             val o = arr.optJSONObject(i) ?: continue
             val link = o.optString("url")
             when {
-                link.startsWith("http") && o.optJSONObject("behaviorHints")?.optJSONObject("proxyHeaders") != null -> headers++
                 link.startsWith("http") -> {}
                 o.has("infoHash") -> torrent++
                 else -> noLink++
