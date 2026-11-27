@@ -229,7 +229,8 @@ object Settings {
     private val HOME_LINES = listOf(
         "Watching" to listOf("notices" to "Notices at the top", "search" to "Search", "continue" to "Continue watching", "next" to "Next watch",
             "ready" to "Ready", "waiting" to "Waiting", "calendar" to "Calendar", "watched" to "Watched", "favourites" to "Favourites", "basket" to "Basket"),
-        "For you and Browse" to listOf("foryou" to "For you", "coming" to "Coming soon"),
+        "For you" to listOf("foryou.top" to "Top picks for you", "foryou.because" to "Because you watched…", "foryou.favs" to "More like your favourites"),
+        "Browse" to listOf("coming" to "Coming soon"),
         "App" to listOf("live" to "Live TV", "drives" to "Drives", "downloads" to "Downloads", "news" to "News", "sleep" to "Sleep timer"),
     )
     private fun hiddenOnHome(c: Context): Set<String> = prefs(c).getStringSet("homeHidden", emptySet()) ?: emptySet()
@@ -591,7 +592,6 @@ object Settings {
         screen = Screen(
             "Settings",
             listOf(
-                Row("Set up Stremonino", "step by step  ►", opens = { SetupWizard.screen(app) }),
                 Row("──── Playback ────"), playerRow, langRow, subsAddonRow(app), nextRow, skipRow, SleepTimer.row(app),
                 Row("──── Alerts ────"), followRow, ntfyRow,
                 Row("──── Drives ────"), Drives.settingsRow(app), *listOfNotNull(Offline.settingsRow(app)).toTypedArray(),
@@ -601,7 +601,8 @@ object Settings {
                 Row("Hide rows", "►", opens = { rowsScreen(app) }),
                 Row("──── Look ────"),
                 lookRow, themeRow, sizeRow, clockRow, watchedRow,
-                Row("──── Rows & streams ────"),
+                Row("──── Configuration ────"),
+                Row("Set up Stremonino", "step by step  ►", opens = { SetupWizard.screen(app) }),
                 Row("Reload my rows and add-ons", action = { Home.reload(); app.toast("Reloading your rows and add-ons…") }),
                 Row("Your rows (AIOMetadata)", "►", opens = { RowsSetup.screen(app) }),
                 Row("Your streams (AIOStreams)", "►", opens = { StreamsSetup.screen(app) }),

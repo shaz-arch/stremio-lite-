@@ -141,13 +141,15 @@ object ForYouUi {
 
     fun homeRows(): List<Row> {
         if (Prefs.tmdbKey.isBlank() || KidsGuard.locked()) return emptyList()
+        val top = Prefs.onHome("foryou.top"); val because = Prefs.onHome("foryou.because"); val favs = Prefs.onHome("foryou.favs")
+        if (!top && !because && !favs) return emptyList()
         val r = current()
         if (r == null || System.currentTimeMillis() - r.at > F.KEEP_MS) refresh { Home.redraw() }
         val rows = mutableListOf(Row("──── For you ────"))
         if (r == null) { rows += Row("Finding suggestions from what you watch…"); return rows }
-        if (r.top.isNotEmpty()) rows += Row("Top picks for you", "${r.top.size}  ►", opens = { list("Top picks for you", r.top, true) })
-        r.because.forEach { (s, l) -> rows += Row("Because you watched ${s.name}", "${l.size}  ►", opens = { list("Because you watched ${s.name}", l) }) }
-        if (r.favourites.isNotEmpty()) rows += Row("More like your favourites", "${r.favourites.size}  ►", opens = { list("More like your favourites", r.favourites) })
+        if (top && r.top.isNotEmpty()) rows += Row("Top picks for you", "${r.top.size}  ►", opens = { list("Top picks for you", r.top, true) })
+        if (because) r.because.forEach { (s, l) -> rows += Row("Because you watched ${s.name}", "${l.size}  ►", opens = { list("Because you watched ${s.name}", l) }) }
+        if (favs && r.favourites.isNotEmpty()) rows += Row("More like your favourites", "${r.favourites.size}  ►", opens = { list("More like your favourites", r.favourites) })
         if (rows.size == 1) rows += Row("Nothing yet.")
         return rows
     }

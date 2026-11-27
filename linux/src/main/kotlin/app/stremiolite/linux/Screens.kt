@@ -221,7 +221,7 @@ object Home {
             if (Prefs.onHome("watched")) rows += Row("Watched", Watched.list().size.let { if (it == 0) "" else "$it  ►" }, opens = { watchedScreen() })
             if (Prefs.onHome("favourites")) rows += Row("Favourites", if (lib.isEmpty()) "empty" else "${lib.size}  ►", opens = { libraryScreen() })
             if (Prefs.onHome("basket")) rows += Row("Basket", BasketList.summary(), opens = { BasketList.screen() })
-            if (Prefs.onHome("foryou")) rows += ForYouUi.homeRows()
+            rows += ForYouUi.homeRows()
             if (list != null) {
                 rows += Row("──── Browse ────")
                 val entries = Index.entries(list)
@@ -1018,7 +1018,6 @@ object Settings {
         fun build() {
             // Same order as the phone and stick. Text size is the terminal's own (kitty: ctrl+shift+= / -).
             s.rows = listOf(
-                Row("Set up Stremonino", "step by step  ►", opens = { SetupWizard.screen() }),
                 Row("──── Playback ────"),
                 Row("Player", Prefs.player, action = {
                     App.ask("Player command (e.g. mpv)", Prefs.player) { v -> if (!v.isNullOrBlank()) { Prefs.player = v.trim(); build() } }
@@ -1078,7 +1077,8 @@ object Settings {
                 Row("Watched films in lists", "◄ ${if (Prefs.hideWatched) "Hide them" else "Show with ●"} ►", action = {
                     Prefs.hideWatched = !Prefs.hideWatched; Prefs.syncOut(); build()
                 }),
-                Row("──── Rows & streams ────"),
+                Row("──── Configuration ────"),
+                Row("Set up Stremonino", "step by step  ►", opens = { SetupWizard.screen() }),
                 Row("Reload my rows and add-ons", action = { Home.load(force = true); App.toast("Reloading your rows and add-ons…") }),
                 Row("Your rows (AIOMetadata)", "►", opens = { RowsSetup.screen() }),
                 Row("Your streams (AIOStreams)", "►", opens = { StreamsSetup.screen() }),
@@ -1638,7 +1638,8 @@ fun keysScreen(): Screen {
 private val HOME_LINES = listOf(
     "Watching" to listOf("notices" to "Notices at the top", "search" to "Search", "continue" to "Continue watching", "next" to "Next watch",
         "ready" to "Ready", "waiting" to "Waiting", "calendar" to "Calendar", "watched" to "Watched", "favourites" to "Favourites", "basket" to "Basket"),
-    "For you and Browse" to listOf("foryou" to "For you", "coming" to "Coming soon"),
+    "For you" to listOf("foryou.top" to "Top picks for you", "foryou.because" to "Because you watched…", "foryou.favs" to "More like your favourites"),
+    "Browse" to listOf("coming" to "Coming soon"),
     "App" to listOf("live" to "Live TV", "drives" to "Drives", "downloads" to "Downloads", "news" to "News", "sleep" to "Sleep timer"),
 )
 

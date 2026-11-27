@@ -136,7 +136,7 @@ object Home {
                 Row("Watched", History.watched(app).size.let { if (it == 0) "" else "$it  ►" }, opens = { watchedScreen(app) }).takeIf { Settings.onHome(app, "watched") },
                 Row("Favourites", if (lib.isEmpty()) "empty" else "${lib.size}  ►", opens = { libraryScreen(app) }).takeIf { Settings.onHome(app, "favourites") },
                 Row("Basket", BasketList.summary(app), opens = { BasketList.screen(app) }).takeIf { Settings.onHome(app, "basket") },
-            ) + (if (Settings.onHome(app, "foryou")) ForYouUi.homeRows(app) else emptyList()) + listOf(
+            ) + ForYouUi.homeRows(app) + listOf(
                 Row("──── Browse ────"),
             ))
             screen.rows = rows + tools()

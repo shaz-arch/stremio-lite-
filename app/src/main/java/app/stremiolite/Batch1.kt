@@ -169,13 +169,15 @@ object ForYouUi {
 
     fun homeRows(app: MainActivity): List<Row> {
         if (Settings.tmdbKey(app).isBlank() || KidsGuard.locked(app)) return emptyList()
+        val top = Settings.onHome(app, "foryou.top"); val because = Settings.onHome(app, "foryou.because"); val favs = Settings.onHome(app, "foryou.favs")
+        if (!top && !because && !favs) return emptyList()
         val r = current(app)
         if (r == null || System.currentTimeMillis() - r.at > ForYou.KEEP_MS) refresh(app) { Home.redraw() }
         val rows = mutableListOf(Row("──── For you ────"))
         if (r == null) { rows += Row("Finding suggestions from what you watch…"); return rows }
-        if (r.top.isNotEmpty()) rows += Row("Top picks for you", "${r.top.size}  ►", opens = { list(app, "Top picks for you", r.top, refreshRow = true) })
-        r.because.forEach { (s, l) -> rows += Row("Because you watched ${s.name}", "${l.size}  ►", opens = { list(app, "Because you watched ${s.name}", l) }) }
-        if (r.favourites.isNotEmpty()) rows += Row("More like your favourites", "${r.favourites.size}  ►", opens = { list(app, "More like your favourites", r.favourites) })
+        if (top && r.top.isNotEmpty()) rows += Row("Top picks for you", "${r.top.size}  ►", opens = { list(app, "Top picks for you", r.top, refreshRow = true) })
+        if (because) r.because.forEach { (s, l) -> rows += Row("Because you watched ${s.name}", "${l.size}  ►", opens = { list(app, "Because you watched ${s.name}", l) }) }
+        if (favs && r.favourites.isNotEmpty()) rows += Row("More like your favourites", "${r.favourites.size}  ►", opens = { list(app, "More like your favourites", r.favourites) })
         if (rows.size == 1) rows += Row("Nothing yet.")
         return rows
     }
