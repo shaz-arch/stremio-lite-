@@ -46,5 +46,25 @@ object AddonFinder {
         }.distinctBy { it.transportUrl }
     }
 
+    /** "Sort by": the list's own order (most popular first on stremio-addons.net), name, or what it gives. */
+    val SORTS = listOf("List order (popular)", "Name A–Z", "What it gives")
+
+    /** What it's mainly for, for grouping: streams first, then rows, subtitles, details, other. */
+    fun group(e: Entry): String = when {
+        "stream" in e.resources -> "Streams"
+        "catalog" in e.resources -> "Rows"
+        "subtitles" in e.resources -> "Subtitles"
+        "meta" in e.resources -> "Details"
+        else -> "Other"
+    }
+    private val GROUPS = listOf("Streams", "Rows", "Subtitles", "Details", "Other")
+
+    /** Sorted per [sort]; with "What it gives", (heading, entries) pairs, else one group with no heading. */
+    fun sorted(list: List<Entry>, sort: Int): List<Pair<String?, List<Entry>>> = when (sort) {
+        1 -> listOf(null to list.sortedBy { it.name.lowercase() })
+        2 -> list.groupBy { group(it) }.toList().sortedBy { GROUPS.indexOf(it.first) }.map { (g, l) -> g to l.sortedBy { it.name.lowercase() } }
+        else -> listOf(null to list)
+    }
+
     fun matches(e: Entry, q: String) = q.isBlank() || q.lowercase().split(' ').filter { it.isNotEmpty() }.all { w -> w in (e.name + " " + e.description).lowercase() }
 }

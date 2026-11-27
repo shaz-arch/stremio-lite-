@@ -30,17 +30,30 @@ object FinderUi {
         lateinit var s: Screen
         s = Screen(if (query.isBlank()) sources.singleOrNull()?.label ?: "Add-ons" else "Add-ons: $query", listOf(Row("Loading…")))
         var started = false
+        var all: List<AddonFinder.Entry> = emptyList()
+        var failed = false
+        fun build() {
+            val sort = Profiles.prefsFor(app, "settings").getInt("finderSort", 0)
+            val rows = mutableListOf<Row>()
+            rows += Row("Sort by", "◄ ${AddonFinder.SORTS[sort]} ►", action = {
+                Profiles.prefsFor(app, "settings").edit().putInt("finderSort", (sort + 1) % AddonFinder.SORTS.size).apply(); build()
+            })
+            if (sources.size == 1 && query.isBlank()) rows += Row("Search this list", "►", action = { ask(app, "Search add-ons") { q -> app.push(results(app, sources, q)) } })
+            if (all.isEmpty()) rows += Row(if (failed) "Couldn't load the list." else "Nothing found.")
+            AddonFinder.sorted(all, sort).forEach { (heading, list) ->
+                heading?.let { rows += Row("──── $it (${list.size}) ────") }
+                list.forEach { e -> rows += Row((if (installed(e.id)) "✓ " else "") + e.name, e.what.ifEmpty { "►" }, opens = { entry(app, e) }) }
+            }
+            s.rows = rows
+            if (app.isTop(s)) app.refresh(s)
+        }
         s.onShow = {
             if (!started) {
                 started = true
                 Net.async({ sources.flatMap { runCatching { AddonFinder.list(it) }.getOrDefault(emptyList()) }.distinctBy { it.transportUrl } }) { r ->
-                    val all = r.getOrDefault(emptyList()).filter { AddonFinder.matches(it, query) }
-                    val rows = mutableListOf<Row>()
-                    if (sources.size == 1 && query.isBlank()) rows += Row("Search this list", "►", action = { ask(app, "Search add-ons") { q -> app.push(results(app, sources, q)) } })
-                    if (all.isEmpty()) rows += Row(if (r.isFailure) "Couldn't load the list." else "Nothing found.")
-                    all.forEach { e -> rows += Row((if (installed(e.id)) "✓ " else "") + e.name, e.what.ifEmpty { "►" }, opens = { entry(app, e) }) }
-                    s.rows = rows
-                    if (app.isTop(s)) app.refresh(s)
+                    failed = r.isFailure
+                    all = r.getOrDefault(emptyList()).filter { AddonFinder.matches(it, query) }
+                    build()
                 }
             }
         }

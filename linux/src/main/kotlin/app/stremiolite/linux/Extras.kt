@@ -767,16 +767,28 @@ object FinderUi {
         lateinit var s: Screen
         s = Screen(if (query.isBlank()) sources.singleOrNull()?.label ?: "Add-ons" else "Add-ons: $query", listOf(Row("Loading…")))
         var started = false
+        var all: List<app.stremiolite.AddonFinder.Entry> = emptyList()
+        var failed = false
+        val F = app.stremiolite.AddonFinder
+        fun build() {
+            val sort = Prefs.finderSort
+            val rows = mutableListOf<Row>()
+            rows += Row("Sort by", "◄ ${F.SORTS[sort]} ►", action = { Prefs.finderSort = (sort + 1) % F.SORTS.size; build() })
+            if (sources.size == 1 && query.isBlank()) rows += Row("Search this list", "►", action = { App.ask("Search add-ons") { q -> q?.trim()?.takeIf { it.isNotEmpty() }?.let { App.push(results(sources, it)) } } })
+            if (all.isEmpty()) rows += Row(if (failed) "Couldn't load the list." else "Nothing found.")
+            F.sorted(all, sort).forEach { (heading, list) ->
+                heading?.let { rows += Row("──── $it (${list.size}) ────") }
+                list.forEach { e -> rows += Row((if (installed(e.id)) "✓ " else "") + e.name, e.what.ifEmpty { "►" }, opens = { entry(e) }) }
+            }
+            s.rows = rows; App.refresh()
+        }
         s.onShow = {
             if (!started) {
                 started = true
-                App.async({ sources.flatMap { runCatching { app.stremiolite.AddonFinder.list(it) }.getOrDefault(emptyList()) }.distinctBy { it.transportUrl } }) { r ->
-                    val all = r.getOrDefault(emptyList()).filter { app.stremiolite.AddonFinder.matches(it, query) }
-                    val rows = mutableListOf<Row>()
-                    if (sources.size == 1 && query.isBlank()) rows += Row("Search this list", "►", action = { App.ask("Search add-ons") { q -> q?.trim()?.takeIf { it.isNotEmpty() }?.let { App.push(results(sources, it)) } } })
-                    if (all.isEmpty()) rows += Row(if (r.isFailure) "Couldn't load the list." else "Nothing found.")
-                    all.forEach { e -> rows += Row((if (installed(e.id)) "✓ " else "") + e.name, e.what.ifEmpty { "►" }, opens = { entry(e) }) }
-                    s.rows = rows; App.refresh()
+                App.async({ sources.flatMap { runCatching { F.list(it) }.getOrDefault(emptyList()) }.distinctBy { it.transportUrl } }) { r ->
+                    failed = r.isFailure
+                    all = r.getOrDefault(emptyList()).filter { F.matches(it, query) }
+                    build()
                 }
             }
         }

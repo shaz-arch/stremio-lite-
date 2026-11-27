@@ -224,6 +224,9 @@ object Prefs {
         percent?.let { data().put("ratingsPercent", it) }
         save(); syncOut()
     }
+    var finderSort: Int
+        get() = data().optInt("finderSort", 0)
+        set(v) { data().put("finderSort", v); save() }
     var sleepOnHome: Boolean
         get() = data().optBoolean("sleepOnHome", false)
         set(v) { data().put("sleepOnHome", v); save() }
