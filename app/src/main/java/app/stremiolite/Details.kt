@@ -408,15 +408,17 @@ object Details {
         val w = WhereToWatch.known(f.type, f.id, region)
             ?: return listOf(head, Row(WhereToWatch.error(f.type, f.id, region)?.let { "Couldn't look it up: $it" } ?: "Looking it up…"))
         val rows = mutableListOf(head)
-        w.released.forEach { (k, v) -> rows += Row(info(if (f.type == "movie") "Released: $k" else k, v)) }
-        fun line(label: String, names: List<String>) { if (names.isNotEmpty()) rows += Row(info(label, names.joinToString(", "))) }
+        val cols = app.columns()
+        // "UK cinemas  14 Aug 2026": the label is where, so it lines up with the others.
+        w.released.forEach { (k, v) -> rows += infoRows(k, v, cols) }
+        fun line(label: String, names: List<String>) { if (names.isNotEmpty()) rows += infoRows(label, names.joinToString(", "), cols) }
         line("Included with", w.included)
         line("Free", w.free)
         line("Rent", w.rent)
         line("Buy", w.buy)
         if (w.included.isEmpty() && w.free.isEmpty() && w.rent.isEmpty() && w.buy.isEmpty()) rows += Row("Not on any $where service just now.")
         if (w.link.isNotBlank()) rows += LinkOut.row(app, "All the options", "Where to watch: ${f.name}", w.link)
-        rows += Row("Where-to-watch data from JustWatch, via TMDB.")
+        Catalogs.wrap("Where-to-watch data from JustWatch, via TMDB.", cols).forEach { rows += Row(it) }
         return rows
     }
 
