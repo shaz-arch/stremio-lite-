@@ -149,7 +149,7 @@ object Share {
         } else {
             rows += Row("Easiest: on your phone, sign in to Stremonino with")
             rows += Row("this same account and point the camera at their code.")
-            rows += Row("Then choose Reload my rows and add-ons here.")
+            rows += Row("Then choose Settings › Reload my rows and add-ons here.")
         }
         rows += Row("────────────────────")
         rows += Row("Paste a link they sent you", "►", action = { askPaste(app) })

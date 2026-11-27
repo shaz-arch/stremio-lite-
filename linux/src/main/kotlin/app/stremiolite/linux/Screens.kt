@@ -211,16 +211,14 @@ object Home {
             val searchRow = Row("Search", "/  ►", opens = null, action = { Search.start() })
             if (!KidsGuard.hides()) rows += searchRow
             NowPlaying.row()?.let { rows += it }
-            rows += Row("Basket", BasketList.summary(), opens = { BasketList.screen() })
+            rows += Row("Continue watching", if (cw.isEmpty()) "nothing yet" else "${cw.size}  ►", opens = { continueScreen() })
             rows += Row("Next watch", NextList.summary(), opens = { NextList.screen() })
             rows += Row("Ready", Ready.summary(), opens = { Ready.screen() })
             rows += Row("Waiting", Waiting.summary(), opens = { Waiting.screen() })
-            rows += Row("Favourites", if (lib.isEmpty()) "empty" else "${lib.size}  ►", opens = { libraryScreen() })
-            rows += Row("Continue watching", if (cw.isEmpty()) "nothing yet" else "${cw.size}  ►", opens = { continueScreen() })
-            rows += Row("Watched", Watched.list().size.let { if (it == 0) "" else "$it  ►" }, opens = { watchedScreen() })
             rows += Row("Calendar", NewEpisodes.weekCount()?.let { if (it == 0) "nothing this week  ►" else "$it this week  ►" } ?: "", opens = { NewEpisodes.calendar() })
-            Drives.homeRow()?.let { rows += it }
-            if (Prefs.liveTv && !KidsGuard.hides()) rows += Row("Live TV", Live.homeDetail(), opens = { Live.screen() })
+            rows += Row("Favourites", if (lib.isEmpty()) "empty" else "${lib.size}  ►", opens = { libraryScreen() })
+            rows += Row("Watched", Watched.list().size.let { if (it == 0) "" else "$it  ►" }, opens = { watchedScreen() })
+            rows += Row("Basket", BasketList.summary(), opens = { BasketList.screen() })
             rows += ForYouUi.homeRows()
             if (list != null) {
                 rows += Row("──── Browse ────")
@@ -243,14 +241,15 @@ object Home {
             }
             rows += Row("──── App ────")
             // Same order and wording as the phone and stick.
+            if (Prefs.liveTv && !KidsGuard.hides()) rows += Row("Live TV", Live.homeDetail(), opens = { Live.screen() })
+            Drives.homeRow()?.let { rows += it }
             if (KidsGuard.locked()) rows += Row("Games", "►", opens = { GamesScreen.screen() })
             if (Prefs.newsOn && !KidsGuard.hides()) {
                 rows += Row("News", "film & TV headlines  ►", opens = { Feeds.news() })
             }
-            rows += SleepTimer.row()
+            if (Prefs.sleepOnHome) rows += SleepTimer.row()
             // Setup items (add-ons, export/import, device check, about) live inside Settings.
             rows += Row("Settings", "►", action = { KidsGuard.guard { App.push(Settings.screen()) } })
-            rows += Row("Reload my rows and add-ons", action = { load(force = true) })
             rows += Row("──── Profile ────")
             rows += Row(Profiles.current()?.name ?: "…", if (KidsGuard.locked()) "current · locked" else "current")
             rows += Row("Switch profile", "►", action = { KidsGuard.guard { App.push(Profiles.chooser()) } })
@@ -1037,18 +1036,35 @@ object Settings {
                 Row("Auto-play next episode", "◄ ${if (Prefs.autoNext) "On" else "Off"} ►", action = {
                     Prefs.autoNext = !Prefs.autoNext; Prefs.syncOut(); build()
                 }),
-                Row("Follow shows I start watching", "◄ ${if (Prefs.autoFollow) "On" else "Off: I choose"} ►", action = {
-                    Prefs.autoFollow = !Prefs.autoFollow; Prefs.syncOut(); build()
-                }),
                 Row("Skip intros and recaps (mpv)", "◄ ${if (Prefs.skipIntros) "On" else "Off"} ►", action = {
                     Prefs.skipIntros = !Prefs.skipIntros; build()
                 }),
+                SleepTimer.row(),
                 Row("Play on a TV on my Wi-Fi (DLNA)", "◄ ${if (Prefs.castDlna) "On" else "Off: mpv"} ►", action = { Prefs.castDlna = !Prefs.castDlna; build() }),
                 Row("Play what's sent to the TV", "◄ ${if (Prefs.receiveSends) "On: this computer too" else "Off"} ►", action = {
                     Prefs.receiveSends = !Prefs.receiveSends; build()
                 }),
+                Row("──── Alerts ────"),
+                Row("Follow shows I start watching", "◄ ${if (Prefs.autoFollow) "On" else "Off: I choose"} ►", action = {
+                    Prefs.autoFollow = !Prefs.autoFollow; Prefs.syncOut(); build()
+                }),
                 Row("──── Drives ────"),
                 Drives.settingsRow(),
+                Row("──── Home ────"),
+                Row("Live TV on Home", "◄ ${if (Prefs.liveTv) "Shown" else "Hidden"} ►", action = {
+                    Prefs.liveTv = !Prefs.liveTv; Prefs.syncOut(); Home.redraw(); build()
+                }),
+                Row("News on Home", "◄ ${if (Prefs.newsOn) "Shown" else "Hidden"} ►", action = {
+                    Prefs.newsOn = !Prefs.newsOn; Prefs.syncOut(); Home.redraw(); build()
+                }),
+                Row("Coming soon in Browse", "◄ ${if (Prefs.comingOn) "Shown" else "Hidden"} ►", action = {
+                    Prefs.comingOn = !Prefs.comingOn; Prefs.syncOut(); Home.redraw(); build()
+                }),
+                Row("Sleep timer on Home", "◄ ${if (Prefs.sleepOnHome) "Shown" else "Hidden"} ►", action = {
+                    Prefs.sleepOnHome = !Prefs.sleepOnHome; Home.redraw(); build()
+                }),
+                Row("Arrange your Index", "►", opens = { Arrange.screen() }),
+                Row("Hide rows", "►", opens = { rowsScreen() }),
                 Row("──── Look ────"),
                 Row("Theme, text size and clock", "◄ ${if (Prefs.lookLocal) "This computer only" else "Same on all devices"} ►", action = {
                     Prefs.lookLocal = !Prefs.lookLocal
@@ -1066,24 +1082,12 @@ object Settings {
                 Row("Watched films in lists", "◄ ${if (Prefs.hideWatched) "Hide them" else "Show with ●"} ►", action = {
                     Prefs.hideWatched = !Prefs.hideWatched; Prefs.syncOut(); build()
                 }),
-                Row("Live TV on Home", "◄ ${if (Prefs.liveTv) "Shown" else "Hidden"} ►", action = {
-                    Prefs.liveTv = !Prefs.liveTv; Prefs.syncOut(); Home.redraw(); build()
-                }),
-                Row("News on Home", "◄ ${if (Prefs.newsOn) "Shown" else "Hidden"} ►", action = {
-                    Prefs.newsOn = !Prefs.newsOn; Prefs.syncOut(); Home.redraw(); build()
-                }),
-                Row("Coming soon in Browse", "◄ ${if (Prefs.comingOn) "Shown" else "Hidden"} ►", action = {
-                    Prefs.comingOn = !Prefs.comingOn; Prefs.syncOut(); Home.redraw(); build()
-                }),
-                Row("──── Index ────"),
-                Row("Arrange your Index", "►", opens = { Arrange.screen() }),
-                Row("Hide rows", "►", opens = { rowsScreen() }),
                 Row("──── Rows & streams ────"),
+                Row("Reload my rows and add-ons", action = { Home.load(force = true); App.toast("Reloading your rows and add-ons…") }),
                 Row("Your rows (AIOMetadata)", "►", opens = { RowsSetup.screen() }),
                 Row("Your streams (AIOStreams)", "►", opens = { StreamsSetup.screen() }),
                 Row(info("Stream speed", SpeedCheck.summary()), "►", opens = { SpeedScreen.screen() }),
                 Row("Your add-ons", (Home.all().size.takeIf { it > 0 }?.let { "$it  " } ?: "") + "►", opens = { Addons.screen() }),
-                Row("Where to watch (TMDB key)", (if (Prefs.tmdbKey.isBlank()) "not set" else "set ✓ · ${app.stremiolite.WhereToWatch.regionName(Prefs.watchRegion)}") + "  ►", opens = { Details.whereToWatchSettings() }),
                 Row("Your keys", "TMDB, debrid, MDBList, Gemini  ►", opens = { keysScreen() }),
                 Row("──── Share ────"),
                 Row("Export my setup to another account", "►", opens = { Share.screen() }),
@@ -1091,8 +1095,10 @@ object Settings {
                 Row("──── About ────"),
                 Row(info("App version", "build ${Updates.current}")),
                 Row("Check for updates", action = { Updates.checkNow() }),
-                Row("Is everything working?", "check it all  ►", opens = { HealthScreen.screen() }),
-                Row("Device check", "►", opens = { DeviceCheck.screen() }),
+                Row("Checks", "►", opens = { Screen("Checks", listOf(
+                    Row("Is everything working?", "check it all  ►", opens = { HealthScreen.screen() }),
+                    Row("Device check", "►", opens = { DeviceCheck.screen() }),
+                )) }),
                 Row("About Stremonino", "►", opens = { Home.about() }),
             )
             App.refresh()

@@ -187,6 +187,9 @@ object Prefs {
         get() = data().optBoolean("newsOn", true)
         set(v) { data().put("newsOn", v); save() }
 
+    var sleepOnHome: Boolean
+        get() = data().optBoolean("sleepOnHome", false)
+        set(v) { data().put("sleepOnHome", v); save() }
     var comingOn: Boolean
         get() = data().optBoolean("comingOn", true)
         set(v) { data().put("comingOn", v); save() }

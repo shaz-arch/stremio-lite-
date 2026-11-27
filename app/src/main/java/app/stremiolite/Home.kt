@@ -67,15 +67,14 @@ object Home {
             Row("News", "film & TV headlines  ►", opens = { Feeds.news(app) }),
         )
         val sleepRow = SleepTimer.row(app)
-        val appRows = listOf(
+        reloadHome = {
+            // Also fetches your history, follows and waiting list from the account straight away.
+            History.pull(app, full = true) { rebuildHome?.invoke() }
+            if (!loading) load(app, screen)
+        }
+        fun appRows() = (if (Settings.sleepOnHome(app)) listOf(sleepRow) else emptyList()) + listOf(
             // Setup items (add-ons, export/import, device check, about) live inside Settings.
-            sleepRow,
             Row("Settings", "►", action = { KidsGuard.guard(app) { app.push(Settings.screen(app)) } }),
-            Row("Reload my rows and add-ons", action = {
-                // Also fetches your history, follows and waiting list from the account straight away.
-                History.pull(app, full = true) { rebuildHome?.invoke() }
-                if (!loading) load(app, screen)
-            }),
             Row("──── Profile ────"),
             who,
             Row("Switch profile", "►", action = { KidsGuard.guard(app) { app.push(Profiles.chooser(app)) } }),
@@ -84,8 +83,10 @@ object Home {
         // The App rows; News and Coming soon sit above Settings unless hidden in Settings → Look.
         val games = Row("Games", "►", opens = { GamesScreen.screen(app) })
         fun tools() = listOf(Row("──── App ────")) +
+            (if (Settings.liveTv(app) && !KidsGuard.hides(app)) listOf(Row("Live TV", Live.homeDetail(app), opens = { Live.screen(app) })) else emptyList()) +
+            listOfNotNull(Drives.homeRow(app)) +
             (if (KidsGuard.hides(app)) emptyList() else if (Settings.newsOn(app)) news else emptyList()) +
-            (if (KidsGuard.locked(app)) listOf(games) else emptyList()) + appRows
+            (if (KidsGuard.locked(app)) listOf(games) else emptyList()) + appRows()
 
         fun rebuild() {
             val list = addons
@@ -124,16 +125,15 @@ object Home {
             rows.addAll(top, listOf(
                 Row("──── Watching ────"),
             ) + (if (KidsGuard.hides(app)) emptyList() else listOf(search)) + listOf(
-                Row("Basket", BasketList.summary(app), opens = { BasketList.screen(app) }),
+                Row("Continue watching", if (cw.isEmpty()) "nothing yet" else "${cw.size}  ►", opens = { continueScreen(app) }),
                 Row("Next watch", NextList.summary(app), opens = { NextList.screen(app) }),
                 Row("Ready", Ready.summary(app), opens = { Ready.screen(app) }),
                 Row("Waiting", Waiting.summary(app), opens = { Waiting.screen(app) }),
-                Row("Favourites", if (lib.isEmpty()) "empty" else "${lib.size}  ►", opens = { libraryScreen(app) }),
-                Row("Continue watching", if (cw.isEmpty()) "nothing yet" else "${cw.size}  ►", opens = { continueScreen(app) }),
-                Row("Watched", History.watched(app).size.let { if (it == 0) "" else "$it  ►" }, opens = { watchedScreen(app) }),
                 Row("Calendar", NewEpisodes.weekCount()?.let { if (it == 0) "nothing this week  ►" else "$it this week  ►" } ?: "", opens = { NewEpisodes.calendar(app) }),
-            ) + listOfNotNull(Drives.homeRow(app)) + (if (Settings.liveTv(app) && !KidsGuard.hides(app)) listOf(Row("Live TV", Live.homeDetail(app), opens = { Live.screen(app) })) else emptyList())
-                + ForYouUi.homeRows(app) + listOf(
+                Row("Favourites", if (lib.isEmpty()) "empty" else "${lib.size}  ►", opens = { libraryScreen(app) }),
+                Row("Watched", History.watched(app).size.let { if (it == 0) "" else "$it  ►" }, opens = { watchedScreen(app) }),
+                Row("Basket", BasketList.summary(app), opens = { BasketList.screen(app) }),
+            ) + ForYouUi.homeRows(app) + listOf(
                 Row("──── Browse ────"),
             ))
             screen.rows = rows + tools()
@@ -181,6 +181,10 @@ object Home {
 
     /** Redraws Home if it has been built (e.g. an update was found while the app was in the background). */
     fun redraw() { rebuildHome?.invoke() }
+
+    /** Reload my rows and add-ons (in Settings). */
+    private var reloadHome: (() -> Unit)? = null
+    fun reload() { reloadHome?.invoke() }
 
     /** The add-on list as last saved, so a refresh that changes nothing doesn't redraw Home. */
     private var savedJson: String? = null
@@ -525,7 +529,7 @@ object Home {
                 Row(""),
                 Row("For AIOMetadata: press Load Configuration,"),
                 Row("enter your password, change things, then Save."),
-                Row("Back here, choose Reload my rows and add-ons."),
+                Row("Back here, choose Settings › Reload my rows and add-ons."),
                 Row(""),
                 Row("Your install link stays the same,"),
                 Row("so nothing needs reinstalling."),

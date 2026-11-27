@@ -220,6 +220,7 @@ object Settings {
     /** News and Coming soon on Home (on unless turned off). */
     fun newsOn(c: Context) = prefs(c).getBoolean("newsOn", true)
     fun comingOn(c: Context) = prefs(c).getBoolean("comingOn", true)
+    fun sleepOnHome(c: Context) = prefs(c).getBoolean("sleepOnHome", false)
 
     /** News feeds you've added (synced). */
     fun newsFeeds(c: Context): List<News.Feed> = News.feeds(prefs(c).getString("newsFeeds", null))
@@ -447,6 +448,7 @@ object Settings {
         lateinit var liveRow: Row
         lateinit var newsRow: Row
         lateinit var comingRow: Row
+        lateinit var sleepHomeRow: Row
 
         fun show() {
             lookRow.detail = "◄ ${if (lookLocal(app)) "This device only" else "Same on all devices"} ►"
@@ -463,6 +465,7 @@ object Settings {
             liveRow.detail = "◄ ${if (liveTv(app)) "Shown" else "Hidden"} ►"
             newsRow.detail = "◄ ${if (newsOn(app)) "Shown" else "Hidden"} ►"
             comingRow.detail = "◄ ${if (comingOn(app)) "Shown" else "Hidden"} ►"
+            sleepHomeRow.detail = "◄ ${if (sleepOnHome(app)) "Shown" else "Hidden"} ►"
             app.refresh(screen)
         }
         lateinit var updateRow: Row
@@ -509,6 +512,9 @@ object Settings {
             Home.redraw()
             show()
         })
+        sleepHomeRow = Row("Sleep timer on Home", action = {
+            prefs(app).edit().putBoolean("sleepOnHome", !sleepOnHome(app)).apply(); Home.redraw(); show()
+        })
         skipRow = Row("Skip intros (start after them)", action = {
             prefs(app).edit().putBoolean("skipIntros", !skipIntros(app)).apply(); show()
         })
@@ -545,19 +551,21 @@ object Settings {
             "Settings",
             listOf(
                 Row("Set up Stremonino", "step by step  ►", opens = { SetupWizard.screen(app) }),
-                Row("──── Playback ────"), playerRow, langRow, subsAddonRow(app), nextRow, skipRow, followRow, ntfyRow,
+                Row("──── Playback ────"), playerRow, langRow, subsAddonRow(app), nextRow, skipRow, SleepTimer.row(app),
+                Row("──── Alerts ────"), followRow, ntfyRow,
                 Row("──── Drives ────"), Drives.settingsRow(app),
-                Row("──── Look ────"),
-                lookRow, themeRow, sizeRow, clockRow, watchedRow, liveRow, newsRow, comingRow,
-                Row("──── Index ────"),
+                Row("──── Home ────"),
+                liveRow, newsRow, comingRow, sleepHomeRow,
                 Row("Arrange your Index", "►", opens = { Arrange.screen(app) }),
                 Row("Hide rows", "►", opens = { rowsScreen(app) }),
+                Row("──── Look ────"),
+                lookRow, themeRow, sizeRow, clockRow, watchedRow,
                 Row("──── Rows & streams ────"),
+                Row("Reload my rows and add-ons", action = { Home.reload(); app.toast("Reloading your rows and add-ons…") }),
                 Row("Your rows (AIOMetadata)", "►", opens = { RowsSetup.screen(app) }),
                 Row("Your streams (AIOStreams)", "►", opens = { StreamsSetup.screen(app) }),
                 Row(info("Stream speed", SpeedCheck.summary(app)), "►", opens = { SpeedScreen.screen(app) }),
                 Row("Your add-ons", (Home.addonCount()?.let { "$it  " } ?: "") + "►", opens = { Home.addonsScreen(app) }),
-                Row("Where to watch (TMDB key)", (if (tmdbKey(app).isBlank()) "not set" else "set ✓ · ${WhereToWatch.regionName(watchRegion(app))}") + "  ►", opens = { whereToWatch(app) }),
                 Row("Your keys", "TMDB, debrid, MDBList, Gemini  ►", opens = { keysScreen(app) }),
                 Row("──── Share ────"),
                 Row("Export my setup to another account", "►", opens = { Share.screen(app) }),
@@ -565,8 +573,10 @@ object Settings {
                 Row("──── About ────"),
                 Row(info("App version", BuildConfig.VERSION_NAME)),
                 updateRow,
-                Row("Is everything working?", "check it all  ►", opens = { HealthScreen.screen(app) }),
-                Row("Device check", "►", opens = { DemoMenus.deviceCheck(app) }),
+                Row("Checks", "►", opens = { Screen("Checks", listOf(
+                    Row("Is everything working?", "check it all  ►", opens = { HealthScreen.screen(app) }),
+                    Row("Device check", "►", opens = { DemoMenus.deviceCheck(app) }),
+                )) }),
                 Row("About Stremonino", "►", opens = { DemoMenus.about() }),
             ),
         )

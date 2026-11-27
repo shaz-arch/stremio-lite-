@@ -418,7 +418,7 @@ object Addons {
                 Row(""),
                 Row("For AIOMetadata: press Load Configuration,"),
                 Row("enter your password, change things, then Save."),
-                Row("Back here, choose Reload my rows and add-ons."),
+                Row("Back here, choose Settings › Reload my rows and add-ons."),
                 Row("Your install link stays the same, so nothing"),
                 Row("needs reinstalling."),
             ),
@@ -538,7 +538,7 @@ object Share {
             Row("────────────────────"),
             Row("Easiest: on your phone, sign in to Stremonino with this same"),
             Row("account and point the camera at their code. Then choose"),
-            Row("Reload my rows and add-ons here."),
+            Row("Settings › Reload my rows and add-ons here."),
             Row("────────────────────"),
             Row("Paste a link they sent you", "►", action = { askPaste() }),
         )
