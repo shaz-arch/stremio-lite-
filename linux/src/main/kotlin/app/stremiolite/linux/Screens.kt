@@ -757,7 +757,7 @@ object Details {
         rows += Row(info("Type", if (collection) "Collection" else if (f.type == "movie") "Movie" else if (f.type == "series") "Series" else f.type))
         if (f.year.isNotBlank()) rows += Row(info("Year", f.year))
         val scores = app.stremiolite.Ratings.known(f.id)
-        if (scores != null && scores.line.isNotEmpty()) app.stremiolite.Ratings.lines(scores, Prefs.ratingsConfig(), maxOf(24, App.columns() - 24)).forEachIndexed { i, l -> rows += Row(info(if (i == 0) "Ratings" else "", l)) }
+        if (scores != null && (scores.scores.isNotEmpty() || scores.overall > 0)) app.stremiolite.Ratings.lines(scores, Prefs.ratingsConfig(), maxOf(24, App.columns() - 24)).forEachIndexed { i, l -> rows += Row(info(if (i == 0) "Ratings" else "", l)) }
         else if (f.rating.isNotBlank()) rows += Row(info("IMDb rating", "★ ${f.rating}"))
         app.stremiolite.Ratings.ageLine(f.certification, scores).takeIf { it.isNotEmpty() }?.let { rows += Row(info("Age rating", it)) }
         if (f.runtime.isNotBlank()) rows += Row(info("Runtime", f.runtime))

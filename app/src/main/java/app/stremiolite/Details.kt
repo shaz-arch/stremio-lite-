@@ -345,7 +345,7 @@ object Details {
         rows += Row(info("Type", if (isShow) "Series" else if (collection) "Collection" else Catalogs.typeLabel(f.type).removeSuffix("s")))
         if (f.year.isNotBlank()) rows += Row(info("Year", f.year))
         val scores = Ratings.known(f.id)
-        if (scores != null && scores.line.isNotEmpty()) Ratings.lines(scores, Settings.ratingsConfig(app), maxOf(24, app.columns() - 20)).forEachIndexed { i, l -> rows += Row(info(if (i == 0) "Ratings" else "", l)) }
+        if (scores != null && (scores.scores.isNotEmpty() || scores.overall > 0)) Ratings.lines(scores, Settings.ratingsConfig(app), maxOf(24, app.columns() - 20)).forEachIndexed { i, l -> rows += Row(info(if (i == 0) "Ratings" else "", l)) }
         else if (f.rating.isNotBlank()) rows += Row(info("IMDb rating", "★ ${f.rating}"))
         Ratings.ageLine(f.certification, scores).takeIf { it.isNotEmpty() }?.let { rows += Row(info("Age rating", it)) }
         if (f.runtime.isNotBlank()) rows += Row(info("Runtime", f.runtime))
