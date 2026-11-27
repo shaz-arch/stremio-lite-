@@ -89,7 +89,7 @@ object StreamsSetup {
                         App.toast(if (torrentio != null) "Updating Torrentio with your key…" else "Adding Torrentio…")
                         App.async({ app.stremiolite.Stremio.installAddon(key, link) }) { r ->
                             if (r.isFailure) App.toast("Couldn't add it: " + Net.describe(r.exceptionOrNull()!!))
-                            else Home.refresh { s.rows = build(); App.refresh(); App.toast("Torrentio added: used only when AIOStreams gives nothing") }
+                            else Home.refresh { s.rows = build(); App.refresh(); App.toast("Torrentio added: used only when AIOStreams gives nothing"); StreamAlert.maybe(force = true) { Home.redraw() } }
                         }
                     }
                 }

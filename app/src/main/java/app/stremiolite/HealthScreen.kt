@@ -3,6 +3,8 @@ package app.stremiolite
 /** "Is everything working?": runs [Health]'s checks and shows each result, with what to do about a failure. */
 object HealthScreen {
     fun screen(app: MainActivity): Screen {
+        // The Home warning is brought up to date too.
+        StreamAlert.maybe(app, force = true) { Home.redraw() }
         val summary = Row("")
         lateinit var screen: Screen
         var results = mutableMapOf<Int, Health.Outcome>()
