@@ -41,5 +41,5 @@ object StreamCheck {
     }
 
     /** True if the link serves something too small to be the real video. Unknown counts as fine. */
-    fun broken(link: String): Boolean = runCatching { size(link) }.getOrNull()?.let { it in 1 until MIN_BYTES } ?: false
+    fun broken(link: String): Boolean = if (YouTube.idOf(link) != null) false else runCatching { size(link) }.getOrNull()?.let { it in 1 until MIN_BYTES } ?: false
 }

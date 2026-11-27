@@ -25,6 +25,19 @@ object Player {
      * Plays [url] in the player chosen in Settings (or [force] if given), passing [subs] along.
      * VLC takes one subtitle link; Just Player takes a list.
      */
+    /** Opens a YouTube video in a YouTube app: SmartTube, YouTube for TV / Fire TV, or the phone's YouTube. */
+    private fun openYouTube(activity: MainActivity, id: String, title: String) {
+        val link = android.net.Uri.parse(YouTube.watch(id))
+        val pm = activity.packageManager
+        val apps = listOf("com.teamsmart.videomanager.tv", "org.smarttube.stable", "com.liskovsoft.smarttubetv.beta", "com.amazon.firetv.youtube", "com.google.android.youtube.tv", "com.google.android.youtube")
+        val tries = apps.filter { p -> runCatching { pm.getPackageInfo(p, 0) }.isSuccess }.map { p -> android.content.Intent(android.content.Intent.ACTION_VIEW, link).setPackage(p) } +
+            listOf(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("vnd.youtube:$id")), android.content.Intent(android.content.Intent.ACTION_VIEW, link))
+        for (i in tries) {
+            if (runCatching { activity.startActivity(i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess) { activity.toast("Opening in YouTube: $title"); return }
+        }
+        activity.toast("Install a YouTube app (YouTube or SmartTube) to play YouTube videos")
+    }
+
     fun play(
         activity: MainActivity,
         url: String,
@@ -39,6 +52,8 @@ object Player {
             activity.toast("Not allowed on this profile (" + (AgeRatings.of(watch.id)?.ifBlank { null } ?: "not rated yet") + ")")
             return
         }
+        // A YouTube video: VLC can't play those reliably, so a YouTube app does.
+        YouTube.idOf(url)?.let { id -> openYouTube(activity, id, title); return }
         // Skip intros: an episode played from the start begins after an opening recap or intro.
         var startAt = startAt
         if (startAt == 0L && watch != null && ':' in watch.videoId && Settings.skipIntros(activity)) {

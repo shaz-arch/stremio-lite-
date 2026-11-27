@@ -66,7 +66,7 @@ object Downloads {
 
     /** Streams worth downloading, best first: cached, not a cam, at or below [cap], smallest file at the best height. */
     fun candidates(found: List<Stream>, minutes: Double, cap: Int): List<Stream> {
-        val ok = found.filter { it.cached != false }.filter { Best.score(it, minutes) != null }
+        val ok = found.filter { it.cached != false && YouTube.idOf(it.url) == null }.filter { Best.score(it, minutes) != null }
         val within = ok.filter { it.rank in 1..cap }.ifEmpty { ok }
         return within.sortedWith(compareBy<Stream>({ -it.rank }, { if (it.sizeMb > 0) it.sizeMb else Double.MAX_VALUE }, { it.order }))
     }

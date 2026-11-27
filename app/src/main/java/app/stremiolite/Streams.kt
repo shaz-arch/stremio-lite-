@@ -107,6 +107,9 @@ object Streams {
                             val web = StreamParse.webLink(o, a)
                             when {
                                 web != null -> if (links.none { it.second == web.second }) links += web
+                                // A YouTube video by its id: opened in the YouTube app.
+                                link.isBlank() && o.optString("ytId").isNotBlank() ->
+                                    StreamParse.addUnique(found, StreamParse.parse(o, YouTube.watch(o.optString("ytId")), shortName(a.name), found.size))
                                 link.isBlank() || !link.startsWith("http") ->
                                     if (o.has("infoHash")) hiddenTorrent++
                                 else -> StreamParse.addUnique(found, StreamParse.parse(o, link, shortName(a.name), found.size))
