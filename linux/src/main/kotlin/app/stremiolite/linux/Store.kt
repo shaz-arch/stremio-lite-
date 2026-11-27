@@ -145,6 +145,18 @@ object Prefs {
     var clock: Int
         get() = data().optInt("clock", 0)
         set(v) { data().put("clock", v); save() }
+    /** Ricing: lines, frame, banner and bars ([app.stremiolite.Rice.Config]), shared like the theme. */
+    var rice: app.stremiolite.Rice.Config
+        get() = app.stremiolite.Rice.read(data().optString("rice", "").ifEmpty { null })
+        set(v) { data().put("rice", v.json()); save() }
+    /** Your own colours (#rrggbb ×6), shared like the theme. */
+    var customTheme: String
+        get() = data().optString("customTheme", "")
+        set(v) { data().put("customTheme", v); save() }
+    /** Use the terminal's own colours (kitty's theme, its see-through background): this computer only. */
+    var termColours: Boolean
+        get() = data().optBoolean("termColours", false)
+        set(v) { data().put("termColours", v); save() }
     var hideWatched: Boolean
         get() = data().optBoolean("hideWatched", false)
         set(v) { data().put("hideWatched", v); save() }
@@ -353,11 +365,11 @@ object Prefs {
     private const val SYNC_ID = "stremiolite:settings"
 
     /** Shared settings this build knows; one this computer has never had is always taken from the account. */
-    private val SHARED = listOf("theme", "subLang", "autoNext", "clock", "hideWatched", "layout", "autoFollow", "liveTv", "playlists", "liveFavs", "liveGuide", "liveFreeHide", "newsOn", "comingOn", "sleepOnHome", "homeHidden", "ratingsOrder", "ratingsVotes", "ratingsPercent", "newsFeeds", "newsHide", "tmdbKey", "watchRegion", "geminiKey")
+    private val SHARED = listOf("theme", "subLang", "autoNext", "clock", "hideWatched", "layout", "autoFollow", "liveTv", "playlists", "liveFavs", "liveGuide", "liveFreeHide", "newsOn", "comingOn", "sleepOnHome", "homeHidden", "ratingsOrder", "ratingsVotes", "ratingsPercent", "newsFeeds", "newsHide", "tmdbKey", "watchRegion", "geminiKey", "rice", "customTheme")
     /** Synced with your own devices, but never sent to someone else with "Share my setup". */
     private val NOT_SHARED = setOf("playlists", "liveFavs", "liveGuide", "tmdbKey", "geminiKey")
     /** The look: shared by default, or kept to this computer ("lookLocal", which itself never syncs). */
-    private val LOOK = setOf("theme", "clock")
+    private val LOOK = setOf("theme", "clock", "rice", "customTheme")
 
     var lookLocal: Boolean
         get() = data().optBoolean("lookLocal", false)
@@ -415,7 +427,74 @@ object Prefs {
 }
 
 object Look {
-    fun theme(): Theme = themes.getOrElse(Prefs.theme) { themes[0] }
+    /** The shared choices: the six, then "Your own" (index 6). */
+    val themeCount get() = themes.size + 1
+    const val OWN = 6
+
+    fun colours(): app.stremiolite.Rice.Colours = app.stremiolite.Rice.readColours(Prefs.customTheme) ?: app.stremiolite.Rice.DEFAULT
+
+    fun theme(): Theme = when {
+        Prefs.termColours -> terminalTheme
+        Prefs.theme == OWN -> ownTheme(colours())
+        else -> themes.getOrElse(Prefs.theme) { themes[0] }
+    }
+
+    fun themeName() = when { Prefs.termColours -> "Terminal colours"; Prefs.theme == OWN -> "Your own"; else -> theme().name }
+
+    private fun c(hex: String) = app.stremiolite.Rice.rgb(hex).let { (r, g, b) -> com.googlecode.lanterna.TextColor.RGB(r, g, b) }
+    private fun ownTheme(k: app.stremiolite.Rice.Colours) = Theme("Your own", c(k.bg), c(k.text), c(k.dim), c(k.title), c(k.bar), c(k.barText))
+
+    /** kitty's own palette: its background (see-through if kitty is), text, color8, color3 and color4; the cursor line reversed. */
+    private val terminalTheme = com.googlecode.lanterna.TextColor.ANSI.let { a ->
+        Theme("Terminal colours", a.DEFAULT, a.DEFAULT, a.BLACK_BRIGHT, a.YELLOW, a.BLUE, a.DEFAULT, reverse = true)
+    }
+
+    // ---- the theme file (~/.config/stremonino/theme.conf) ----------------------------------------
+
+    val themeFile: java.io.File by lazy {
+        val base = System.getenv("XDG_CONFIG_HOME")?.takeIf { it.isNotBlank() } ?: (System.getProperty("user.home") + "/.config")
+        java.io.File(base, "stremonino/theme.conf")
+    }
+    private var seen = 0L
+    private var checkedAt = 0L
+
+    /** Sets your own colours (and writes the file). */
+    fun setColours(k: app.stremiolite.Rice.Colours) {
+        Prefs.customTheme = k.joined(); Prefs.theme = OWN; Prefs.syncOut()
+        runCatching { themeFile.parentFile.mkdirs(); themeFile.writeText(k.conf()); seen = themeFile.lastModified() }
+    }
+
+    /** The file changed (edited by hand): take its colours. Called from the main loop; true if it did. */
+    fun checkFile(): Boolean {
+        val now = System.currentTimeMillis()
+        if (now - checkedAt < 2_000) return false
+        checkedAt = now
+        val f = themeFile
+        if (!f.exists()) {
+            // First time with your own colours: write them out so there's a file to edit.
+            if (Prefs.theme == OWN) runCatching { f.parentFile.mkdirs(); f.writeText(colours().conf()); seen = f.lastModified() }
+            return false
+        }
+        val m = f.lastModified()
+        if (seen == 0L) { seen = m; if (Prefs.customTheme.isNotBlank()) return false }
+        if (m == seen) return false
+        seen = m
+        val k = app.stremiolite.Rice.parseConf(runCatching { f.readText() }.getOrDefault(""), colours())
+        if (k.joined() == Prefs.customTheme && Prefs.theme == OWN) return false
+        Prefs.customTheme = k.joined(); Prefs.theme = OWN; Prefs.syncOut()
+        return true
+    }
+
+    /** kitty's colours, from ~/.config/kitty/kitty.conf and what it includes (like current-theme.conf). */
+    fun kittyColours(): app.stremiolite.Rice.Colours? {
+        val base = System.getenv("XDG_CONFIG_HOME")?.takeIf { it.isNotBlank() } ?: (System.getProperty("user.home") + "/.config")
+        val dir = java.io.File(base, "kitty")
+        val conf = java.io.File(dir, "kitty.conf").takeIf { it.exists() } ?: return null
+        return app.stremiolite.Rice.fromKitty(conf.readText(), { p ->
+            val f = java.io.File(p.replaceFirst("~", System.getProperty("user.home"))).let { if (it.isAbsolute) it else java.io.File(dir, p) }
+            runCatching { f.readText() }.getOrNull()
+        })
+    }
 
     /** The same clock choices as the phone and stick (shared through the account); empty pattern = off. */
     class Clock(val name: String, val pattern: String)

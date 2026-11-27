@@ -1106,9 +1106,12 @@ object Settings {
                     App.toast(if (Prefs.lookLocal) "This computer keeps its own look" else "Your look is now shared with your other devices")
                     build()
                 }),
-                Row("Theme", "◄ ${Look.theme().name} ►", action = {
-                    Prefs.theme = (Prefs.theme + 1) % themes.size; Prefs.syncOut(); build()
+                Row("Theme", "◄ ${Look.themeName()} ►", action = {
+                    if (Prefs.termColours) { Prefs.termColours = false }
+                    else Prefs.theme = (Prefs.theme + 1) % Look.themeCount
+                    Prefs.syncOut(); build()
                 }),
+                *RiceUi.rows { build() }.toTypedArray(),
                 Row("Text size", "your terminal's (kitty: ctrl+shift+= / −)"),
                 Row("Clock", "◄ ${Look.clock().name} ►", action = {
                     Prefs.clock = (Look.clocks.indexOf(Look.clock()) + 1) % Look.clocks.size; Prefs.syncOut(); build()

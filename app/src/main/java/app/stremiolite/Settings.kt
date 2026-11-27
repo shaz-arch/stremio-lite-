@@ -61,7 +61,9 @@ object Settings {
     private val INT_KEYS = listOf("subLang", "theme", "clock", "textSize")
     private val BOOL_KEYS = listOf("autoNext", "hideWatched", "autoFollow", "liveTv", "newsOn", "comingOn", "sleepOnHome", "ratingsVotes", "ratingsPercent")
     /** The look: shared by default, or kept to this device ("lookLocal", which itself never syncs). */
-    private val LOOK_KEYS = setOf("theme", "clock", "textSize")
+    private val LOOK_KEYS = setOf("theme", "clock", "textSize", "rice", "customTheme")
+    /** Ricing and your own colours: text settings that go with the look. */
+    private val LOOK_TEXT = listOf("rice", "customTheme")
 
     fun lookLocal(c: Context) = prefs(c).getBoolean("lookLocal", false)
 
@@ -78,6 +80,7 @@ object Settings {
         o.put("homeHidden", JSONArray(hiddenOnHome(c).toList()))
         p.getString("layout", null)?.let { o.put("layout", it) }
         p.getString("ratingsOrder", null)?.let { o.put("ratingsOrder", it) }
+        LOOK_TEXT.forEach { k -> if (shares(c, k)) p.getString(k, null)?.let { o.put(k, it) } }
         return o
     }
 
@@ -90,6 +93,7 @@ object Settings {
         e.putStringSet("hiddenRows", hiddenRows(c) + theirs + alsoHide)
         if (o.has("layout")) e.putString("layout", o.optString("layout"))
         if (o.has("ratingsOrder")) e.putString("ratingsOrder", o.optString("ratingsOrder"))
+        LOOK_TEXT.forEach { k -> if (o.has(k)) e.putString(k, o.optString(k)) }
         e.apply()
         syncOut(c)
     }
@@ -169,6 +173,7 @@ object Settings {
         INT_KEYS.forEach { k -> if (o.has(k) && shares(c, k)) e.putInt(k, o.optInt(k)) }
         BOOL_KEYS.forEach { k -> if (o.has(k)) e.putBoolean(k, o.optBoolean(k)) }
         if (o.has("ratingsOrder")) e.putString("ratingsOrder", o.optString("ratingsOrder"))
+        LOOK_TEXT.forEach { k -> if (o.has(k) && shares(c, k)) e.putString(k, o.optString(k)) }
         if (o.has("layout")) e.putString("layout", o.optString("layout"))
         o.optJSONArray("homeHidden")?.let { a -> e.putStringSet("homeHidden", (0 until a.length()).map { a.optString(it) }.toSet()) }
         if (o.has("playlists")) e.putString("playlists", o.optString("playlists"))
@@ -643,7 +648,10 @@ object Settings {
                 Row("Arrange your Index", "►", opens = { Arrange.screen(app) }),
                 Row("Hide rows", "►", opens = { rowsScreen(app) }),
                 Row("──── Look ────"),
-                lookRow, themeRow, sizeRow, clockRow, watchedRow,
+                lookRow, themeRow,
+                Row("Your own colours", (if (prefs(app).getInt("theme", 0) == Look.OWN) "in use  " else "") + "►", opens = { RiceUi.colours(app) }),
+                Row("Lines, frame, banner and bars", "►", opens = { RiceUi.style(app) }),
+                sizeRow, clockRow, watchedRow,
                 Row("Ratings", "which scores, order  ►", opens = { ratingsScreen(app) }),
                 Row("──── Configuration ────"),
                 Row("Set up Stremonino", "step by step  ►", opens = { SetupWizard.screen(app) }),

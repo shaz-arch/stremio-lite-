@@ -195,7 +195,10 @@ class MainActivity : Activity() {
     /** Shows the time, then wakes again just after the next minute (or second, when showing seconds) starts. */
     fun updateClock() {
         clockTick?.let { clockHandler.removeCallbacks(it) }
-        val view = findViewById<TextView>(R.id.clock)
+        // Ricing: the clock can sit in the top bar instead.
+        val atTop = Look.rice(this).clockTop
+        val view = findViewById<TextView>(if (atTop) R.id.clock_top else R.id.clock)
+        findViewById<TextView>(if (atTop) R.id.clock else R.id.clock_top).visibility = View.GONE
         val pattern = Look.clock(this).pattern
         if (pattern.isEmpty()) { view.visibility = View.GONE; return }
         view.visibility = View.VISIBLE
@@ -325,9 +328,10 @@ class MainActivity : Activity() {
         val t = Look.theme(this)
         val sp = Look.size(this).sp
         window.decorView.setBackgroundColor(t.background)
-        findViewById<View>(R.id.root).setBackgroundColor(t.background)
-        findViewById<View>(R.id.rule_top).setBackgroundColor(t.bar)
-        findViewById<View>(R.id.rule_bottom).setBackgroundColor(t.bar)
+        RiceLook.applyLook(this, findViewById(R.id.root), findViewById(R.id.rule_top), findViewById(R.id.rule_bottom), t)
+        findViewById<TextView>(R.id.clock_top).apply {
+            setTextColor(t.dim); setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, sp)
+        }
         titleView.setTextColor(t.title)
         titleView.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, sp + 2)
         counterView.setTextColor(t.dim)
@@ -408,10 +412,15 @@ class MainActivity : Activity() {
 
     private fun render() {
         val screen = stack.last()
+        val rice = Look.rice(this)
         titleView.text = buildString {
-            append(screen.title.uppercase())
+            // Ricing: the whole way here (⌂ › Settings › Look), its start cut off if too long.
+            if (rice.path && stack.size > 1) append((listOf("⌂") + stack.drop(1).map { it.title }).joinToString(" › ").uppercase())
+            else append(screen.title.uppercase())
             if (screen.tag.isNotEmpty()) append("   [").append(screen.tag).append(']')
         }
+        titleView.ellipsize = if (rice.path) android.text.TextUtils.TruncateAt.START else android.text.TextUtils.TruncateAt.END
+        RiceLook.applyBars(this, findViewById(R.id.banner), stack.size == 1, Look.theme(this), Look.size(this).sp)
         adapter.rows = screen.rows
         adapter.notifyDataSetChanged()
         screen.moveTo = null
@@ -423,10 +432,12 @@ class MainActivity : Activity() {
 
     private fun updateCounter(position: Int) {
         val count = adapter.count
-        counterView.text = if (count == 0) "" else "${position + 1}/$count"
+        val rice = Look.rice(this)
+        counterView.text = if (count == 0 || !rice.counter) "" else "${position + 1}/$count"
         // What ▶ does on this line: add to basket, play, or nothing.
         val row = stack.lastOrNull()?.rows?.getOrNull(position)
-        findViewById<TextView>(R.id.footer).text = "↑↓ move   OK open   " + (PlayKind.of(row)?.let { "▶ $it   " } ?: "") + "◄► page   BACK back   ☰ search"
+        findViewById<TextView>(R.id.footer).text = if (!rice.hints) "" else
+            Rice.style("↑↓ move   OK open   " + (PlayKind.of(row)?.let { "▶ $it   " } ?: "") + "◄► page   BACK back   ☰ search", rice)
     }
 
     /** Left / Right jump a page at a time in long lists. */
@@ -557,15 +568,16 @@ class MainActivity : Activity() {
             // episode title is cut short (…) instead of squeezing the name on the left down to a few letters.
             val half = if (stacked || parent.width <= 0) Int.MAX_VALUE else (parent.width * 0.55f).toInt()
             if (holder.detail.maxWidth != half) holder.detail.maxWidth = half
-            holder.label.text = row.label
-            val detail = when {
+            val rice = Look.rice(context)
+            holder.label.text = Rice.style(row.label, rice)
+            val detail = Rice.style(when {
                 row.detail.isNotEmpty() -> row.detail
                 row.opens != null -> "►"
                 else -> ""
-            }
+            }, rice)
             if (stacked) {
                 // A lone arrow needs no line of its own on a touch screen.
-                val d = detail.removeSuffix("►").trim().takeIf { t -> t.any { it.isLetterOrDigit() } } ?: ""
+                val d = detail.removeSuffix("►").removeSuffix(">").trim().takeIf { t -> t.any { it.isLetterOrDigit() } } ?: ""
                 holder.detail.text = d
                 holder.detail.visibility = if (d.isEmpty()) View.GONE else View.VISIBLE
             } else {

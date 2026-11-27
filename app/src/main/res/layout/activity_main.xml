@@ -29,6 +29,17 @@
             android:textStyle="bold" />
 
         <TextView
+            android:id="@+id/clock_top"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="16dp"
+            android:fontFamily="monospace"
+            android:singleLine="true"
+            android:textColor="@color/dos_grey"
+            android:textSize="20sp"
+            android:visibility="gone" />
+
+        <TextView
             android:id="@+id/counter"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -44,6 +55,19 @@
         android:layout_marginTop="6dp"
         android:layout_marginBottom="6dp"
         android:background="@color/dos_cyan" />
+
+    <!-- Ricing: the banner on Home (Settings › Look) -->
+    <TextView
+        android:id="@+id/banner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:fontFamily="monospace"
+        android:gravity="center_horizontal"
+        android:includeFontPadding="false"
+        android:lineSpacingExtra="0dp"
+        android:textColor="@color/dos_yellow"
+        android:visibility="gone" />
 
     <LinearLayout
         android:layout_width="match_parent"
