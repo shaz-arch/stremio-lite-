@@ -347,12 +347,12 @@ object Details {
         val scores = Ratings.known(f.id)
         if (scores != null && scores.line.isNotEmpty()) Ratings.lines(scores, maxOf(24, app.columns() - 20)).forEachIndexed { i, l -> rows += Row(info(if (i == 0) "Ratings" else "", l)) }
         else if (f.rating.isNotBlank()) rows += Row(info("IMDb rating", "★ ${f.rating}"))
-        if (scores != null && scores.age.isNotEmpty()) rows += Row(info("Age rating", scores.age))
+        Ratings.ageLine(f.certification, scores).takeIf { it.isNotEmpty() }?.let { rows += Row(info("Age rating", it)) }
         if (f.runtime.isNotBlank()) rows += Row(info("Runtime", f.runtime))
         if (f.genres.isNotEmpty()) rows += Row(info("Genres", f.genres.joinToString(", ")))
         if (f.director.isNotEmpty()) rows += Row(info("Director", f.director.take(3).joinToString(", ")))
         if (f.cast.isNotEmpty()) rows += Row(info("Cast", f.cast.take(4).joinToString(", ")))
-        DetailExtras.facts(f, DetailExtras.today()).filter { !(it.first == "Age rating" && scores?.age?.isNotEmpty() == true) }.forEach { (k, v) -> rows += Row(info(k, v)) }
+        DetailExtras.facts(f, DetailExtras.today()).filter { it.first != "Age rating" }.forEach { (k, v) -> rows += Row(info(k, v)) }
         DetailExtras.history(History.infos(app).firstOrNull { it.id == f.id }).forEach { (k, v) -> rows += Row(info(k, v)) }
         if (f.imdbUrl.isNotBlank()) rows += LinkOut.row(app, "IMDb page", "IMDb: ${f.name}", f.imdbUrl)
         Trailers.row(app, f)?.let { rows += it }

@@ -759,12 +759,12 @@ object Details {
         val scores = app.stremiolite.Ratings.known(f.id)
         if (scores != null && scores.line.isNotEmpty()) app.stremiolite.Ratings.lines(scores, maxOf(24, App.columns() - 24)).forEachIndexed { i, l -> rows += Row(info(if (i == 0) "Ratings" else "", l)) }
         else if (f.rating.isNotBlank()) rows += Row(info("IMDb rating", "★ ${f.rating}"))
-        if (scores != null && scores.age.isNotEmpty()) rows += Row(info("Age rating", scores.age))
+        app.stremiolite.Ratings.ageLine(f.certification, scores).takeIf { it.isNotEmpty() }?.let { rows += Row(info("Age rating", it)) }
         if (f.runtime.isNotBlank()) rows += Row(info("Runtime", f.runtime))
         if (f.genres.isNotEmpty()) rows += Row(info("Genres", f.genres.joinToString(", ")))
         if (f.director.isNotEmpty()) rows += Row(info("Director", f.director.joinToString(", ")))
         if (f.cast.isNotEmpty()) rows += Row(info("Cast", f.cast.take(5).joinToString(", ")))
-        DetailExtras.facts(f, DetailExtras.today()).filter { !(it.first == "Age rating" && scores?.age?.isNotEmpty() == true) }.forEach { (k, v) -> rows += Row(info(k, v)) }
+        DetailExtras.facts(f, DetailExtras.today()).filter { it.first != "Age rating" }.forEach { (k, v) -> rows += Row(info(k, v)) }
         DetailExtras.history(Lib.info(f.id)).forEach { (k, v) -> rows += Row(info(k, v)) }
         if (f.imdbUrl.isNotBlank()) rows += Row("IMDb page", "opens browser  ►", action = { WebLink.open(f.imdbUrl) })
         Trailers.row(f)?.let { rows += it }

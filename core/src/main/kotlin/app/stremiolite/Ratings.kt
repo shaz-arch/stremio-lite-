@@ -25,6 +25,15 @@ object Ratings {
         return out
     }
 
+    /** "15 (15+)", "PG (8+)", "U (all ages)". */
+    fun withAge(c: String): String = c + (KidsLock.ageOf(c)?.let { a -> if (a > 0) " ($a+)" else " (all ages)" } ?: "")
+
+    /**
+     * The age rating to show: the title's own (from your metadata add-on, which follows your country,
+     * so UK first), and MDBList's US one only when there's none.
+     */
+    fun ageLine(own: String, r: Result?): String = own.trim().takeIf { it.isNotEmpty() }?.let { withAge(it) } ?: r?.age.orEmpty()
+
     fun known(id: String): Result? = cache[id]?.takeIf { System.currentTimeMillis() - it.first < KEEP_MS }?.second
 
     /** Blocking; only IMDb ids (tt…). An empty result if MDBList has nothing. */
@@ -61,7 +70,7 @@ object Ratings {
             }
         }
         val cert = o.optString("certification").trim().takeIf { it.isNotEmpty() && it != "null" }
-        val age = cert?.let { c -> c + (KidsLock.ageOf(c)?.let { a -> if (a > 0) " ($a+)" else " (all ages)" } ?: "") } ?: ""
+        val age = cert?.let { withAge(it) } ?: ""
         return Result(parts.joinToString(" · "), age)
     }
 }
