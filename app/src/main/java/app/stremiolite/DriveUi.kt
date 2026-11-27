@@ -236,10 +236,10 @@ object SharedFiles {
         ?.takeIf { System.currentTimeMillis() - it.at < 3 * 86_400_000L }
 
     /** The computer's share, and a phone's (not on the phone that's sharing). */
-    fun homeRows(app: MainActivity): List<Row> = listOfNotNull(
-        share(app, LocalFiles.Record.ID),
-        share(app, LocalFiles.Record.PHONE_ID)?.takeIf { !PhoneShare.on(app) },
-    ).map { s -> Row("Files on ${s.name}", "►", opens = { screen(app, s) }) }
+    fun sources(app: MainActivity): List<Drives.Source> = listOfNotNull(
+        share(app, LocalFiles.Record.ID)?.let { s -> Drives.Source("computer", s.name) { screen(app, s) } },
+        share(app, LocalFiles.Record.PHONE_ID)?.takeIf { !PhoneShare.on(app) }?.let { s -> Drives.Source("phone", s.name) { screen(app, s) } },
+    )
 
     private fun fileRow(app: MainActivity, share: LocalFiles.Record.Share, f: LocalFiles.Shared): Row {
         val go = { Player.play(app, LocalFiles.playUrl(share, f), f.name.substringBeforeLast('.')) }
@@ -410,5 +410,54 @@ object PhoneShare {
     private fun stop(app: MainActivity) {
         server?.stop(); server = null
         History.putRemote(app, LocalFiles.Record.record(History.rawRemote(app, LocalFiles.Record.PHONE_ID), null, LocalFiles.Record.PHONE_ID))
+    }
+}
+
+/** Google Drive and the drives shared on your Wi-Fi: one "Drives" line on Home, each one shown there or not. */
+object Drives {
+    class Source(val key: String, val name: String, val opens: () -> Screen)
+
+    private fun prefs(c: Context) = Profiles.prefsFor(c, "settings")
+    private fun off(c: Context): Set<String> = prefs(c).getStringSet("drivesOffHome", emptySet()) ?: emptySet()
+    private fun onHome(c: Context, key: String) = key !in off(c)
+    private fun setOnHome(c: Context, key: String, on: Boolean) = prefs(c).edit().putStringSet("drivesOffHome", if (on) off(c) - key else off(c) + key).apply()
+
+    fun sources(app: MainActivity): List<Source> =
+        listOfNotNull(if (DriveUi.connected(app)) Source("gdrive", "Google Drive") { DriveUi.screen(app) } else null) + SharedFiles.sources(app)
+
+    fun homeRow(app: MainActivity): Row? {
+        val shown = sources(app).filter { onHome(app, it.key) }
+        if (shown.isEmpty()) return null
+        return Row("Drives", "${shown.size}  ►", opens = { Screen("Drives", shown.map { Row(it.name, "►", opens = it.opens) }) })
+    }
+
+    fun settingsRow(app: MainActivity): Row = Row("Drives", sources(app).size.let { if (it == 0) "none" else "$it" } + "  ►", opens = { settings(app) })
+
+    private fun settings(app: MainActivity): Screen {
+        lateinit var s: Screen
+        fun build(): List<Row> {
+            val rows = mutableListOf<Row>()
+            fun toggle(src: Source) {
+                rows += Row("   On Home", "◄ ${if (onHome(app, src.key)) "Shown" else "Hidden"} ►", action = {
+                    setOnHome(app, src.key, !onHome(app, src.key)); Home.redraw(); s.rows = build(); app.refresh(s)
+                })
+            }
+            rows += Row("──── Google Drive ────")
+            rows += DriveUi.settingsRow(app)
+            sources(app).firstOrNull { it.key == "gdrive" }?.let { toggle(it) }
+            rows += Row("──── Shared on your Wi-Fi ────")
+            val shared = SharedFiles.sources(app)
+            if (shared.isEmpty()) rows += Row("None.")
+            shared.forEach { src -> rows += Row(src.name, "►", opens = src.opens); toggle(src) }
+            if (app.isPhone) {
+                rows += Row("──── This phone ────")
+                PhoneShare.row(app)?.let { rows += it }
+                PhoneShare.foldersRow(app)?.let { rows += it }
+            }
+            return rows
+        }
+        s = Screen("Drives", build())
+        s.onShow = { s.rows = build(); app.refresh(s) }
+        return s
     }
 }

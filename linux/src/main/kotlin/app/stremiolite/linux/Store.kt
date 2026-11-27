@@ -95,6 +95,10 @@ object Prefs {
         get() = data().optBoolean("receiveSends", false)
         set(v) { data().put("receiveSends", v); save() }
     /** My files: your own folders (this computer only). */
+    /** Drives you've taken off Home on this computer ("gdrive", "myfiles", "phone"). */
+    var drivesOffHome: Set<String>
+        get() = data().optJSONArray("drivesOffHome")?.let { a -> (0 until a.length()).map { a.optString(it) }.toSet() }.orEmpty()
+        set(v) { data().put("drivesOffHome", org.json.JSONArray(v.toList())); save() }
     var myFolders: List<String>
         get() = data().optJSONArray("myFolders")?.let { a -> (0 until a.length()).map { a.optString(it) }.filter { it.isNotEmpty() } }.orEmpty()
         set(v) { data().put("myFolders", org.json.JSONArray(v)); save() }

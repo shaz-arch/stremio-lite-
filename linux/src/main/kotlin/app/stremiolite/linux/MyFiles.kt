@@ -9,7 +9,7 @@ object MyFiles {
 
     fun homeRow(): Row? = if (Prefs.myFolders.isEmpty()) null else Row("My files", "${Prefs.myFolders.size} folder" + (if (Prefs.myFolders.size == 1) "" else "s") + "  ►", opens = { root() })
 
-    private fun root(): Screen {
+    fun root(): Screen {
         val rows = folders().map { d ->
             if (d.isDirectory) Row(d.name.ifEmpty { d.path }, "►", opens = { folder(d) })
             else Row(d.name.ifEmpty { d.path }, "not plugged in or not mounted")
@@ -147,7 +147,7 @@ object Cast {
 object PhoneFiles {
     private fun share() = LocalFiles.Record.parse(Lib.raw(LocalFiles.Record.PHONE_ID)?.toString())?.takeIf { System.currentTimeMillis() - it.at < 3 * 86_400_000L }
 
-    fun homeRow(): Row? { val s = share() ?: return null; return Row("Files on ${s.name}", "►", opens = { screen(s) }) }
+    fun source(): Drives.Source? { val s = share() ?: return null; return Drives.Source("phone", s.name) { screen(s) } }
 
     private fun screen(sh: LocalFiles.Record.Share): Screen {
         val s = Screen("Files on ${sh.name}", listOf(Row("Asking ${sh.name}…")))
@@ -172,6 +172,52 @@ object PhoneFiles {
             }.onFailure { s.rows = listOf(Row("Couldn't reach ${sh.name}."), Row("Is Stremonino open on it, with the screen on, on the same Wi-Fi?")) }
             App.refresh()
         }
+        return s
+    }
+}
+
+/** Google Drive, My files and a phone sharing on your Wi-Fi: one "Drives" line on Home, each one shown there or not. */
+object Drives {
+    class Source(val key: String, val name: String, val opens: () -> Screen)
+
+    private fun onHome(key: String) = key !in Prefs.drivesOffHome
+
+    fun sources(): List<Source> = listOfNotNull(
+        if (DriveUi.connected()) Source("gdrive", "Google Drive") { DriveUi.screen() } else null,
+        if (Prefs.myFolders.isNotEmpty()) Source("myfiles", "My files") { MyFiles.root() } else null,
+        PhoneFiles.source(),
+    )
+
+    fun homeRow(): Row? {
+        val shown = sources().filter { onHome(it.key) }
+        if (shown.isEmpty()) return null
+        return Row("Drives", "${shown.size}  ►", opens = { Screen("Drives", shown.map { Row(it.name, "►", opens = it.opens) }) })
+    }
+
+    fun settingsRow() = Row("Drives", sources().size.let { if (it == 0) "none" else "$it" } + "  ►", opens = { settings() })
+
+    private fun settings(): Screen {
+        lateinit var s: Screen
+        fun build() {
+            val rows = mutableListOf<Row>()
+            fun toggle(key: String) {
+                if (sources().none { it.key == key }) return
+                rows += Row("   On Home", "◄ ${if (onHome(key)) "Shown" else "Hidden"} ►", action = {
+                    Prefs.drivesOffHome = if (onHome(key)) Prefs.drivesOffHome + key else Prefs.drivesOffHome - key
+                    Home.redraw(); build()
+                })
+            }
+            rows += Row("──── Google Drive ────")
+            rows += DriveUi.settingsRow(); toggle("gdrive")
+            rows += Row("──── This computer ────")
+            rows += MyFiles.settingsRow(); toggle("myfiles")
+            rows += Row("──── Shared on your Wi-Fi ────")
+            val phone = PhoneFiles.source()
+            if (phone == null) rows += Row("None.") else { rows += Row(phone.name, "►", opens = phone.opens); toggle("phone") }
+            s.rows = rows; App.refresh()
+        }
+        s = Screen("Drives", emptyList())
+        s.onShow = { build() }
         return s
     }
 }

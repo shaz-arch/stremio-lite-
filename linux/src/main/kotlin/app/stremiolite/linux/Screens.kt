@@ -219,9 +219,7 @@ object Home {
             rows += Row("Continue watching", if (cw.isEmpty()) "nothing yet" else "${cw.size}  ►", opens = { continueScreen() })
             rows += Row("Watched", Watched.list().size.let { if (it == 0) "" else "$it  ►" }, opens = { watchedScreen() })
             rows += Row("Calendar", NewEpisodes.weekCount()?.let { if (it == 0) "nothing this week  ►" else "$it this week  ►" } ?: "", opens = { NewEpisodes.calendar() })
-            DriveUi.homeRow()?.let { rows += it }
-            MyFiles.homeRow()?.let { rows += it }
-            PhoneFiles.homeRow()?.let { rows += it }
+            Drives.homeRow()?.let { rows += it }
             if (Prefs.liveTv && !KidsGuard.hides()) rows += Row("Live TV", Live.homeDetail(), opens = { Live.screen() })
             rows += ForYouUi.homeRows()
             if (list != null) {
@@ -1045,12 +1043,12 @@ object Settings {
                 Row("Skip intros and recaps (mpv)", "◄ ${if (Prefs.skipIntros) "On" else "Off"} ►", action = {
                     Prefs.skipIntros = !Prefs.skipIntros; build()
                 }),
-                DriveUi.settingsRow(),
-                MyFiles.settingsRow(),
                 Row("Play on a TV on my Wi-Fi (DLNA)", "◄ ${if (Prefs.castDlna) "On" else "Off: mpv"} ►", action = { Prefs.castDlna = !Prefs.castDlna; build() }),
                 Row("Play what's sent to the TV", "◄ ${if (Prefs.receiveSends) "On: this computer too" else "Off"} ►", action = {
                     Prefs.receiveSends = !Prefs.receiveSends; build()
                 }),
+                Row("──── Drives ────"),
+                Drives.settingsRow(),
                 Row("──── Look ────"),
                 Row("Theme, text size and clock", "◄ ${if (Prefs.lookLocal) "This computer only" else "Same on all devices"} ►", action = {
                     Prefs.lookLocal = !Prefs.lookLocal
