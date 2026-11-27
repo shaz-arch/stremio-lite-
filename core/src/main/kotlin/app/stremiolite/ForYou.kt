@@ -47,7 +47,8 @@ object ForYou {
     fun build(key: String, recent: List<Seed>, favourites: List<Seed>, exclude: Set<String>, rows: Int = 3): Result {
         val seeds = recent.take(6)
         val got = seeds.associateWith { recs(key, it) }
-        val favGot = favourites.filter { f -> seeds.none { it.id == f.id } }.take(5).associateWith { recs(key, it) }
+        // Favourites you've also watched lately still count (their lists are already fetched).
+        val favGot = favourites.take(5).associateWith { f -> seeds.firstOrNull { it.id == f.id }?.let { got[it] } ?: recs(key, f) }
         val seedIds = (recent + favourites).map { it.id }.toSet()
         fun ok(p: Pick) = p.id !in exclude && p.id !in seedIds
 
@@ -66,8 +67,9 @@ object ForYou {
             s to got.getValue(s).asSequence().map { pick(key, it) }.filter { ok(it) }.take(PER_ROW).toList()
         }.filter { it.second.size >= 3 }
         because.forEach { (_, l) -> shown += l.map { it.id } }
-        val favs = favGot.values.flatMap { it.take(8) }.distinctBy { it.kind + it.tmdb }.asSequence()
-            .map { pick(key, it) }.filter { ok(it) && it.id !in shown }.take(PER_ROW).toList()
+        val favPool = favGot.values.flatMap { it.take(10) }.distinctBy { it.kind + it.tmdb }.map { pick(key, it) }.filter(::ok)
+        // Fresh titles first; ones already in the rows above only to fill it out.
+        val favs = (favPool.filter { it.id !in shown } + favPool.filter { it.id in shown }).take(PER_ROW)
         return Result(top, because, favs, System.currentTimeMillis())
     }
 
@@ -92,13 +94,14 @@ object ForYou {
     private fun pr(o: JSONObject) = Pick(o.optString("id"), o.optString("type"), o.optString("name"), o.optString("year"))
     private fun list(a: JSONArray?) = a?.let { (0 until it.length()).mapNotNull { i -> it.optJSONObject(i) }.map(::pr) }.orEmpty()
 
-    fun json(r: Result): String = JSONObject().put("at", r.at)
+    fun json(r: Result): String = JSONObject().put("at", r.at).put("v", 2)
         .put("top", JSONArray(r.top.map(::pj)))
         .put("because", JSONArray(r.because.map { (s, l) -> JSONObject().put("id", s.id).put("type", s.type).put("name", s.name).put("list", JSONArray(l.map(::pj))) }))
         .put("favs", JSONArray(r.favourites.map(::pj))).toString()
 
     fun parse(raw: String?): Result? = runCatching {
         val o = JSONObject(raw!!)
+        if (o.optInt("v") < 2) return null   // built before favourites counted: build again
         val b = o.optJSONArray("because")
         Result(list(o.optJSONArray("top")),
             (0 until (b?.length() ?: 0)).mapNotNull { b!!.optJSONObject(it) }.map { Seed(it.optString("id"), it.optString("type"), it.optString("name")) to list(it.optJSONArray("list")) },

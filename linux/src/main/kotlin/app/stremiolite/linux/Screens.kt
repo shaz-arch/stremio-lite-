@@ -1086,6 +1086,7 @@ object Settings {
                 Row("Your add-ons", (Home.all().size.takeIf { it > 0 }?.let { "$it  " } ?: "") + "►", opens = { Addons.screen() }),
                 Row("Your keys", "TMDB, debrid, MDBList, Gemini  ►", opens = { keysScreen() }),
                 Row("──── Share ────"),
+                Row("Share Stremonino", "download links  ►", opens = { AppShare.screen() }),
                 Row("Export my setup to another account", "►", opens = { Share.screen() }),
                 Row("Import a setup from another account", "►", opens = { Share.importScreen() }),
                 Row("──── About ────"),

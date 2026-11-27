@@ -680,3 +680,24 @@ object DeviceCheck {
         return s
     }
 }
+
+/** Settings › Share › Share Stremonino: the download links, to copy or scan. */
+object AppShare {
+    private fun link(label: String, url: String) = Row(label, "copy  ►", action = { Clipboard.copyOrShow(url, "Link") }, opens = null)
+
+    fun screen(): Screen {
+        val s = Screen("Share Stremonino", listOf(
+            Row("Copy all the links", "►", action = { Clipboard.copyOrShow(app.stremiolite.AppLinks.message(), "Links") }),
+            Row("──── Android phone, Fire Stick, Android TV ────"),
+            link("Android app", app.stremiolite.AppLinks.ANDROID),
+            Row(info("In Downloader, type", app.stremiolite.AppLinks.ANDROID.removePrefix("https://"))),
+            Row("──── Linux ────"),
+            link("Linux app", app.stremiolite.AppLinks.LINUX),
+            Row(info("Run it with", "java -jar stremonino-linux.jar")),
+            Row("──── All builds ────"),
+            Row("Releases page", "opens browser  ►", action = { WebLink.open(app.stremiolite.AppLinks.PAGE) }),
+        ))
+        s.qr = qrLines(app.stremiolite.AppLinks.ANDROID)
+        return s
+    }
+}
