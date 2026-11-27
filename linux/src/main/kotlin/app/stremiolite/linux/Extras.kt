@@ -821,3 +821,50 @@ object FinderUi {
         }
     }
 }
+
+/** Settings › Your keys: send them to another device on your Wi-Fi, or receive them from one. */
+object KeyDropUi {
+    private var receiver: app.stremiolite.KeyDrop.Receiver? = null
+    private val K = app.stremiolite.KeyDrop
+
+    fun rows(): List<Row> = listOf(
+        Row("Send my keys to another device", "same Wi-Fi  ►", action = { send() }),
+        Row("Receive keys from another device", "►", opens = { receive() }),
+    )
+
+    private fun receive(): Screen {
+        val status = Row("Starting…")
+        val s = Screen("Receive keys", listOf(status, Row("On the other device (signed in to this account): Settings › Your keys › Send my keys to another device.")))
+        val ip = LocalFiles.lanAddress()
+        if (Account.authKey == null) { status.label = "Sign in first."; return s }
+        if (ip == null) { status.label = "Not on a network: connect to the same Wi-Fi as the other device."; return s }
+        receiver?.stop()
+        val r = K.Receiver { o ->
+            App.post {
+                if (o.optString("tmdb").isNotBlank()) { Prefs.tmdbKey = o.optString("tmdb"); o.optString("region").takeIf { it.isNotBlank() }?.let { Prefs.watchRegion = it } }
+                app.stremiolite.StreamSetup.parseKeys(o.optString("debrid")).takeIf { it.isNotEmpty() }?.let { Prefs.debridKeys = it }
+                o.optString("mdblist").takeIf { it.isNotBlank() }?.let { Prefs.mdblistKey = it }
+                o.optString("gemini").takeIf { it.isNotBlank() }?.let { Prefs.geminiKey = it }
+                Lib.put(K.record(Lib.raw(K.ID)?.toString(), null))
+                status.label = "✓ Keys received"; App.toast("Keys received"); Home.redraw(); App.refresh()
+            }
+        }.also { receiver = it }
+        val port = r.start()
+        Lib.put(K.record(Lib.raw(K.ID)?.toString(), K.Offer("http://$ip:$port/k", r.token, "computer", System.currentTimeMillis())))
+        status.label = "Waiting for 5 minutes for your keys…"
+        return s
+    }
+
+    private fun send() {
+        val key = Account.authKey ?: run { App.toast("Sign in first"); return }
+        val pack = K.pack(Prefs.tmdbKey, Prefs.watchRegion, Prefs.debridKeys, Prefs.mdblistKey, Prefs.geminiKey)
+        App.toast("Looking for the other device…")
+        App.async({
+            val offer = K.parse(app.stremiolite.Sync.pullIds(key, listOf(K.ID)).optJSONObject(0)?.toString())?.takeIf { it.fresh } ?: throw IllegalStateException("none")
+            K.send(offer, pack); offer.device
+        }) { r ->
+            r.onSuccess { d -> App.toast("✓ Keys sent to $d") }
+                .onFailure { e -> App.toast(if (e is IllegalStateException) "Nothing's waiting: on the other device choose Receive keys from another device first" else "Couldn't reach it: same Wi-Fi? (${Net.describe(e)})") }
+        }
+    }
+}

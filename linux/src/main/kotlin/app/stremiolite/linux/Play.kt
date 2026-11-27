@@ -22,14 +22,15 @@ object Play {
     private class Fetch(type: String, id: String, val onChange: () -> Unit) {
         private val tiers = StreamParse.tiers(Home.all().filter { it.supports("stream", type, id) })
         /** The add-ons asked so far: AIOStreams, plus the fail-safes once they're needed. */
-        val streamAddons = tiers.first.toMutableList()
+        private val skipMain = tiers.second.isNotEmpty() && StreamParse.mainDown()
+        val streamAddons = (if (skipMain) tiers.second else tiers.first).toMutableList()
         val subAddons = Home.all().filter { it.supports("subtitles", type, id) }
         val found = mutableListOf<Stream>()
         val subs = mutableListOf<Sub>()
         val notes = mutableListOf<String>()
         var answered = 0
         var subsAnswered = 0
-        var usingFailsafe = false
+        var usingFailsafe = skipMain
         /** Web pages rather than videos ("open in browser", ratings pages): shown as links, never played. */
         val links = mutableListOf<Pair<String, String>>()
         val started = System.currentTimeMillis()
@@ -59,6 +60,7 @@ object Play {
                         }
                     }.onFailure { e -> notes += "${StreamParse.shortName(a.name)}: ${Net.describe(e)}" }
                     // AIOStreams has answered with nothing playable: ask the fail-safes now.
+                    if (done && !usingFailsafe && tiers.second.isNotEmpty()) StreamParse.noteMain(StreamParse.hasPlayable(found))
                     if (done && !usingFailsafe && tiers.second.isNotEmpty() && !StreamParse.hasPlayable(found)) {
                         usingFailsafe = true
                         streamAddons += tiers.second
@@ -71,6 +73,7 @@ object Play {
         }
 
         init {
+            if (skipMain) notes += tiers.first.joinToString(", ") { StreamParse.shortName(it.name) } + " gave nothing a few minutes ago: showing your fail-safes (" + tiers.second.joinToString(", ") { StreamParse.shortName(it.name) } + ")"
             ask(streamAddons)
             subAddons.forEach { a ->
                 val url = a.base + "/subtitles/" + Net.enc(type) + "/" + Net.enc(id) + ".json"

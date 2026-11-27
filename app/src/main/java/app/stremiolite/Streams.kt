@@ -78,14 +78,15 @@ object Streams {
 
         private val tiers = StreamParse.tiers(Home.allAddons().filter { it.supports("stream", type, id) })
         /** The add-ons asked so far: AIOStreams, plus the fail-safes once they're needed. */
-        val addons = tiers.first.toMutableList()
+        private val skipMain = tiers.second.isNotEmpty() && StreamParse.mainDown()
+        val addons = (if (skipMain) tiers.second else tiers.first).toMutableList()
         val found = mutableListOf<Stream>()
         val notes = mutableListOf<String>()
         var answered = 0
         var hiddenTorrent = 0
         var hiddenHeaders = 0
         /** AIOStreams gave nothing playable, so the fail-safes were asked. */
-        var usingFailsafe = false
+        var usingFailsafe = skipMain
         /** Web pages rather than videos ("open in browser", ratings pages): shown as links, never played. */
         val links = mutableListOf<Pair<String, String>>()
         val done: Boolean get() = answered >= addons.size
@@ -119,6 +120,7 @@ object Streams {
                         notes += "${shortName(a.name)}: ${Net.describe(e)}"
                     }
                     // AIOStreams has answered with nothing playable: ask the fail-safes now.
+                    if (done && !usingFailsafe && tiers.second.isNotEmpty()) StreamParse.noteMain(StreamParse.hasPlayable(found))
                     if (done && !usingFailsafe && tiers.second.isNotEmpty() && !StreamParse.hasPlayable(found)) {
                         usingFailsafe = true
                         addons += tiers.second
@@ -137,7 +139,7 @@ object Streams {
 
         /** "AIOStreams gave nothing: showing your fail-safes (Torrentio)". */
         fun failsafeLine(): String? = if (!usingFailsafe) null
-            else tiers.first.joinToString(", ") { shortName(it.name) } + " gave nothing: showing your fail-safes (" + tiers.second.joinToString(", ") { shortName(it.name) } + ")"
+            else tiers.first.joinToString(", ") { shortName(it.name) } + (if (skipMain) " gave nothing a few minutes ago" else " gave nothing") + ": showing your fail-safes (" + tiers.second.joinToString(", ") { shortName(it.name) } + ")"
 
         fun listen(l: () -> Unit): Fetch {
             listeners += l

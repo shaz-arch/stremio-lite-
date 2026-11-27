@@ -347,6 +347,7 @@ object Settings {
         fun set(k: String) = if (k.isBlank()) "not set" else "…" + k.takeLast(4)
         fun build(): List<Row> = listOf(
             Row("Check all my keys", "►", opens = { KeysCheck.screen(app) }),
+        ) + KeyDropUi.rows(app) + listOf(
             Row("────────────────────"),
             Row("TMDB key", set(tmdbKey(app)) + "  ►", opens = { whereToWatch(app) }),
             Row("Debrid keys", debridKeys(app).let { if (it.isEmpty()) "not set" else StreamSetup.names(it).joinToString(", ") } + "  ►", opens = { StreamsSetup.screen(app, keysOnly = true) }),
@@ -371,7 +372,7 @@ object Settings {
         )
         s = Screen("Your keys", build())
         s.onShow = { s.rows = build(); app.refresh(s) }
-        s.position = 3
+        s.position = 5
         return s
     }
 

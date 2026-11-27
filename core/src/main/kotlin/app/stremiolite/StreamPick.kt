@@ -181,6 +181,15 @@ object StreamParse {
         return null
     }
 
+    /**
+     * When AIOStreams last gave nothing: for 10 minutes after, titles go straight to the fail-safes
+     * (no waiting on it each time); then it's asked first again, and back to normal once it answers.
+     */
+    @Volatile private var mainDownUntil = 0L
+    private const val MAIN_DOWN_MS = 10 * 60_000L
+    fun mainDown() = System.currentTimeMillis() < mainDownUntil
+    fun noteMain(worked: Boolean) { mainDownUntil = if (worked) 0L else System.currentTimeMillis() + MAIN_DOWN_MS }
+
     /** Something here could play now (not waiting to be fetched by the debrid service). */
     fun hasPlayable(found: List<Stream>) = found.any { it.cached != false }
 
@@ -192,7 +201,9 @@ object StreamParse {
     /** Every direct stream the add-ons offer for a title right now (blocking); fail-safes only if needed. */
     fun fetchAll(addons: List<Addon>, type: String, id: String): List<Stream> {
         val (main, backup) = tiers(addons.filter { it.supports("stream", type, id) })
+        if (backup.isNotEmpty() && mainDown()) return fetchFrom(backup, type, id)
         val found = fetchFrom(main, type, id)
+        if (backup.isNotEmpty()) noteMain(hasPlayable(found))
         if (backup.isNotEmpty() && !hasPlayable(found)) fetchFrom(backup, type, id).forEach { addUnique(found, it) }
         return found
     }

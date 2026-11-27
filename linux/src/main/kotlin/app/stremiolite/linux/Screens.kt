@@ -1638,6 +1638,7 @@ fun keysScreen(): Screen {
     fun set(k: String) = if (k.isBlank()) "not set" else "…" + k.takeLast(4)
     fun build(): List<Row> = listOf(
         Row("Check all my keys", "►", opens = { KeysCheck.screen() }),
+    ) + KeyDropUi.rows() + listOf(
         Row("────────────────────"),
         Row("TMDB key", set(Prefs.tmdbKey) + "  ►", opens = { Details.whereToWatchSettings() }),
         Row("Debrid keys", Prefs.debridKeys.let { if (it.isEmpty()) "not set" else app.stremiolite.StreamSetup.names(it).joinToString(", ") } + "  ►", opens = { StreamsSetup.screen(keysOnly = true) }),
