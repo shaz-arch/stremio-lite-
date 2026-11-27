@@ -247,6 +247,7 @@ object Home {
             if (Prefs.liveTv && !KidsGuard.hides()) rows += Row("Live TV", Live.homeDetail(), opens = { Live.screen() })
             if (Prefs.onHome("drives")) Drives.homeRow()?.let { rows += it }
             if (Prefs.onHome("downloads")) Offline.homeRow()?.let { rows += it }
+            if (Prefs.onHome("playlink")) rows += PlayLink.homeRow()
             if (KidsGuard.locked()) rows += Row("Games", "►", opens = { GamesScreen.screen() })
             if (Prefs.newsOn && !KidsGuard.hides()) {
                 rows += Row("News", "film & TV headlines  ►", opens = { Feeds.news() })
@@ -1666,7 +1667,7 @@ private val HOME_LINES = listOf(
         "ready" to "Ready", "waiting" to "Waiting", "calendar" to "Calendar", "watched" to "Watched", "favourites" to "Favourites", "basket" to "Basket"),
     "For you" to listOf("foryou.top" to "Top picks for you", "foryou.because" to "Because you watched…", "foryou.favs" to "More like your favourites"),
     "Browse" to listOf("coming" to "Coming soon"),
-    "App" to listOf("live" to "Live TV", "drives" to "Drives", "downloads" to "Downloads", "news" to "News", "sleep" to "Sleep timer"),
+    "App" to listOf("live" to "Live TV", "drives" to "Drives", "downloads" to "Downloads", "playlink" to "Play a link", "news" to "News", "sleep" to "Sleep timer"),
 )
 
 fun homeLines(): Screen {

@@ -221,3 +221,57 @@ object Drives {
         return s
     }
 }
+
+/**
+ * Play a link: any video page from the sites yt-dlp supports (YouTube, Vimeo, Twitch, news sites…)
+ * plays in mpv, with where you got to remembered. Recent links are kept on this computer.
+ */
+object PlayLink {
+    private fun recent(): List<Pair<String, String>> = Prefs.recentLinks
+    fun homeRow() = Row("Play a link", "►", opens = { screen() })
+
+    fun screen(): Screen {
+        lateinit var s: Screen
+        fun build() {
+            val rows = mutableListOf(Row("Paste a link", "►", action = { App.ask("Video page link") { v -> v?.trim()?.takeIf { it.startsWith("http") }?.let { play(it, null) { build() } } } }))
+            val list = recent()
+            if (list.isNotEmpty()) {
+                rows += Row("──── Recent ────")
+                list.forEach { (url, title) ->
+                    val at = Prefs.fileResume(url)
+                    val mark = if (Prefs.fileWatched(url)) "✓" else if (at > 0) "from ${clockOf(at)}" else ""
+                    rows += Row(title.ifEmpty { url }, listOf(mark, runCatching { java.net.URL(url).host.removePrefix("www.") }.getOrDefault("")).filter { it.isNotEmpty() }.joinToString(" · ") + "  ►",
+                        action = { play(url, title) { build() } }, play = { play(url, title) { build() } })
+                }
+                rows += Row("Clear the list", action = { Prefs.recentLinks = emptyList(); build() })
+            }
+            s.rows = rows; App.refresh()
+        }
+        s = Screen("Play a link", emptyList())
+        s.onShow = { build() }
+        return s
+    }
+
+    private fun clockOf(ms: Long): String { val t = ms / 1000; return if (t >= 3600) "%d:%02d:%02d".format(t / 3600, t / 60 % 60, t % 60) else "%d:%02d".format(t / 60, t % 60) }
+
+    private fun play(url: String, known: String?, after: () -> Unit) {
+        if (!java.io.File(Prefs.player).name.startsWith("mpv")) { App.toast("Play a link needs mpv as your player (Settings › Player)"); return }
+        val title = known ?: runCatching { java.net.URL(url).host.removePrefix("www.") }.getOrDefault("Video")
+        remember(url, title)
+        // The page's real title, from yt-dlp, for the list.
+        if (known.isNullOrEmpty()) App.async({
+            val p = ProcessBuilder("yt-dlp", "--no-warnings", "--skip-download", "--print", "title", url).redirectErrorStream(true).start()
+            val out = p.inputStream.bufferedReader().readText().trim().lines().lastOrNull().orEmpty()
+            if (p.waitFor() == 0) out else null
+        }) { r -> r.getOrNull()?.takeIf { it.isNotBlank() }?.let { remember(url, it); App.refresh() } }
+        Player.play(url, title, null, Prefs.fileResume(url)) { r ->
+            if (r.failed) App.toast("That link didn't play (${r.why})")
+            else Prefs.setFileProgress(url, r.pos, r.dur > 0 && r.pos >= r.dur * 0.92)
+            after()
+        }
+    }
+
+    private fun remember(url: String, title: String) {
+        Prefs.recentLinks = (listOf(url to title) + recent().filter { it.first != url }).take(20)
+    }
+}

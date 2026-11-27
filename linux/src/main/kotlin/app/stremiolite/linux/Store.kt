@@ -118,6 +118,10 @@ object Prefs {
         if (watched) w.put(path, true)
         save()
     }
+    /** Play a link: recent links on this computer (link, title), newest first. */
+    var recentLinks: List<Pair<String, String>>
+        get() = data().optJSONArray("recentLinks")?.let { a -> (0 until a.length()).mapNotNull { a.optJSONObject(it) }.map { it.optString("url") to it.optString("title") } }.orEmpty()
+        set(v) { data().put("recentLinks", org.json.JSONArray(v.map { org.json.JSONObject().put("url", it.first).put("title", it.second) })); save() }
     var castDlna: Boolean
         get() = data().optBoolean("castDlna", false)
         set(v) { data().put("castDlna", v); save() }
