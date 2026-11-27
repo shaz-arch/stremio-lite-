@@ -194,7 +194,7 @@ object Prefs {
         set(v) { data().put("newsOn", v); save() }
 
     /** Lines taken off Home on this computer (Settings › Home › Show on Home). */
-    private var homeHidden: Set<String>
+    var homeHidden: Set<String>
         get() = data().optJSONArray("homeHidden")?.let { a -> (0 until a.length()).map { a.optString(it) }.toSet() }.orEmpty()
         set(v) { data().put("homeHidden", org.json.JSONArray(v.toList())); save() }
     fun onHome(key: String): Boolean = when (key) {
@@ -206,7 +206,7 @@ object Prefs {
             "live" -> liveTv = on; "news" -> newsOn = on; "coming" -> comingOn = on; "sleep" -> sleepOnHome = on
             else -> homeHidden = if (on) homeHidden - key else homeHidden + key
         }
-        if (key in setOf("live", "news", "coming")) syncOut()
+        syncOut()
     }
     var sleepOnHome: Boolean
         get() = data().optBoolean("sleepOnHome", false)
@@ -330,7 +330,7 @@ object Prefs {
     private const val SYNC_ID = "stremiolite:settings"
 
     /** Shared settings this build knows; one this computer has never had is always taken from the account. */
-    private val SHARED = listOf("theme", "subLang", "autoNext", "clock", "hideWatched", "layout", "autoFollow", "liveTv", "playlists", "liveFavs", "liveGuide", "liveFreeHide", "newsOn", "comingOn", "newsFeeds", "newsHide", "tmdbKey", "watchRegion", "geminiKey")
+    private val SHARED = listOf("theme", "subLang", "autoNext", "clock", "hideWatched", "layout", "autoFollow", "liveTv", "playlists", "liveFavs", "liveGuide", "liveFreeHide", "newsOn", "comingOn", "sleepOnHome", "homeHidden", "newsFeeds", "newsHide", "tmdbKey", "watchRegion", "geminiKey")
     /** Synced with your own devices, but never sent to someone else with "Share my setup". */
     private val NOT_SHARED = setOf("playlists", "liveFavs", "liveGuide", "tmdbKey", "geminiKey")
     /** The look: shared by default, or kept to this computer ("lookLocal", which itself never syncs). */

@@ -59,7 +59,7 @@ object Settings {
 
     private const val SYNC_ID = "stremiolite:settings"
     private val INT_KEYS = listOf("subLang", "theme", "clock", "textSize")
-    private val BOOL_KEYS = listOf("autoNext", "hideWatched", "autoFollow", "liveTv", "newsOn", "comingOn")
+    private val BOOL_KEYS = listOf("autoNext", "hideWatched", "autoFollow", "liveTv", "newsOn", "comingOn", "sleepOnHome")
     /** The look: shared by default, or kept to this device ("lookLocal", which itself never syncs). */
     private val LOOK_KEYS = setOf("theme", "clock", "textSize")
 
@@ -74,6 +74,8 @@ object Settings {
         INT_KEYS.forEach { k -> if (p.contains(k) && shares(c, k)) o.put(k, p.getInt(k, 0)) }
         BOOL_KEYS.forEach { k -> if (p.contains(k)) o.put(k, p.getBoolean(k, false)) }
         o.put("hiddenRows", JSONArray(hiddenRows(c).toList()))
+        // Your Home layout (Show on Home) is the same on every device.
+        o.put("homeHidden", JSONArray(hiddenOnHome(c).toList()))
         p.getString("layout", null)?.let { o.put("layout", it) }
         return o
     }
@@ -165,6 +167,7 @@ object Settings {
         INT_KEYS.forEach { k -> if (o.has(k) && shares(c, k)) e.putInt(k, o.optInt(k)) }
         BOOL_KEYS.forEach { k -> if (o.has(k)) e.putBoolean(k, o.optBoolean(k)) }
         if (o.has("layout")) e.putString("layout", o.optString("layout"))
+        o.optJSONArray("homeHidden")?.let { a -> e.putStringSet("homeHidden", (0 until a.length()).map { a.optString(it) }.toSet()) }
         if (o.has("playlists")) e.putString("playlists", o.optString("playlists"))
         if (o.has("liveFavs")) e.putString("liveFavs", o.optString("liveFavs"))
         if (o.has("tmdbKey")) e.putString("tmdbKey", o.optString("tmdbKey"))
@@ -244,7 +247,7 @@ object Settings {
             "sleep" -> prefs(c).edit().putBoolean("sleepOnHome", on).apply()
             else -> prefs(c).edit().putStringSet("homeHidden", if (on) hiddenOnHome(c) - key else hiddenOnHome(c) + key).apply()
         }
-        if (key in setOf("live", "news", "coming")) syncOut(c)
+        syncOut(c)
     }
 
     private fun homeLines(app: MainActivity): Screen {
