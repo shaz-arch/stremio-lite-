@@ -144,7 +144,7 @@ object Search {
         val (a, m) = p
         val detail = if (m.id in collections) listOf(m.year, "Collection").filter { it.isNotBlank() }.joinToString("  ") else Catalogs.detail(m)
         lateinit var r: Row
-        r = Row(Marks.title(History.marks(app)[m.id], m.name), detail, opens = { Details.screen(app, a, m) }, play = {
+        r = Row(Marks.title(History.marks(app)[m.id], m.name), detail, opens = { Details.screen(app, a, m) }, play = PlayKind.basket {
             BasketList.toggle(app, m.id, m.type, m.name, m.year)
             r.label = Marks.title(History.marks(app)[m.id], m.name); app.refreshTop()
         })

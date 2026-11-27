@@ -478,7 +478,7 @@ object Catalogs {
         Marks.title(mark(m), m.name), detail(m),
         opens = { Details.screen(a, m) },
         // p (Play) puts a title in the basket while browsing; Enter opens it.
-        play = { BasketList.toggle(m.id, m.type, m.name, m.year) },
+        play = PlayKind.basket { BasketList.toggle(m.id, m.type, m.name, m.year) },
     )
 
     fun screen(a: Addon, c: Addon.Catalog, title: String = c.name): Screen {
@@ -794,7 +794,7 @@ object Details {
         if (allowed.isEmpty()) return listOf(head, Row("Nothing similar found."))
         return listOf(head) + allowed.map { p ->
             Row(Marks.title(Catalogs.mark(p.id, p.type), p.name) + if (p.year.isNotEmpty()) " (${p.year})" else "", MetaParse.typeLabel(p.type) + "  ►",
-                opens = { screenFor(p.id, p.type, p.name) }, play = { BasketList.toggle(p.id, p.type, p.name, p.year) })
+                opens = { screenFor(p.id, p.type, p.name) }, play = PlayKind.basket { BasketList.toggle(p.id, p.type, p.name, p.year) })
         }
     }
 

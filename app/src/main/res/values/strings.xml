@@ -1,4 +1,4 @@
 <resources>
     <string name="app_name">Stremonino</string>
-    <string name="keys_hint">↑↓ move   OK open   ▶ play/basket   ◄► page   BACK back   ☰ search</string>
+    <string name="keys_hint">↑↓ move   OK open   ◄► page   BACK back   ☰ search</string>
 </resources>

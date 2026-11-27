@@ -160,7 +160,7 @@ object ForYouUi {
         fun rowsFor(picks: List<app.stremiolite.ForYou.Pick>): List<Row> {
             val rows = picks.map { p ->
                 Row(app.stremiolite.Marks.title(Catalogs.mark(p.id, p.type), p.name) + if (p.year.isNotEmpty()) " (${p.year})" else "", MetaParse.typeLabel(p.type) + "  ►",
-                    opens = { Details.screenFor(p.id, p.type, p.name) }, play = { BasketList.toggle(p.id, p.type, p.name, p.year) })
+                    opens = { Details.screenFor(p.id, p.type, p.name) }, play = PlayKind.basket { BasketList.toggle(p.id, p.type, p.name, p.year) })
             }.toMutableList()
             if (refreshRow) {
                 rows += Row("────────────────────")

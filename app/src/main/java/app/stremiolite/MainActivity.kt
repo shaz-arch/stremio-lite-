@@ -420,6 +420,9 @@ class MainActivity : Activity() {
     private fun updateCounter(position: Int) {
         val count = adapter.count
         counterView.text = if (count == 0) "" else "${position + 1}/$count"
+        // What ▶ does on this line: add to basket, play, or nothing.
+        val row = stack.lastOrNull()?.rows?.getOrNull(position)
+        findViewById<TextView>(R.id.footer).text = "↑↓ move   OK open   " + (PlayKind.of(row)?.let { "▶ $it   " } ?: "") + "◄► page   BACK back   ☰ search"
     }
 
     /** Left / Right jump a page at a time in long lists. */

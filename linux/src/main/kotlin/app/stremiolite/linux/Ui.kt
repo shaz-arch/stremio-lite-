@@ -381,7 +381,8 @@ object App {
             }
             else -> {
                 g.foregroundColor = t.dim
-                g.putString(left, h - 1, fit("↑↓ move  Enter open  p play/basket  ←→ page  Esc back  / search  q quit", inner - width(clock) - 2))
+                val play = PlayKind.of(s.rows.getOrNull(s.pos))?.let { "p $it  " } ?: ""
+                g.putString(left, h - 1, fit("↑↓ move  Enter open  ${play}←→ page  Esc back  / search  q quit", inner - width(clock) - 2))
             }
         }
         if (p == null && clock.isNotEmpty()) {
@@ -403,3 +404,11 @@ fun confirmScreen(title: String, question: String, yes: String, onYes: () -> Uni
         Row(yes, action = onYes),
     ),
 ).also { it.pos = it.rows.size - 2 }
+
+/** What ▶ does on a line, for the hint at the bottom: "basket" for titles, "play" otherwise. */
+object PlayKind {
+    private val baskets = java.util.Collections.newSetFromMap(java.util.WeakHashMap<Any, Boolean>())
+    /** Marks a ▶ action as putting the title in (or out of) the basket. */
+    fun basket(f: () -> Unit): () -> Unit = f.also { synchronized(baskets) { baskets += it } }
+    fun of(row: Row?): String? = row?.play?.let { p -> if (synchronized(baskets) { p in baskets }) "basket" else "play" }
+}

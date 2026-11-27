@@ -191,7 +191,7 @@ object ForYouUi {
             val rows = picks.map { p ->
                 Row(Marks.title(marks[p.id], p.name) + if (p.year.isNotEmpty()) " (${p.year})" else "", Catalogs.typeLabel(p.type).removeSuffix("s") + "  ►",
                     opens = { Details.screenFor(app, p.id, p.type, p.name, p.year) ?: Screen(p.name, listOf(Row("Your add-ons are still loading."))) },
-                    play = { BasketList.toggle(app, p.id, p.type, p.name, p.year); s.rows = build(); app.refresh(s) })
+                    play = PlayKind.basket { BasketList.toggle(app, p.id, p.type, p.name, p.year); s.rows = build(); app.refresh(s) })
             }.toMutableList()
             if (refreshRow) {
                 rows += Row("────────────────────")

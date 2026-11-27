@@ -59,3 +59,11 @@ fun confirmScreen(app: MainActivity, title: String, question: String, yes: Strin
         Row(yes, action = onYes),
     ),
 ).also { it.position = it.rows.size - 2 }
+
+/** What ▶ does on a line, for the hint at the bottom: "basket" for titles, "play" otherwise. */
+object PlayKind {
+    private val baskets = java.util.Collections.newSetFromMap(java.util.WeakHashMap<Any, Boolean>())
+    /** Marks a ▶ action as putting the title in (or out of) the basket. */
+    fun basket(f: () -> Unit): () -> Unit = f.also { synchronized(baskets) { baskets += it } }
+    fun of(row: Row?): String? = row?.play?.let { p -> if (synchronized(baskets) { p in baskets }) "basket" else "play" }
+}

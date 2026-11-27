@@ -69,7 +69,7 @@ object Catalogs {
             val rows = visible.mapTo(ArrayList<Row>(visible.size + 3).apply { add(about) }) { m ->
                 val mark = marks[m.id]
                 // Play/Pause on a title while browsing puts it in (or out of) the basket.
-                Row(Marks.title(mark, m.name), detail(m), opens = { Details.screen(app, a, m) }, play = {
+                Row(Marks.title(mark, m.name), detail(m), opens = { Details.screen(app, a, m) }, play = PlayKind.basket {
                     BasketList.toggle(app, m.id, m.type, m.name, m.year); rebuild(); app.refresh(screen)
                 })
             }

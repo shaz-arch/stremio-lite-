@@ -384,7 +384,7 @@ object Details {
             lateinit var r: Row
             r = Row(Marks.title(marks[p.id], p.name) + if (p.year.isNotEmpty()) " (${p.year})" else "", Catalogs.typeLabel(p.type).removeSuffix("s") + "  ►",
                 opens = { screenFor(app, p.id, p.type, p.name, p.year) ?: Screen(p.name, listOf(Row("Your add-ons are still loading."))) },
-                play = { BasketList.toggle(app, p.id, p.type, p.name, p.year); r.label = Marks.title(History.marks(app)[p.id], p.name) + if (p.year.isNotEmpty()) " (${p.year})" else ""; app.refreshTop() })
+                play = PlayKind.basket { BasketList.toggle(app, p.id, p.type, p.name, p.year); r.label = Marks.title(History.marks(app)[p.id], p.name) + if (p.year.isNotEmpty()) " (${p.year})" else ""; app.refreshTop() })
             r
         }
     }
