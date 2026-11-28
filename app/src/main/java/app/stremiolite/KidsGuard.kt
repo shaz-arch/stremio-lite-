@@ -13,7 +13,36 @@ object KidsGuard {
     fun state(c: Context): KidsLock.State = KidsLock.read(c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("state", null))
 
     private fun save(c: Context, s: KidsLock.State) {
-        c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("state", s.json()).apply()
+        val now = System.currentTimeMillis()
+        c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("state", s.json()).putLong("updated", now).apply()
+        // Every profile's account gets it, so the other devices signed in to them follow ([KidsSync]).
+        val keys = Profiles.all(c).filter { it.authKey.isNotEmpty() }.associate { it.id to it.authKey }
+        Net.async({ KidsSync.push(keys, s, now) }) { }
+    }
+
+    private var syncedAt = 0L
+
+    /** [syncIn] at most every few minutes (coming back to the app); [changed] only if something did. */
+    fun syncSoon(c: Context, changed: () -> Unit) {
+        if (System.currentTimeMillis() - syncedAt < 5 * 60_000L) return
+        syncedAt = System.currentTimeMillis()
+        syncIn(c) { if (it) changed() }
+    }
+
+    /**
+     * Takes a newer kids lock from the profiles' accounts (set on another device), then runs [done]
+     * with whether anything changed here.
+     */
+    fun syncIn(c: Context, done: (Boolean) -> Unit = {}) {
+        val p = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val keys = Profiles.all(c).filter { it.authKey.isNotEmpty() }.associate { it.id to it.authKey }
+        if (keys.isEmpty()) { done(false); return }
+        val local = state(c); val at = p.getLong("updated", 0L)
+        Net.async({ KidsSync.merge(local, at, KidsSync.pull(keys)) }) { r ->
+            val got = r.getOrNull()
+            if (got != null) p.edit().putString("state", got.first.json()).putLong("updated", got.second).apply()
+            done(got != null)
+        }
     }
 
     /** The profile in use is locked. */
@@ -160,6 +189,8 @@ object KidsGuard {
         fun redraw(): Unit = run { screen.rows = build(app, p, draft) { draft = it; redraw() }; app.refresh(screen) }
         screen = Screen("Kids lock", emptyList())
         screen.rows = build(app, p, null) { draft = it; redraw() }
+        // Changed on another device since: show that (unless changes are being made here).
+        syncIn(app) { if (it && draft == null && app.inStack(screen)) redraw() }
         screen.onHide = {
             if (draft != null) { draft = null; app.toast("Kids lock changes not saved") }
         }

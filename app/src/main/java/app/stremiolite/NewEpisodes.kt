@@ -45,6 +45,7 @@ object NewEpisodes {
             override fun calendarFilms() = NewEpisodes.calendarFilms(c)
             override fun tmdbKey() = Settings.tmdbKey(c)
             override fun region() = Settings.watchRegion(c)
+            override fun stopped() = Follow.stopped(c)
         }
     }
 

@@ -259,6 +259,8 @@ object Home {
                 load()
             }
             App.later(8_000) { if (App.isTop(s)) SpeedCheck.maybe() }
+            // A profile locked (or unlocked) on another device: follow it here.
+            KidsGuard.syncIn { if (App.isTop(s)) build() }
             Lib.pull { build() }
             Updates.check { build() }
             App.later(3_000) { if (App.isTop(s)) StreamAlert.maybe { build() } }
@@ -1356,6 +1358,7 @@ object NewEpisodes {
         override fun calendarFilms() = NewEpisodes.calendarFilms()
         override fun tmdbKey() = Prefs.tmdbKey
         override fun region() = Prefs.watchRegion
+        override fun stopped() = Follow.stopped()
     }
 
     fun fresh(): Boolean { S.readSavedNow(); return S.fresh() }
