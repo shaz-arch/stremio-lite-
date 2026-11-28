@@ -284,6 +284,8 @@ object Waiting {
                         }.onFailure { app.toast("Couldn't check: ${Net.describe(it)}") }
                     }
                 }),
+                // Films that left Waiting because a stream (or a better version) turned up.
+                Ready.films(app).size.let { n -> Row("Moved to Ready", (if (n == 0) "none yet" else "$n") + "  ►", opens = { Ready.screen(app) }) },
                 Row("────────────────────"),
             )
             fun filmLabel(e: Entry) = Marks.title(if (e.better) Marks.BETTER else Marks.WAITING, e.name) + if (e.year.isNotEmpty()) " (${e.year})" else ""
