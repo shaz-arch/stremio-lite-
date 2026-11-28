@@ -1,5 +1,6 @@
 package app.stremiolite.linux
 
+import app.stremiolite.AccountLibrary
 import app.stremiolite.Language
 import app.stremiolite.LibraryItems
 import app.stremiolite.Languages
@@ -532,56 +533,70 @@ class Watch(
 
 /**
  * The account's library records: Continue watching, Library, watched marks and resume points,
- * plus the hidden records (shared settings, waiting list). Cached on disk, synced with the account.
+ * plus the hidden records (shared settings, waiting list). The records and syncing them are shared
+ * with the Android app ([AccountLibrary]); this keeps them in the profile's library.json.
  */
 object Lib {
-    private val records = LinkedHashMap<String, JSONObject>()
-    private val unsent = LinkedHashSet<String>()
+    private val account = AccountLibrary
     private var loaded = false
-    private var pulling = false
-    var lastPull = 0L
-        private set
+
+    val lastPull: Long get() = account.lastPull
 
     private fun ensure() {
         if (loaded) return
         loaded = true
+        account.onChanged = { save() }
         val o = Store.readJson("library.json")
-        o.optJSONArray("records")?.let { a -> for (i in 0 until a.length()) a.optJSONObject(i)?.let { records[it.optString("_id")] = it } }
+        val records = LinkedHashMap<String, String>()
+        o.optJSONArray("records")?.let { a -> for (i in 0 until a.length()) a.optJSONObject(i)?.let { records[it.optString("_id")] = it.toString() } }
+        val unsent = mutableListOf<String>()
         o.optJSONArray("unsent")?.let { a -> for (i in 0 until a.length()) unsent += a.optString(i) }
+        account.load(records, unsent)
     }
 
     private fun save() {
-        val o = JSONObject().put("records", JSONArray(records.values.toList())).put("unsent", JSONArray(unsent.toList()))
+        val records = JSONArray()
+        account.all().forEach { (_, raw) -> runCatching { records.put(JSONObject(raw)) } }
+        val o = JSONObject().put("records", records).put("unsent", JSONArray(account.unsentIds()))
         runCatching { Store.writeJson("library.json", o) }
     }
 
+    /** Signed out: nothing in memory, and nothing to read back from the file. */
     fun reset() {
-        records.clear(); unsent.clear(); loaded = true; lastPull = 0; fullDone = false
+        account.forget()
+        account.onChanged = { save() }
+        loaded = true
     }
 
     /** Forgets what's in memory so the next use reads the (new) profile's file. */
     fun unload() {
-        records.clear(); unsent.clear(); loaded = false; lastPull = 0; fullDone = false
+        account.forget()
+        loaded = false
     }
 
-    fun raw(id: String): JSONObject? { ensure(); return records[id] }
+    /** One record, as a copy: change it and [put] it back. */
+    fun raw(id: String): JSONObject? { ensure(); return account.get(id) }
 
-    fun put(item: JSONObject) {
+    fun put(item: JSONObject) { ensure(); account.put(Account.authKey, item) }
+
+    /** Stores several changed records and sends them in one go. */
+    fun putAll(items: List<JSONObject>) { ensure(); account.put(Account.authKey, items) }
+
+    // Read once per change: lists are built from these many times a screen.
+    private var infosAt = -1
+    private var infosNow: List<LibraryItems.Info> = emptyList()
+
+    fun infos(): List<LibraryItems.Info> {
         ensure()
-        val id = item.optString("_id")
-        records[id] = item
-        unsent += id
-        save()
-        send()
+        if (infosAt != account.version) { infosNow = account.infos(); infosAt = account.version }
+        return infosNow
     }
-
-    fun infos(): List<LibraryItems.Info> { ensure(); return records.values.map { LibraryItems.read(it) } }
 
     fun continueWatching() = infos().filter { it.continuing }.sortedByDescending { it.updated }
     fun library() = infos().filter { it.inLibrary }.sortedByDescending { it.updated }
     fun watchedFilms() = infos().filter { it.filmWatched }.sortedByDescending { it.updated }
 
-    fun info(id: String) = raw(id)?.let { LibraryItems.read(it) }
+    fun info(id: String): LibraryItems.Info? { ensure(); return account.raw(id)?.let { runCatching { LibraryItems.read(JSONObject(it)) }.getOrNull() } }
 
     fun inLibrary(id: String) = info(id)?.inLibrary == true
 
@@ -601,131 +616,44 @@ object Lib {
     fun record(w: Watch, pos: Long, dur: Long, positionKnown: Boolean, done: Boolean) {
         ensure()
         if (done) Watched.add(w)
-        val item = LibraryItems.update(
-            existing = records[w.id], id = w.id, type = w.type, name = w.name, videoId = w.videoId,
+        account.recordPlay(
+            Account.authKey, id = w.id, type = w.type, name = w.name, videoId = w.videoId,
             pos = pos, dur = dur, done = done, positionKnown = positionKnown,
             videoIds = w.videoIds, alsoDone = emptySet(), nextVideoId = w.nextVideoId,
         )
-        put(item)
     }
 
     /** Takes a film or episode off the watched list ([videoIds]: the show's episodes in Stremio's order). */
     fun unwatch(id: String, type: String, videoId: String, videoIds: List<String>) {
         ensure()
-        val item = records[id] ?: return
-        put(LibraryItems.unwatch(item, videoId, if (type == "movie") emptyList() else videoIds))
+        account.unwatch(Account.authKey, id, type, videoId, videoIds)
     }
 
     fun toggleLibrary(id: String, type: String, name: String): Boolean {
         ensure()
         val had = inLibrary(id)
-        val item = records[id] ?: Sync.newItem(id, type, name)
-        item.put("removed", had).put("temp", false).put("_mtime", Sync.iso(System.currentTimeMillis()))
-        put(item)
+        account.setInLibrary(Account.authKey, listOf(AccountLibrary.Title(id, type, name)), inLibrary = !had)
         return !had
     }
 
-    /** Stores several changed records and sends them in one go. */
-    fun putAll(items: List<JSONObject>) {
-        ensure()
-        items.forEach { val id = it.optString("_id"); records[id] = it; unsent += id }
-        save()
-        send()
-    }
-
     /** Empties Continue watching (resume points); watched marks stay. */
-    fun clearContinue() {
-        val now = Sync.iso(System.currentTimeMillis())
-        putAll(continueWatching().mapNotNull { i -> records[i.id]?.also { it.optJSONObject("state")?.put("timeOffset", 0); it.put("_mtime", now) } })
-    }
+    fun clearContinue() { ensure(); account.removeFromContinue(Account.authKey, continueWatching().map { it.id }) }
 
     /** Empties the Library; history and watched marks stay. */
-    fun clearLibrary() {
-        val now = Sync.iso(System.currentTimeMillis())
-        putAll(library().mapNotNull { i -> records[i.id]?.also { it.put("removed", true).put("temp", false).put("_mtime", now) } })
-    }
+    fun clearLibrary() { ensure(); account.setInLibrary(Account.authKey, library().map { AccountLibrary.Title(it.id, it.type, it.name) }, inLibrary = false) }
 
-    fun removeFromContinue(id: String) {
-        ensure()
-        val item = records[id] ?: return
-        item.optJSONObject("state")?.put("timeOffset", 0)
-        item.put("_mtime", Sync.iso(System.currentTimeMillis()))
-        put(item)
-    }
-
-    private fun send() {
-        val key = Account.authKey ?: return
-        val ids = unsent.toList()
-        if (ids.isEmpty()) return
-        val items = ids.mapNotNull { records[it] }.map { JSONObject(it.toString()) }
-        App.async({ Sync.push(key, items) }) { r ->
-            if (r.isSuccess) {
-                unsent.removeAll(ids.toSet())
-                save()
-            }
-        }
-    }
-
-    /** Fetches the account's library; [done] runs on the main loop afterwards. */
-    /** False until a full pull has happened since the app started (or the profile changed). */
-    private var fullDone = false
+    fun removeFromContinue(id: String) { ensure(); account.removeFromContinue(Account.authKey, listOf(id)) }
 
     /**
-     * Brings in changes from the account. Normally only records that changed are fetched (the
-     * account lists ids and change times first); the first pull, and [full] ones (Reload), fetch everything.
+     * Brings in changes from the account ([AccountLibrary.pull]: normally only the records that
+     * changed); [done] runs on the main loop afterwards.
      */
     fun pull(force: Boolean = false, full: Boolean = false, done: (() -> Unit)? = null) {
         ensure()
-        val key = Account.authKey ?: return
-        if (pulling || (!force && !full && System.currentTimeMillis() - lastPull < 60_000)) return
-        pulling = true
-        send()
-        val whole = full || !fullDone
-        val keep = unsent.toSet()
-        val known = if (whole) emptyMap() else records.mapValues { Sync.parseTime(it.value.optString("_mtime")) }
-        App.async({
-            if (whole) Sync.pull(key) to true
-            else {
-                // Any trouble with the change list: just do a full pull, as before.
-                val meta = runCatching { Sync.meta(key) }.getOrNull()
-                if (meta == null) Sync.pull(key) to true
-                else {
-                    val want = Sync.changed(meta, known, keep)
-                    when {
-                        want.isEmpty() -> null
-                        want.size > 150 -> Sync.pull(key) to true
-                        else -> Sync.pullIds(key, want) to false   // only changed records; nothing is dropped
-                    }
-                }
-            }
-        }) { r ->
-            pulling = false
+        account.pull(Account.authKey, force, full, prepare = { }) { r ->
             r.onSuccess { got ->
-                lastPull = System.currentTimeMillis()
-                if (whole) fullDone = true
-                if (got == null) { done?.invoke(); return@onSuccess }
-                val (arr, everything) = got
-                if (everything) {
-                    val fresh = LinkedHashMap<String, JSONObject>()
-                    for (i in 0 until arr.length()) {
-                        val o = arr.optJSONObject(i) ?: continue
-                        val id = o.optString("_id")
-                        if (id.isEmpty()) continue
-                        fresh[id] = if (id in keep) records[id] ?: o else o
-                    }
-                    keep.forEach { id -> records[id]?.let { fresh.putIfAbsent(id, it) } }
-                    records.clear()
-                    records.putAll(fresh)
-                } else {
-                    for (i in 0 until arr.length()) {
-                        val o = arr.optJSONObject(i) ?: continue
-                        val id = o.optString("_id")
-                        if (id.isEmpty() || id in unsent) continue
-                        records[id] = o
-                    }
-                }
-                save()
-                if (Prefs.syncIn()) App.refresh()
+                // Settings changed on another device come in with the records (only when something changed).
+                if (got != null && Prefs.syncIn()) App.refresh()
                 done?.invoke()
             }.onFailure { e -> App.toast("Couldn't sync your history: ${Net.describe(e)}") }
         }
