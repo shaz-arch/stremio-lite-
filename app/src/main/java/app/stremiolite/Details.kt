@@ -412,7 +412,7 @@ object Details {
     }
 
     /** A plain text bar, filled as far as [pos] is through [dur]. */
-    private fun progressBar(pos: Long, dur: Long, width: Int = 12): String {
+    private fun progressBar(pos: Long, dur: Long, width: Int = 8): String {
         val n = (pos.toDouble() / dur * width).toInt().coerceIn(0, width)
         return "█".repeat(n) + "░".repeat(width - n)
     }
@@ -473,7 +473,7 @@ object Details {
             mark(app, v).takeIf { it.isNotEmpty() }?.let { rows += Row(info("Watched", if (it == "✓") "yes ✓" else it)) }
             // How far through, out of how long, as a bar.
             History.progress(app, v.id)?.takeIf { !it.done && it.position > 60_000 && it.duration > 0 }?.let { p ->
-                rows += Row(info("Progress", progressBar(p.position, p.duration) + "  " + History.clock(p.position) + " of " + History.clock(p.duration)))
+                rows += Row(info("Progress", progressBar(p.position, p.duration) + " " + (p.position * 100 / p.duration) + "%"))
             }
             if (mark(app, v) == "✓") rows += Row("Remove from watched", action = {
                 History.unwatch(app, f.id, f.type, v.id, label, stremioOrder(f))

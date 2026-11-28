@@ -5,7 +5,7 @@ object Binge {
     private const val SECONDS = 10
 
     /** The episode after [w], built from what was saved when [w] started. */
-    private fun nextWatch(w: History.Watch): History.Watch? {
+    fun nextWatch(w: History.Watch): History.Watch? {
         val next = w.nextVideoId ?: return null
         // Regular episodes only ("id:season:episode" with season above 0), in Stremio's order.
         val regular = w.videoIds.filter { vid -> vid.split(':').let { p -> p.size >= 3 && (p[p.size - 2].toIntOrNull() ?: 0) > 0 } }
