@@ -238,7 +238,7 @@ object Details {
                         app.toast("Checking…")
                         Net.async({ FilmOut.check(Home.allAddons(), Settings.tmdbKey(app), Settings.watchRegion(app), f.id) }) { r ->
                             val (out, note) = r.getOrDefault(true to "")
-                            if (out) { Waiting.add(app, Waiting.Entry(f.id, f.type, f.name, f.year, 0)); app.toast("Added to Waiting") }
+                            if (out) { Waiting.add(app, WaitingList.Entry(f.id, f.type, f.name, f.year, 0)); app.toast("Added to Waiting") }
                             else {
                                 Follow.followFilms(app, listOf(Following.Film(f.id, f.name, f.year, note)))
                                 Waiting.askToNotify(app)
