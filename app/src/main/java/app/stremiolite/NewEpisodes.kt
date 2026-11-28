@@ -13,13 +13,14 @@ import java.util.Locale
 /**
  * Episodes out in the last 7 days for the shows you follow: your Library, Continue watching and
  * your own list rows (e.g. the MDBList Watchlist). On phones, the 6-hourly background check also
- * sends a notification when a new episode or season comes out.
+ * sends a notification when a new episode or season comes out. Fetching and keeping the shows, and
+ * the check itself, are shared with the Linux app ([FollowedShows]).
  */
 object NewEpisodes {
-    private const val KEEP_MS = 60 * 60_000L
     private const val NOTIFY_ID = 4202
     private const val CHANNEL = "episodes"
     private const val MAX_SHOWS = 60
+    private val S = FollowedShows
 
     private class Found(val show: Full, val ep: Video)
 
@@ -29,108 +30,46 @@ object NewEpisodes {
         return Follow.shows(c, lists).take(MAX_SHOWS)
     }
 
-    // ---- the followed shows' episode lists, fetched once an hour and shared by
-    //      New episodes, the Calendar and the counts on Home ---------------------------------
+    // ---- the followed shows' episode lists ([FollowedShows]) ----------------------------------
 
-    private var fulls: List<Full> = emptyList()
-    private var fullsAt = 0L
-    private var followedCount = 0
-    private var loading = false
-    private var checked = 0
-    private val waiting = mutableListOf<() -> Unit>()
+    /** What the shared code needs from this app; set at start-up (and by the background job). */
+    fun install(context: Context) {
+        val c = context.applicationContext
+        S.host = object : FollowedShows.Host {
+            override fun addons() = Home.allAddons()
+            override fun followed(lists: List<Pair<String, String>>) = Follow.shows(c, lists)
+            override fun continuing() = History.continueWatching(c).filter { it.type == "series" }.map { it.id to it.name }
+            override fun fetchShow(id: String) = Details.loadFull("series", id)
+            override fun readSaved(): String? = cacheFile(c).takeIf { it.exists() }?.readText()
+            override fun writeSaved(o: org.json.JSONObject) = cacheFile(c).writeText(o.toString())
+            override fun calendarFilms() = NewEpisodes.calendarFilms(c)
+            override fun tmdbKey() = Settings.tmdbKey(c)
+            override fun region() = Settings.watchRegion(c)
+        }
+    }
 
     /** True once the shows have been checked in the last hour. */
-    fun fresh() = System.currentTimeMillis() - fullsAt < KEEP_MS
+    fun fresh() = S.fresh()
 
-    // ---- kept on the device, so a fresh start doesn't refetch every show -----------------------
-
-    /** Which profile's saved copy is in memory (each profile has its own file). */
+    /** Which profile's shows are in memory (each profile has its own file). */
     private var cacheName = ""
-    private var cacheRead = false
 
     private fun cacheFile(c: Context) = java.io.File(c.applicationContext.filesDir, Profiles.fileName(c, "shows"))
 
-    private fun readCache(c: Context): Triple<List<Full>, Long, List<Pair<String, String>>>? = runCatching {
-        val o = org.json.JSONObject(cacheFile(c).readText())
-        val arr = o.optJSONArray("shows") ?: return null
-        val shows = (0 until arr.length()).mapNotNull { i -> arr.optJSONObject(i)?.let { MetaParse.full(it, it.optString("source")) } }
-        val fol = o.optJSONArray("followed")?.let { a -> (0 until a.length()).mapNotNull { i -> a.optJSONArray(i)?.let { it.optString(0) to it.optString(1) } } } ?: emptyList()
-        Triple(shows, o.optLong("at"), fol)
-    }.getOrNull()
-
-    private fun writeCache(c: Context) {
-        val shows = fulls; val at = fullsAt; val fol = lastFollowed; val f = cacheFile(c)
-        Net.async({
-            val arr = org.json.JSONArray(); shows.forEach { arr.put(MetaParse.compact(it)) }
-            val fa = org.json.JSONArray(); fol.forEach { fa.put(org.json.JSONArray().put(it.first).put(it.second)) }
-            f.writeText(org.json.JSONObject().put("at", at).put("shows", arr).put("followed", fa).toString())
-        }) { }
+    /** Another profile in use since last time: its own shows, not these. */
+    private fun sameProfile(c: Context) {
+        val name = Profiles.fileName(c, "shows")
+        if (name != cacheName) { cacheName = name; S.forget() }
     }
 
     /** Reads the saved copy if it hasn't been yet (no network), then runs [done]: counts on Home at once. */
-    fun warm(app: MainActivity, done: () -> Unit) {
-        val name = Profiles.fileName(app, "shows")
-        if (cacheRead && name == cacheName) { done(); return }
-        if (name != cacheName) { cacheName = name; fulls = emptyList(); fullsAt = 0; lastFollowed = emptyList() }
-        cacheRead = true
-        Net.async({ readCache(app) }) { r ->
-            r.getOrNull()?.let { (shows, at, fol) -> if (fulls.isEmpty()) { fulls = shows; fullsAt = at; lastFollowed = fol; followedCount = fol.size } }
-            done()
-        }
-    }
+    fun warm(app: MainActivity, done: () -> Unit) { sameProfile(app); S.warm(done) }
 
     /** Fetches the followed shows (if not fresh), then runs [done]. [progress] runs as each show arrives. */
     fun load(app: MainActivity, force: Boolean = false, progress: (() -> Unit)? = null, done: () -> Unit) {
-        val name = Profiles.fileName(app, "shows")
-        if (name != cacheName) {
-            cacheName = name; cacheRead = false
-            fulls = emptyList(); fullsAt = 0; lastFollowed = emptyList()
-        }
-        // First time: read the saved copy (in the background), then carry on as if it had just been fetched.
-        if (!cacheRead) {
-            cacheRead = true
-            Net.async({ readCache(app) }) { r ->
-                r.getOrNull()?.let { (shows, at, fol) -> if (fulls.isEmpty()) { fulls = shows; fullsAt = at; lastFollowed = fol; followedCount = fol.size } }
-                load(app, force, progress, done)
-            }
-            return
-        }
-        if (!force && fresh()) { done(); return }
-        waiting += done
-        progressHook = progress ?: progressHook
-        if (loading) return
-        loading = true
-        checked = 0
-        val cont = History.continueWatching(app).filter { it.type == "series" }.map { it.id to it.name }
-        Net.async({ followed(app, Home.allAddons()) }) { r ->
-            val mine = r.getOrDefault(emptyList())
-            if (r.isSuccess) lastFollowed = mine
-            followedCount = mine.size
-            // Shows in Continue watching are checked too: their new episodes come to Ready.
-            val shows = (mine + cont).distinctBy { it.first }
-            val got = mutableListOf<Full>()
-            fun finish() {
-                fulls = got.toList(); fullsAt = System.currentTimeMillis(); loading = false; failed.clear()
-                writeCache(app)
-                refreshFilms(app)
-                val list = waiting.toList(); waiting.clear(); list.forEach { it() }
-            }
-            if (shows.isEmpty()) { finish(); return@async }
-            shows.forEach { (id, _) ->
-                Net.async({ Details.loadFull("series", id) }) { rr ->
-                    checked++
-                    rr.getOrNull()?.let { got += it }
-                    progressHook?.invoke()
-                    if (checked >= shows.size) finish()
-                }
-            }
-        }
+        sameProfile(app)
+        S.load(force, progress, done)
     }
-
-    private var progressHook: (() -> Unit)? = null
-
-    /** Every followed show from the last full check, including your list rows (which need the network to read). */
-    @Volatile private var lastFollowed: List<Pair<String, String>> = emptyList()
 
     /**
      * The one list of followed shows that every screen and count uses: started and chosen shows
@@ -138,61 +77,30 @@ object NewEpisodes {
      */
     fun followedNow(c: Context): List<Pair<String, String>> {
         val stopped = Follow.stopped(c)
-        return (Follow.shows(c) + lastFollowed).distinctBy { it.first }.filter { it.first !in stopped }
+        return (Follow.shows(c) + S.lastFollowed()).distinctBy { it.first }.filter { it.first !in stopped }
     }
-
-    private val fetching = HashSet<String>()
-    private val failed = HashSet<String>()
 
     /**
      * Adds shows followed since the last check (e.g. one you've just followed) without waiting
      * for the hourly refresh. [done] runs as each arrives. Returns the ids still on their way.
      */
     fun ensure(app: MainActivity, shows: List<Pair<String, String>>, done: () -> Unit): Set<String> {
-        val have = fulls.map { it.id }.toSet()
-        shows.filter { it.first !in have && it.first !in fetching && it.first !in failed }.forEach { (id, _) ->
-            fetching += id
-            Net.async({ Details.loadFull("series", id) }) { r ->
-                fetching -= id
-                val f = r.getOrNull()
-                if (f == null) failed += id else if (fulls.none { it.id == f.id }) { fulls = fulls + f; writeCache(app) }
-                done()
-            }
-        }
-        return fetching.toSet()
+        sameProfile(app)
+        return S.ensure(shows, done)
     }
 
     /** The followed shows' details from the last check. */
-    fun shows(): List<Full> = fulls
+    fun shows(): List<Full> = S.shows()
 
-    fun followedTotal() = followedCount
+    fun followedTotal() = S.followedTotal()
 
-    fun isLoading() = loading
+    fun isLoading() = S.isLoading()
 
     /** Episodes out in the last week (null until checked). */
-    fun recentCount(): Int? = if (fullsAt == 0L) null else fulls.sumOf { Releases.recent(it).size }
+    fun recentCount(): Int? = S.recentCount()
 
     /** Episodes due in the next 7 days (null until checked). */
-    fun weekCount(): Int? = if (fullsAt == 0L) null else fulls.sumOf { Releases.upcoming(it, 7).size } +
-        filmEvents.orEmpty().count { it.day <= Releases.day(-7) }
-
-    // ---- film dates for the Calendar (and its count on Home), fetched at most once an hour ----
-
-    private var filmEvents: List<FilmDates.Event>? = null
-    private var filmsAt = 0L
-    private var filmsLoading = false
-
-    private fun refreshFilms(app: MainActivity, force: Boolean = false, done: () -> Unit = {}) {
-        if (filmsLoading || (!force && System.currentTimeMillis() - filmsAt < KEEP_MS)) { done(); return }
-        filmsLoading = true
-        val want = calendarFilms(app); val addons = Home.allAddons()
-        val key = Settings.tmdbKey(app); val region = Settings.watchRegion(app)
-        Net.async({ FilmDates.events(addons, key, region, want) }) { r ->
-            filmsLoading = false
-            r.getOrNull()?.let { filmEvents = it; filmsAt = System.currentTimeMillis() }
-            done()
-        }
-    }
+    fun weekCount(): Int? = S.weekCount()
 
     private val pretty = SimpleDateFormat("EEE d MMM", Locale.UK)
     private val iso = SimpleDateFormat("yyyy-MM-dd", Locale.UK)
@@ -213,7 +121,7 @@ object NewEpisodes {
     private fun unseen(c: Context): List<Found> {
         val seen = ReadyNotice.readSeen(seenPrefs(c).getString("epSeen", null))
         val news = isNews(c)
-        return fulls.flatMap { sh -> Releases.recent(sh).map { Found(sh, it) } }
+        return S.shows().flatMap { sh -> Releases.recent(sh).map { Found(sh, it) } }
             .filter { it.ep.id !in seen && History.progress(c, it.ep.id)?.done != true && news(it.show, it.ep) }
             .sortedWith(compareByDescending<Found> { it.ep.released }.thenBy { it.show.name }.thenBy { it.ep.episode })
     }
@@ -244,7 +152,7 @@ object NewEpisodes {
 
     /** You've looked: the line goes until another episode comes out. */
     fun markSeen(c: Context) {
-        val now = fulls.flatMap { sh -> Releases.recent(sh).map { it.id } }
+        val now = S.shows().flatMap { sh -> Releases.recent(sh).map { it.id } }
         if (now.isEmpty()) return
         val p = seenPrefs(c)
         p.edit().putString("epSeen", ReadyNotice.writeSeen(ReadyNotice.readSeen(p.getString("epSeen", null)), now)).apply()
@@ -263,27 +171,27 @@ object NewEpisodes {
 
     /** Episodes due in the next 30 days for the shows you follow, by day. */
     /** Films for the Calendar: ones you're waiting on, lined up in Next watch, or have in the basket. */
-    private fun calendarFilms(app: MainActivity): List<FilmDates.Film> =
-        (Waiting.list(app).filter { it.type == "movie" }.map { FilmDates.Film(it.id, it.name, it.year) } +
-            Follow.films(app).map { FilmDates.Film(it.id, it.name, it.year) } +
-            NextList.all(app).filter { it.type == "movie" }.map { FilmDates.Film(it.id, it.name, it.year) } +
-            BasketList.all(app).filter { it.type == "movie" }.map { FilmDates.Film(it.id, it.name, it.year) }).distinctBy { it.id }
+    private fun calendarFilms(c: Context): List<FilmDates.Film> =
+        (Waiting.list(c).filter { it.type == "movie" }.map { FilmDates.Film(it.id, it.name, it.year) } +
+            Follow.films(c).map { FilmDates.Film(it.id, it.name, it.year) } +
+            NextList.all(c).filter { it.type == "movie" }.map { FilmDates.Film(it.id, it.name, it.year) } +
+            BasketList.all(c).filter { it.type == "movie" }.map { FilmDates.Film(it.id, it.name, it.year) }).distinctBy { it.id }
 
     fun calendar(app: MainActivity): Screen {
         val status = Row("")
         lateinit var screen: Screen
         fun build() {
-            val films = filmEvents
+            val films = S.filmEvents()
             val rows = mutableListOf(status)
-            val eps = fulls.flatMap { sh -> Releases.upcoming(sh).map { Found(sh, it) } }
+            val eps = S.shows().flatMap { sh -> Releases.upcoming(sh).map { Found(sh, it) } }
             // Episodes and films together, by day.
             val days = (eps.map { it.ep.released } + films.orEmpty().map { it.day }).distinct().sorted()
             val n = eps.size + films.orEmpty().size
             status.label = when {
-                loading -> "Checking $followedCount shows… $checked done"
+                S.isLoading() -> "Checking ${S.followedTotal()} shows… ${S.checkedSoFar()} done"
                 n == 0 && films == null -> "Finding film dates…"
                 n == 0 -> "Nothing dated in the next 30 days. Shows you follow and films you're waiting on, lining up or have in the basket show here."
-                else -> "Next 30 days · $followedCount shows followed" + (films?.map { it.film.id }?.distinct()?.size?.takeIf { it > 0 }?.let { " · $it films" } ?: "")
+                else -> "Next 30 days · ${S.followedTotal()} shows followed" + (films?.map { it.film.id }?.distinct()?.size?.takeIf { it > 0 }?.let { " · $it films" } ?: "")
             }
             val marks = History.marks(app)
             days.forEach { day ->
@@ -306,7 +214,8 @@ object NewEpisodes {
                 status.label = "Finding the shows you follow…"
                 load(app, progress = { if (app.isTop(screen)) build() }) { build() }
                 // Fresh each time it opens: you may have added films since.
-                refreshFilms(app, force = true) { if (filmEvents == null) filmEvents = emptyList(); if (app.isTop(screen)) build() }
+                sameProfile(app)
+                S.refreshFilms(force = true) { S.filmsTried(); if (app.isTop(screen)) build() }
             }
             build()
         }
@@ -322,33 +231,11 @@ object NewEpisodes {
     fun checkNow(c: Context): List<Releases.Alert> {
         if (Account.authKey(c) == null) return emptyList()
         val addons = runCatching { Stremio.parseAddons(Account.addonCache(c).readText()) }.getOrNull() ?: return emptyList()
-        val prefs = Profiles.prefsFor(c, "episodes")
-        val alerts = mutableListOf<Releases.Alert>()
-        val e = prefs.edit()
         // The same rule as Ready: how you follow it, and only news (not the next one while you catch up).
         val mine = followed(c, addons)
         val news = isNews(c, mine.map { it.first })
         val cont = History.continueWatching(c).filter { it.type == "series" }.map { it.id to it.name }
-        for ((id, _) in (mine + cont).distinctBy { it.first }) {
-            val show = runCatching { MetaParse.fetch(addons, "series", id) }.getOrNull() ?: continue
-            val seen = prefs.getString(id, null)
-            if (seen != null && Releases.finished(show)) continue
-            val (found, mark) = Releases.check(show, seen)
-            val alert = found?.let { a -> a.episodes.filter { news(show, it) }.takeIf { it.isNotEmpty() }?.let { Releases.Alert(show, it) } }
-            if (alert == null) { if (mark != null) e.putString(id, mark); continue }
-            // Only tell once it really plays; after a couple of days, tell anyway.
-            val newest = alert.episodes.last()
-            val plays = runCatching { StreamParse.availableNow(addons, "series", newest.id) }.getOrDefault(false)
-            when {
-                plays -> alert.note = "ready to watch"
-                Releases.daysSince(newest.released) >= Releases.WAIT_FOR_STREAM_DAYS -> alert.note = "no stream yet"
-                else -> continue // not playable yet: the marker stays, so it's checked again next time
-            }
-            if (mark != null) e.putString(id, mark)
-            alerts += alert
-        }
-        e.apply()
-        return alerts
+        return S.check(addons, mine + cont, news)
     }
 
     fun notify(c: Context, alerts: List<Releases.Alert>) {

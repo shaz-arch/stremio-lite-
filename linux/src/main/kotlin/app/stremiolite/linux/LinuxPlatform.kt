@@ -22,5 +22,6 @@ object LinuxPlatform {
                 Store.writeJson("$store.json", o)
             }
         }
+        app.stremiolite.FollowedShows.host = NewEpisodes.host
     }
 }

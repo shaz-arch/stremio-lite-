@@ -22,5 +22,6 @@ object AndroidPlatform {
                 e.apply()
             }
         }
+        NewEpisodes.install(c)
     }
 }
