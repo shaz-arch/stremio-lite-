@@ -143,9 +143,16 @@ class MainActivity : Activity() {
         if (watch != null && !slept && launched > 0) {
             // With no length at all, the title's running time ("22 min") is close enough to tell the end.
             val length = duration ?: Best.minutes(watch.runtime)?.let { (it * 60_000).toLong() }
-            // The player closed itself without saying where it got to: judge by how long it ran.
-            if ((position == null || position == 0L) && System.currentTimeMillis() - launched > 60_000) {
-                Sleep.reached().takeIf { it in 1 until 6 * 3_600_000L }?.let { if (length != null && History.isFinished(it, length)) position = it }
+            // VLC on some devices only reports where it started or was last moved to, not where it got to,
+            // so when it closes itself at the end the position looks early. Where it started plus how long
+            // it was open says where it really reached: closing within a minute or so of the end, played
+            // straight through, is the end. (Paused for long and stopped part-way lands well past it: not counted.)
+            if (length != null && System.currentTimeMillis() - launched > 60_000) {
+                val reached = Sleep.reached()
+                if (reached in (length - 60_000)..(length + 90_000)) {
+                    completed = true
+                    if ((position ?: 0L) < reached) position = minOf(reached, length)
+                }
             }
             val at = position ?: 0L
             // Into the end credits (where they're known), or the end by the running time: that's watched.
