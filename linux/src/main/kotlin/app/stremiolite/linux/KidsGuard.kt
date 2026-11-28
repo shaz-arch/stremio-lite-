@@ -90,41 +90,46 @@ object KidsGuard {
         }
     }
 
+    /**
+     * A profile's kids lock. Changes are made freely and only kept with Save changes, which asks the
+     * parent PIN once (locking needs no PIN; leaving unsaved drops them).
+     */
     fun screen(p: Profiles.Profile): Screen {
         lateinit var screen: Screen
+        var draft: app.stremiolite.KidsLock.State? = null
         fun build() {
-            val s = state()
+            val saved = state()
+            val s = draft ?: saved
             val rows = mutableListOf<Row>()
-            if (!s.hasPin) {
+            fun edit(n: app.stremiolite.KidsLock.State?) { draft = n; build() }
+            if (!saved.hasPin) {
                 rows += Row("Choose a PIN and lock ${p.name}", action = {
-                    askNewPin { pin -> save(s.withPin(pin).lock(p.id)); App.toast("${p.name} is locked"); build() }
+                    askNewPin { pin -> save(saved.withPin(pin).lock(p.id)); App.toast("${p.name} is locked"); edit(null) }
                 })
             } else {
-                rows += if (s.isLocked(p.id)) Row(info(p.name, "locked"), "unlock", action = {
-                    askPin("Parent PIN to unlock ${p.name}") { save(state().unlock(p.id)); App.toast("${p.name} is unlocked"); build() }
-                }) else Row(info(p.name, "not locked"), "lock", action = { save(s.lock(p.id)); App.toast("${p.name} is locked"); build() })
-                rows += Row("In locked profiles, hide Search, Live TV and News", if (s.hideExtras) "on" else "off", action = {
-                    askPin("Parent PIN") { save(state().withHide(!state().hideExtras)); build() }
+                draft?.let { d ->
+                    rows += Row("Save changes", "parent PIN  ►", action = {
+                        askPin("Parent PIN to save") { save(d); App.toast("Kids lock saved"); edit(null) }
+                    })
+                    rows += Row("Discard changes", action = { edit(null) })
+                    rows += Row("────────────────────")
+                }
+                rows += if (s.isLocked(p.id)) Row(info(p.name, "locked"), "unlock", action = { edit(s.unlock(p.id)) })
+                else Row(info(p.name, "not locked"), "lock", action = {
+                    // Locking is always allowed straight away (it only makes things stricter).
+                    if (draft == null) { save(saved.lock(p.id)); App.toast("${p.name} is locked"); edit(null) } else edit(s.lock(p.id))
                 })
+                rows += Row("In locked profiles, hide Search, Live TV and News", if (s.hideExtras) "on" else "off", action = { edit(s.withHide(!s.hideExtras)) })
                 rows += Row("Age limit in locked profiles", app.stremiolite.KidsLock.ageLabel(s.maxAge) + "  ►", action = {
+                    val K = app.stremiolite.KidsLock
                     if (Prefs.tmdbKey.isBlank()) App.toast("The age limit needs a TMDB key (Settings) for the ratings")
-                    else askPin("Parent PIN") {
-                        val K = app.stremiolite.KidsLock
-                        val next = K.AGES[(K.AGES.indexOf(state().maxAge).coerceAtLeast(0) + 1) % K.AGES.size]
-                        save(state().withAge(next)); App.toast("Age limit: " + K.ageLabel(next)); build()
-                    }
+                    else edit(s.withAge(K.AGES[(K.AGES.indexOf(s.maxAge).coerceAtLeast(0) + 1) % K.AGES.size]))
                 })
-                rows += Row("Bedtime in locked profiles", T.bedtimeLabel(s) + "  ►", action = {
-                    askPin("Parent PIN") { save(state().withBedtime(T.next(T.BEDTIMES, state().bedtime))); App.toast("Bedtime: " + T.bedtimeLabel(state())); build() }
-                })
-                if (s.bedtime >= 0) rows += Row("Allowed again from", T.clock(s.wake) + "  ►", action = {
-                    askPin("Parent PIN") { save(state().withWake(T.next(T.WAKES, state().wake))); build() }
-                })
-                rows += Row("Daily watch limit in locked profiles", T.dailyLabel(s.dailyMins) + "  ►", action = {
-                    askPin("Parent PIN") { val n = T.next(T.DAILY, state().dailyMins); save(state().withDaily(n)); App.toast("Daily limit: " + T.dailyLabel(n)); build() }
-                })
+                rows += Row("Bedtime in locked profiles", T.bedtimeLabel(s) + "  ►", action = { edit(s.withBedtime(T.next(T.BEDTIMES, s.bedtime))) })
+                if (s.bedtime >= 0) rows += Row("Allowed again from", T.clock(s.wake) + "  ►", action = { edit(s.withWake(T.next(T.WAKES, s.wake))) })
+                rows += Row("Daily watch limit in locked profiles", T.dailyLabel(s.dailyMins) + "  ►", action = { edit(s.withDaily(T.next(T.DAILY, s.dailyMins))) })
                 rows += Row("Change the parent PIN", action = {
-                    askPin("Current PIN") { askNewPin { pin -> save(state().withPin(pin)); App.toast("PIN changed") } }
+                    askPin("Current PIN") { askNewPin { pin -> save((draft ?: state()).withPin(pin)); App.toast("PIN changed"); edit(null) } }
                 })
                 val others = Profiles.all().filter { s.isLocked(it.id) && it.id != p.id }.map { it.name }
                 if (others.isNotEmpty()) rows += Row("Also locked: " + others.joinToString(", "))
@@ -134,6 +139,9 @@ object KidsGuard {
         }
         screen = Screen("Kids lock", emptyList())
         build()
+        // Left with changes not saved: they're dropped. (Asking for the PIN may cover this screen for a
+        // moment; that's not leaving it.)
+        screen.onHide = { App.later(0) { if (draft != null && !App.inStack(screen)) { draft = null; App.toast("Kids lock changes not saved") } } }
         screen.pos = 3
         return screen
     }

@@ -138,6 +138,17 @@ object Search {
     /** Ids found to be film collections in the current search. */
     private val collections = HashSet<String>()
 
+    /** A list of results with a Sort line at the top: best match, name, newest, oldest or highest rated. */
+    private fun sortable(app: MainActivity, title: String, list: List<Pair<Addon, Meta>>): Screen {
+        lateinit var screen: Screen
+        var mode = MetaSort.Mode.RELEVANCE
+        fun build(): List<Row> = listOf(Row("Sort", "◄ ${mode.label} ►", action = {
+            mode = MetaSort.next(mode); screen.rows = build(); app.refresh(screen)
+        })) + MetaSort.apply(list, mode) { it.second }.map { row(app, it) }
+        screen = Screen(title, build())
+        return screen
+    }
+
     private fun row(app: MainActivity, p: Pair<Addon, Meta>): Row {
         val (a, m) = p
         val detail = if (m.id in collections) listOf(m.year, "Collection").filter { it.isNotBlank() }.joinToString("  ") else Catalogs.detail(m)
@@ -193,7 +204,7 @@ object Search {
             }
             if (all.isNotEmpty()) rows += Row("────────────────────")
             fun group(name: String, list: List<Pair<Addon, Meta>>) {
-                if (list.isNotEmpty()) rows += Row(name, "${list.size}  ►", opens = { Screen("$name: $query", list.map { row(app, it) }) })
+                if (list.isNotEmpty()) rows += Row(name, "${list.size}  ►", opens = { sortable(app, "$name: $query", list) })
             }
             group("Collections", g.collections)
             group("Films", g.films)

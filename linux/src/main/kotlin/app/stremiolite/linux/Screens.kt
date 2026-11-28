@@ -622,7 +622,16 @@ object Search {
             }
             if (found.isNotEmpty()) rows += Row("────────────────────")
             fun group(name: String, list: List<Pair<Addon, Meta>>) {
-                if (list.isNotEmpty()) rows += Row(name, "${list.size}  ►", opens = { Screen("$name: $q", list.map { row(it) }) })
+                if (list.isNotEmpty()) rows += Row(name, "${list.size}  ►", opens = {
+                    // A Sort line at the top: best match, name, newest, oldest or highest rated.
+                    lateinit var sc: Screen
+                    var mode = app.stremiolite.MetaSort.Mode.RELEVANCE
+                    fun build(): List<Row> = listOf(Row("Sort", "◄ ${mode.label} ►", action = {
+                        mode = app.stremiolite.MetaSort.next(mode); sc.rows = build(); App.refresh()
+                    })) + app.stremiolite.MetaSort.apply(list, mode) { it.second }.map { row(it) }
+                    sc = Screen("$name: $q", build())
+                    sc
+                })
             }
             group("Collections", g.collections)
             group("Films", g.films)
@@ -1270,6 +1279,8 @@ object Waiting {
         fun filmLabel(e: Entry) = Marks.title(if (e.better) Marks.BETTER else Marks.WAITING, e.name) + if (e.year.isNotEmpty()) " (${e.year})" else ""
         val notOut = Follow.films()
         val plain = now.filter { !it.better && it.ready == 0L && notOut.none { n -> n.id == it.id } }
+        // Films that left Waiting because a stream (or a better version) turned up.
+        Ready.films().size.let { n -> rows += Row("Moved to Ready", (if (n == 0) "none yet" else "$n") + "  ►", opens = { Ready.screen() }) }
         rows += Row("──── Films: waiting for a stream ────")
         if (plain.isEmpty() && notOut.isEmpty()) rows += Row("None.")
         plain.sortedBy { it.name }.forEach { e -> rows += Row(filmLabel(e), "no stream yet  ►", opens = { Details.screenFor(e.id, e.type, e.name) }) }

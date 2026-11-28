@@ -177,6 +177,8 @@ object Streams {
         var picked: Stream? = null
         val tried = mutableSetOf<Stream>()
         var askedAt = 0L
+        // Nothing here plays (none found, none suits the device, or every try failed).
+        var nothingPlays = false
         val minutes = Best.minutes(runtime) ?: if (type == "movie") 110.0 else 45.0
         // Episodes: prefer the same release as the last episode played (steady quality, subtitles in sync).
         val showId = watch?.id?.takeIf { type == "series" }
@@ -184,6 +186,12 @@ object Streams {
 
         fun rows(): List<Row> {
             val list = mutableListOf(status)
+            // A film with nothing that plays: one press puts it in Waiting, checked until a stream turns up.
+            if (nothingPlays && type == "movie" && !Waiting.has(app, id)) list += Row("Tell me when a stream is available", "►", action = {
+                Waiting.add(app, WaitingList.Entry(id, type, title, "", 0))
+                app.toast("Added to Waiting: you'll be told when a stream is available")
+                screen.rows = rows(); app.refresh(screen)
+            })
             if (picked != null) list += pickRow
             if (fetch.done) list += Row("Why this stream?", "►", opens = { why(fetch, minutes, picked, tried) })
             list += Row("────────────────────")
@@ -219,6 +227,7 @@ object Streams {
                         val next = if (tried.size >= 6) null else Best.pick(fetch.found.filter { it !in tried }, minutes, prefer)
                         if (next == null) {
                             status.label = "That release has no playable video, and there's no other good one. Choose below."
+                            nothingPlays = true
                             if (type == "movie" && NextList.has(app, id)) {
                                 Waiting.unplayable(app, id, title)
                                 status.label += " It's back in Waiting until one plays."
@@ -247,6 +256,7 @@ object Streams {
             val next = if (tried.size >= 4) null else Best.pick(fetch.found.filter { it !in tried }, minutes, prefer)
             if (next == null) {
                 status.label = "That stream didn't start, and there's no other good one. Choose below."
+                nothingPlays = true
                 screen.rows = rows()
                 app.refresh(screen)
                 false
@@ -279,12 +289,8 @@ object Streams {
             val best = Best.pick(fetch.found, minutes, prefer)
             if (best == null) {
                 status.label = if (fetch.found.isEmpty()) "No playable streams found." else "No stream suits this device. Choose one below."
-                val r = rows().toMutableList()
-                if (type == "movie" && !Waiting.has(app, id)) r.add(1, Row("Tell me when a stream is available", action = {
-                    Waiting.add(app, WaitingList.Entry(id, type, title, "", 0))
-                    app.toast("Added to Waiting")
-                    app.back()
-                }))
+                nothingPlays = true
+                val r = rows()
                 screen.rows = r
                 screen.moveTo = r.lastIndex
                 app.refresh(screen)
