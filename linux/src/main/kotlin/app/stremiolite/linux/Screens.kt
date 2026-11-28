@@ -13,6 +13,7 @@ import app.stremiolite.MetaParse
 import app.stremiolite.SearchRank
 import app.stremiolite.Stremio
 import app.stremiolite.Video
+import app.stremiolite.WaitingList.Entry
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
@@ -1171,24 +1172,11 @@ object Settings {
 // ============================================================================================
 
 object Waiting {
-    private const val ID = "stremiolite:waiting"
+    private const val ID = app.stremiolite.WaitingList.ID
+    private val W = app.stremiolite.WaitingList
 
-    /** Same shape as the phone's: [better] entries wait for a release better than [have] (score [bar]). */
-    class Entry(
-        val id: String, val type: String, val name: String, val year: String, val ready: Long,
-        val better: Boolean = false, val bar: Double = 0.0, val have: String = "", val found: String = "",
-    )
-
-    fun list(): List<Entry> {
-        val name = Lib.raw(ID)?.optString("name") ?: return emptyList()
-        val arr = runCatching { JSONArray(name) }.getOrNull() ?: return emptyList()
-        return (0 until arr.length()).mapNotNull { i ->
-            arr.optJSONObject(i)?.let {
-                Entry(it.optString("id"), it.optString("type"), it.optString("name"), it.optString("year"), it.optLong("ready"),
-                    it.optBoolean("better"), it.optDouble("bar", 0.0), it.optString("have"), it.optString("found"))
-            }
-        }.filter { it.id.isNotEmpty() }
-    }
+    /** The list and its checks are shared with the Android app ([app.stremiolite.WaitingList]). */
+    fun list(): List<Entry> = W.parse(Lib.raw(ID)?.toString())
 
     /** The list without films that are done with ([app.stremiolite.WaitRules]); saved back if any left. */
     fun current(): List<Entry> {
@@ -1207,56 +1195,36 @@ object Waiting {
 
     /** Notes what Play best would pick now, then watches for something clearly better (the phone checks). */
     fun addBetter(id: String, type: String, name: String, year: String, done: (String) -> Unit) {
-        App.async({ app.stremiolite.StreamParse.bestPlayable(Home.all(), type, id) }) { r ->
-            val now = r.getOrNull()
-            val have = now?.first?.summary?.replace(Regex("\\s+"), " ")?.trim() ?: "nothing playable yet"
-            save(list().filter { it.id != id } + Entry(id, type, name, year, 0, true, now?.second ?: 0.0, have, ""))
-            done(have)
+        val addons = Home.all()
+        App.async({ W.better(addons, id, type, name, year) }) { r ->
+            val e = r.getOrNull() ?: return@async
+            save(W.with(list(), e))
+            done(e.have)
         }
     }
 
-    private fun save(list: List<Entry>) {
-        val item = Lib.raw(ID) ?: app.stremiolite.Sync.newItem(ID, "other", "[]")
-        val arr = JSONArray()
-        list.forEach {
-            val o = JSONObject().put("id", it.id).put("type", it.type).put("name", it.name).put("year", it.year).put("ready", it.ready)
-            if (it.better) o.put("better", true).put("bar", it.bar).put("have", it.have).put("found", it.found)
-            arr.put(o)
-        }
-        item.put("name", arr.toString()).put("removed", true).put("temp", false).put("_mtime", app.stremiolite.Sync.iso(System.currentTimeMillis()))
-        Lib.put(item)
-    }
+    private fun save(list: List<Entry>) = Lib.put(W.record(Lib.raw(ID)?.toString(), list))
 
     /** Play best found nothing that plays for a Next watch film: back into Waiting, not ready. */
     fun unplayable(id: String, name: String) {
-        val have = list()
-        val e = have.firstOrNull { it.id == id }
-        save(if (e == null) have + Entry(id, "movie", name, "", 0)
-             else have.map { if (it.id == id) Entry(it.id, it.type, it.name, it.year, 0, it.better, it.bar, it.have, "") else it })
-        app.stremiolite.NextStatus.forget(id)
+        save(W.unplayable(list(), id, name))
     }
 
     /** Followed films now out to stream move here (the phone then checks them); the rest get a fresh note. */
     fun checkFollowedFilms(done: () -> Unit) {
-        val films = Follow.films()
-        if (films.isEmpty()) return
-        val addons = Home.all(); val key = Prefs.tmdbKey; val region = Prefs.watchRegion
-        App.async({ films.take(20).mapNotNull { f -> runCatching { f to app.stremiolite.FilmOut.check(addons, key, region, f.id) }.getOrNull() } }) { r ->
-            val res = r.getOrNull() ?: return@async
-            val out = res.filter { it.second.first }.map { it.first }
-            val notes = res.filter { !it.second.first && it.second.second != it.first.note }.map { (f, n) -> app.stremiolite.Following.Film(f.id, f.name, f.year, n.second) }
-            if (out.isEmpty() && notes.isEmpty()) return@async
-            Follow.followFilms(notes)
-            Follow.unfollowFilms(out.map { it.id })
-            val have = list()
-            val add = out.filter { o -> have.none { it.id == o.id && !it.better } }
-            if (add.isNotEmpty()) save(have + add.map { Entry(it.id, "movie", it.name, it.year, 0) })
+        if (Follow.films().isEmpty()) return
+        val fol = Follow.raw(); val wait = list(); val addons = Home.all(); val key = Prefs.tmdbKey; val region = Prefs.watchRegion
+        App.async({ W.outCheck(addons, key, region, fol, wait, System.currentTimeMillis()) }) { r ->
+            val (rec, changed) = r.getOrNull() ?: return@async
+            if (rec == null && changed == null) return@async
+            rec?.let { Lib.put(it) }
+            changed?.let { save(it) }
             done()
         }
     }
 
     fun add(id: String, type: String, name: String, year: String) {
-        save(list().filter { it.id != id } + Entry(id, type, name, year, 0))
+        save(W.with(list(), Entry(id, type, name, year, 0)))
         App.toast("Added to Waiting (your phone checks it)")
     }
 

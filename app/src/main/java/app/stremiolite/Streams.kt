@@ -270,7 +270,7 @@ object Streams {
                 status.label = if (fetch.found.isEmpty()) "No playable streams found." else "No stream suits this device. Choose one below."
                 val r = rows().toMutableList()
                 if (type == "movie" && !Waiting.has(app, id)) r.add(1, Row("Tell me when a stream is available", action = {
-                    Waiting.add(app, Waiting.Entry(id, type, title, "", 0))
+                    Waiting.add(app, WaitingList.Entry(id, type, title, "", 0))
                     app.toast("Added to Waiting")
                     app.back()
                 }))
