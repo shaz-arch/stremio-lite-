@@ -57,8 +57,13 @@ object CataloguePages {
     fun searchUrl(a: Addon, c: Addon.Catalog, query: String): String =
         a.base + "/catalog/" + enc(c.type) + "/" + enc(c.id) + "/search=" + enc(query) + ".json"
 
-    /** Personal lists (MDBList, Trakt, Letterboxd…) change as you add to them: always fetched fresh. */
-    fun isPersonal(c: Addon.Catalog) = listOf("mdblist.", "trakt.", "letterboxd.", "simkl.").any { c.id.startsWith(it) }
+    /**
+     * Personal lists (MDBList, Trakt, Letterboxd…) change as you add to them: always fetched fresh.
+     * Matched anywhere in the row's id, since add-ons like AIOMetadata put their own prefix first,
+     * and any watchlist row by name ([Folders.isPersonal]).
+     */
+    fun isPersonal(c: Addon.Catalog) =
+        listOf("mdblist", "trakt", "letterboxd", "simkl").any { c.id.contains(it, ignoreCase = true) } || Folders.isPersonal(c)
 
     /** Blocking: one page of a row. A row's first page is kept a while, unless it's a personal list. */
     fun page(a: Addon, c: Addon.Catalog, skip: Int): List<Meta> {
