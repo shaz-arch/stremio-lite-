@@ -8,7 +8,8 @@ import java.security.SecureRandom
 /**
  * Kids lock: one parent PIN per device, and any profile can be locked with it. In a locked profile,
  * leaving it (Switch profile, Sign out) and Settings need the PIN, and Search, Live TV and News can
- * be hidden. Kept on this device only, never synced or shared: the PIN is stored as a salted hash.
+ * be hidden. The PIN is stored as a salted hash; it and the lock follow the profiles' accounts to the
+ * other devices signed in to them ([KidsSync]), but never go out with "Share my setup".
  * A forgotten PIN is cleared by signing in with the locked profile's own Stremio password.
  */
 object KidsLock {

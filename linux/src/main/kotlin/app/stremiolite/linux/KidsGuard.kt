@@ -10,9 +10,41 @@ object KidsGuard {
 
     fun state(): KidsLock.State = KidsLock.read(runCatching { file().readText() }.getOrNull())
 
-    private fun save(s: KidsLock.State) {
-        file().writeText(s.json())
+    private fun write(s: KidsLock.State, updated: Long) {
+        file().writeText(org.json.JSONObject(s.json()).put("updated", updated).toString())
         runCatching { file().setReadable(false, false); file().setReadable(true, true) }
+    }
+
+    private fun save(s: KidsLock.State) {
+        val now = System.currentTimeMillis()
+        write(s, now)
+        // Every profile's account gets it, so the other devices signed in to them follow ([app.stremiolite.KidsSync]).
+        val keys = keys()
+        App.async({ app.stremiolite.KidsSync.push(keys, s, now) }) { }
+    }
+
+    /** Each profile's sign-in, by profile id. */
+    private fun keys(): Map<String, String> = Profiles.all().mapNotNull { p ->
+        runCatching { org.json.JSONObject(File(Profiles.dirFor(p.id), "account.json").readText()).optString("authKey") }.getOrNull()
+            ?.takeIf { it.isNotEmpty() }?.let { p.id to it }
+    }.toMap()
+
+    private var syncedAt = 0L
+
+    /**
+     * Takes a newer kids lock from the profiles' accounts (set on another device), at most every few
+     * minutes unless [force]; [changed] runs only if something did.
+     */
+    fun syncIn(force: Boolean = false, changed: () -> Unit = {}) {
+        if (!force && System.currentTimeMillis() - syncedAt < 5 * 60_000L) return
+        syncedAt = System.currentTimeMillis()
+        val keys = keys()
+        if (keys.isEmpty()) return
+        val local = state()
+        val at = runCatching { org.json.JSONObject(file().readText()).optLong("updated") }.getOrDefault(0L)
+        App.async({ app.stremiolite.KidsSync.merge(local, at, app.stremiolite.KidsSync.pull(keys)) }) { r ->
+            r.getOrNull()?.let { (s, t) -> write(s, t); changed() }
+        }
     }
 
     fun locked() = state().isLocked(Profiles.current()?.id)
@@ -139,6 +171,8 @@ object KidsGuard {
         }
         screen = Screen("Kids lock", emptyList())
         build()
+        // Changed on another device since: show that (unless changes are being made here).
+        syncIn(force = true) { if (draft == null && App.inStack(screen)) build() }
         // Left with changes not saved: they're dropped. (Asking for the PIN may cover this screen for a
         // moment; that's not leaving it.)
         screen.onHide = { App.later(0) { if (draft != null && !App.inStack(screen)) { draft = null; App.toast("Kids lock changes not saved") } } }

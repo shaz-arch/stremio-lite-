@@ -34,6 +34,8 @@ object FollowedShows {
         fun calendarFilms(): List<FilmDates.Film>
         fun tmdbKey(): String
         fun region(): String
+        /** Shows you've stopped following (Following's list), left out at once, not at the next hourly check. */
+        fun stopped(): Set<String> = emptySet()
     }
 
     lateinit var host: Host
@@ -64,8 +66,11 @@ object FollowedShows {
 
     // ---- reading -----------------------------------------------------------------------------
 
-    /** The followed shows' details from the last check. */
-    fun shows(): List<Full> = shows
+    /** The followed shows' details from the last check, minus any you've stopped following since. */
+    fun shows(): List<Full> {
+        val stopped = runCatching { host.stopped() }.getOrDefault(emptySet())
+        return if (stopped.isEmpty()) shows else shows.filter { it.id !in stopped }
+    }
 
     /** Every followed show from the last full check, including list-row shows. */
     fun lastFollowed(): List<Pair<String, String>> = lastFollowed
@@ -78,11 +83,11 @@ object FollowedShows {
     fun fresh() = System.currentTimeMillis() - at < KEEP_MS
 
     /** Episodes out in the last week (null until checked). */
-    fun recentCount(): Int? = if (at == 0L) null else shows.sumOf { Releases.recent(it).size }
+    fun recentCount(): Int? = if (at == 0L) null else shows().sumOf { Releases.recent(it).size }
 
     /** Episodes and film dates in the next 7 days (null until checked). */
-    fun weekCount(): Int? = if (at == 0L) null else shows.sumOf { Releases.upcoming(it, 7).size } +
-        filmEvents.orEmpty().count { it.day <= Releases.day(-7) }
+    fun weekCount(): Int? = if (at == 0L) null else shows().sumOf { Releases.upcoming(it, 7).size } +
+        filmEvents().orEmpty().count { it.day <= Releases.day(-7) }
 
     // ---- the saved copy ----------------------------------------------------------------------
 
@@ -197,8 +202,12 @@ object FollowedShows {
     private var filmsAt = 0L
     private var filmsLoading = false
 
-    /** The Calendar's film dates (null until fetched). */
-    fun filmEvents(): List<FilmDates.Event>? = filmEvents
+    /** The Calendar's film dates (null until fetched), minus films no longer waited on, followed or lined up. */
+    fun filmEvents(): List<FilmDates.Event>? {
+        val all = filmEvents ?: return null
+        val now = runCatching { host.calendarFilms().map { it.id }.toSet() }.getOrNull() ?: return all
+        return all.filter { it.film.id in now }
+    }
 
     /** The Calendar has asked once: no dates now means none, not "still finding". */
     fun filmsTried() { if (filmEvents == null) filmEvents = emptyList() }

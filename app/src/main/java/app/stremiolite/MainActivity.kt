@@ -210,6 +210,8 @@ class MainActivity : Activity() {
         updateClock()
         // Coming back to the app (it may have been running in the background for days).
         Updates.check { Home.redraw() }
+        // A profile locked (or unlocked) on another device: follow it here.
+        KidsGuard.syncSoon(this) { Home.redraw() }
         TvRemote.listen(this)
         PhoneShare.resume(this)
     }
