@@ -4,13 +4,11 @@ import android.app.AlertDialog
 import android.text.InputType
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
-import java.net.URLEncoder
 
 /** Search every add-on catalogue that supports it, all at once: best matches, then collections, films and shows. */
 object Search {
     private var lastQuery = ""
 
-    private fun enc(s: String) = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
 
     // ---- recent searches (last 8, newest first) ----
 
@@ -217,7 +215,7 @@ object Search {
                 rebuild()
                 Live.search(app, query) { channels = it; rebuild() }
                 sources.forEachIndexed { i, (a, c) ->
-                    val url = a.base + "/catalog/" + enc(c.type) + "/" + enc(c.id) + "/search=" + enc(query) + ".json"
+                    val url = CataloguePages.searchUrl(a, c, query)
                     Net.async({ Catalogs.parse(Net.get(url, timeoutMs = 12_000)) }) { r ->
                         answered++
                         r.onSuccess { results[i] = it }

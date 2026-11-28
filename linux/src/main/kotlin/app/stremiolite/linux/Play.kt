@@ -10,6 +10,7 @@ import app.stremiolite.StreamFetch
 import app.stremiolite.StreamMemory
 import app.stremiolite.StreamParse
 import app.stremiolite.Sub
+import app.stremiolite.SubtitleFetch
 import app.stremiolite.YouTube
 import org.json.JSONObject
 import java.io.File
@@ -22,8 +23,8 @@ import java.nio.channels.SocketChannel
 /** Asking add-ons for streams and subtitles, choosing one (the shared Play best rules), and playing it in mpv. */
 object Play {
     /**
-     * One round of asking every stream add-on (shared with the Android app: [StreamFetch]) and every
-     * subtitle add-on for a title.
+     * One round of asking every stream add-on ([StreamFetch]) and every subtitle add-on
+     * ([SubtitleFetch]) for a title, both shared with the Android app.
      */
     private class Fetch(type: String, id: String, val onChange: () -> Unit) {
         // mpv plays YouTube links itself (with yt-dlp); other players are left without them.
@@ -38,27 +39,10 @@ object Play {
         val started: Long get() = streams.started
         val done: Boolean get() = streams.done
 
-        val subAddons = Home.all().filter { it.supports("subtitles", type, id) }
-        val subs = mutableListOf<Sub>()
-        var subsAnswered = 0
-        val subsDone: Boolean get() = subsAnswered >= subAddons.size
-
-        init {
-            subAddons.forEach { a ->
-                val url = a.base + "/subtitles/" + Net.enc(type) + "/" + Net.enc(id) + ".json"
-                App.async({ JSONObject(Http.get(url, timeoutMs = 8_000)) }) { r ->
-                    subsAnswered++
-                    r.getOrNull()?.optJSONArray("subtitles")?.let { arr ->
-                        for (i in 0 until arr.length()) {
-                            val o = arr.optJSONObject(i) ?: continue
-                            val link = o.optString("url")
-                            if (link.startsWith("http")) subs += Sub(link, o.optString("lang"), StreamParse.shortName(a.name))
-                        }
-                    }
-                    onChange()
-                }
-            }
-        }
+        // Shared with fetching early and the stream list ([SubtitleFetch]).
+        private val subtitles = SubtitleFetch.get(type, id, Home.all()).listen { onChange() }
+        val subs: List<Sub> get() = subtitles.found
+        val subsDone: Boolean get() = subtitles.done
 
         /** The subtitle to use: the first in your chosen language (null if off or none). */
         fun chosenSub(): Sub? {

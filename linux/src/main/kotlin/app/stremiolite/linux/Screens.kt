@@ -449,9 +449,6 @@ object Index {
 object Catalogs {
     private const val LOAD_AHEAD = 15
 
-    private fun pageUrl(a: Addon, c: Addon.Catalog, skip: Int) =
-        a.base + "/catalog/" + Net.enc(c.type) + "/" + Net.enc(c.id) + (if (skip > 0) "/skip=$skip" else "") + ".json"
-
     fun detail(m: Meta): String {
         val kind = when (m.type) { "movie" -> "Movie"; "series" -> "Series"; else -> m.type }
         val rating = if (m.rating.isNotBlank()) "★ ${m.rating}" else ""
@@ -522,8 +519,8 @@ object Catalogs {
             if (!loading && !ended) {
                 loading = true
                 rebuild()
-                val url = pageUrl(a, c, fetched)
-                App.async({ MetaParse.parse(Http.get(url)) }) { r ->
+                val skip = fetched
+                App.async({ app.stremiolite.CataloguePages.page(a, c, skip) }) { r ->
                     loading = false
                     r.onSuccess { page ->
                         fetched += page.size
@@ -640,7 +637,7 @@ object Search {
         if (sources.isEmpty()) s.rows = listOf(Row("None of your add-ons can search."))
         Live.search(q) { channels = it; build() }
         sources.forEach { (a, c) ->
-            val url = a.base + "/catalog/" + Net.enc(c.type) + "/" + Net.enc(c.id) + "/search=" + Net.enc(q) + ".json"
+            val url = app.stremiolite.CataloguePages.searchUrl(a, c, q)
             App.async({ MetaParse.parse(Http.get(url)) }) { r ->
                 answered++
                 r.getOrNull()?.forEach { m ->
@@ -659,26 +656,11 @@ object Search {
 // ============================================================================================
 
 object Details {
-    private val cache = HashMap<String, Full>()
-
     /** A title's full details (cached), for screens outside Details. */
     fun load(type: String, id: String): Full = fetch(null, type, id)
 
-    private fun fetch(from: Addon?, type: String, id: String): Full {
-        cache["$type/$id"]?.let { return it }
-        val candidates = (listOfNotNull(from) + Home.all()).distinct().filter { it.supports("meta", type, id) }
-        if (candidates.isEmpty()) throw IllegalStateException("none of your add-ons can describe this title")
-        var last: Throwable? = null
-        for (a in candidates) {
-            try {
-                val m = JSONObject(Http.get(a.base + "/meta/" + Net.enc(type) + "/" + Net.enc(id) + ".json")).optJSONObject("meta") ?: continue
-                val full = MetaParse.full(m, a.name)
-                cache["$type/$id"] = full
-                return full
-            } catch (e: Exception) { last = e }
-        }
-        throw last ?: IllegalStateException("no details found")
-    }
+    /** The add-on the title came from first, then any other that can ([app.stremiolite.TitleDetails], shared with Android). */
+    private fun fetch(from: Addon?, type: String, id: String): Full = app.stremiolite.TitleDetails.load(Home.all(), from, type, id)
 
     fun screenFor(id: String, type: String, name: String, autoPlay: Boolean = false): Screen =
         screen(null, Meta(id, type, name, "", "", "", emptyList(), ""), autoPlay)

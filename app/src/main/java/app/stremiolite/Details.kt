@@ -1,7 +1,5 @@
 package app.stremiolite
 
-import org.json.JSONObject
-import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -12,37 +10,8 @@ import java.util.TimeZone
  * The catalogue's own info shows straight away while the full details load.
  */
 object Details {
-    private const val CACHE_MS = 24 * 60 * 60_000L
-
-    private class Cached(val time: Long, val full: Full)
-    private val cache = object : LinkedHashMap<String, Cached>(16, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Cached>?) = size > 12
-    }
-
-    private fun enc(s: String) = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
-
-    /** Ask the add-on the title came from first (if it can describe it), then any other that can. */
-    private fun fetch(from: Addon, type: String, id: String): Full {
-        val key = "$type/$id"
-        synchronized(cache) {
-            cache[key]?.let { if (System.currentTimeMillis() - it.time < CACHE_MS) return it.full }
-        }
-        val candidates = (listOf(from) + Home.allAddons()).distinct().filter { it.supports("meta", type, id) }
-        if (candidates.isEmpty()) throw IllegalStateException("none of your add-ons can describe this title")
-        var last: Throwable? = null
-        for (a in candidates) {
-            try {
-                val json = JSONObject(Net.get(a.base + "/meta/" + enc(type) + "/" + enc(id) + ".json"))
-                val m = json.optJSONObject("meta") ?: continue
-                val full = MetaParse.full(m, a.name)
-                synchronized(cache) { cache[key] = Cached(System.currentTimeMillis(), full) }
-                return full
-            } catch (e: Exception) {
-                last = e
-            }
-        }
-        throw last ?: IllegalStateException("no details found")
-    }
+    /** Ask the add-on the title came from first (if it can describe it), then any other that can ([TitleDetails]). */
+    private fun fetch(from: Addon, type: String, id: String): Full = TitleDetails.load(Home.allAddons(), from, type, id)
 
     /** [autoPlay]: go straight on to playing (Play/Pause on a list), via the same resume/next logic. */
     fun screen(app: MainActivity, from: Addon, item: Meta, autoPlay: Boolean = false): Screen {
