@@ -129,7 +129,8 @@ object Details {
         val at = History.resumeAt(app, w.videoId)
         val rows = mutableListOf<Row>()
         if (at > 0) {
-            rows += Row("Resume from ${History.clock(at)}", "►", opens = { Streams.playBest(app, f.type, w.videoId, title, f.runtime, w, at) })
+            val length = History.progress(app, w.videoId)?.duration?.takeIf { it > 0 }
+            rows += Row("Resume from ${History.clock(at)}" + (length?.let { " of " + History.clock(it) } ?: ""), "►", opens = { Streams.playBest(app, f.type, w.videoId, title, f.runtime, w, at) })
             rows += Row("Play best from the start", opens = { Streams.playBest(app, f.type, w.videoId, title, f.runtime, w, 0) })
         } else {
             rows += Row("Play best", "►", opens = { Streams.playBest(app, f.type, w.videoId, title, f.runtime, w, 0) })
@@ -410,6 +411,12 @@ object Details {
         }
     }
 
+    /** A plain text bar, filled as far as [pos] is through [dur]. */
+    private fun progressBar(pos: Long, dur: Long, width: Int = 12): String {
+        val n = (pos.toDouble() / dur * width).toInt().coerceIn(0, width)
+        return "█".repeat(n) + "░".repeat(width - n)
+    }
+
     /** ✓ for watched, time left for started. */
     private fun mark(app: MainActivity, v: Video): String {
         val p = History.progress(app, v.id) ?: return ""
@@ -464,6 +471,10 @@ object Details {
             if (v.released.isNotBlank()) rows += Row(info("Released", v.released + if (upcoming(v.released)) " (upcoming)" else ""))
             Ratings.knownEpisode(v.id)?.let { rows += Row(info("Rating", Ratings.episodeLine(it, Settings.ratingsConfig(app)))) }
             mark(app, v).takeIf { it.isNotEmpty() }?.let { rows += Row(info("Watched", if (it == "✓") "yes ✓" else it)) }
+            // How far through, out of how long, as a bar.
+            History.progress(app, v.id)?.takeIf { !it.done && it.position > 60_000 && it.duration > 0 }?.let { p ->
+                rows += Row(info("Progress", progressBar(p.position, p.duration) + "  " + History.clock(p.position) + " of " + History.clock(p.duration)))
+            }
             if (mark(app, v) == "✓") rows += Row("Remove from watched", action = {
                 History.unwatch(app, f.id, f.type, v.id, label, stremioOrder(f))
                 app.toast("$label is no longer marked as watched")
