@@ -135,9 +135,23 @@ class MainActivity : Activity() {
         fun num(vararg keys: String): Long? = keys.firstNotNullOfOrNull { k -> (extras?.get(k) as? Number)?.toLong() }
         // Closed by the sleep timer: the player may not say where it got to, so use the time it ran.
         val slept = launched > 0 && Sleep.stoppedSince(launched)
-        val position = num("extra_position", "position")?.takeIf { it >= 0 } ?: if (slept) Sleep.reached() else null
-        val duration = num("extra_duration", "duration")?.takeIf { it > 0 }
-        val completed = extras?.getString("end_by") == "playback_completion"
+        var position = num("extra_position", "position")?.takeIf { it >= 0 } ?: if (slept) Sleep.reached() else null
+        val reportedDuration = num("extra_duration", "duration")?.takeIf { it > 0 }
+        // Some players don't say how long the video is: use the length from an earlier play of it.
+        val duration = reportedDuration ?: watch?.let { History.progress(this, it.videoId)?.duration?.takeIf { d -> d > 0 } }
+        var completed = extras?.getString("end_by") == "playback_completion"
+        if (watch != null && !slept && launched > 0) {
+            // With no length at all, the title's running time ("22 min") is close enough to tell the end.
+            val length = duration ?: Best.minutes(watch.runtime)?.let { (it * 60_000).toLong() }
+            // The player closed itself without saying where it got to: judge by how long it ran.
+            if ((position == null || position == 0L) && System.currentTimeMillis() - launched > 60_000) {
+                Sleep.reached().takeIf { it in 1 until 6 * 3_600_000L }?.let { if (length != null && History.isFinished(it, length)) position = it }
+            }
+            val at = position ?: 0L
+            // Into the end credits (where they're known), or the end by the running time: that's watched.
+            val credits = Skips.known(watch.videoId)?.let { Skips.creditsAt(it) }
+            if ((credits != null && at >= credits) || (length != null && History.isFinished(at, length))) completed = true
+        }
         if (slept) {
             onPlayerFailed = null
             if (watch != null) History.record(this, watch, position, duration, false)
@@ -150,7 +164,7 @@ class MainActivity : Activity() {
         // Back within 15 seconds without getting past 5: the stream didn't play.
         // A "video" under 2 minutes is an error clip (e.g. ElfHosted's "couldn't play this" screen), not the title.
         val elapsed = System.currentTimeMillis() - launched
-        val errorClip = duration != null && duration < 120_000
+        val errorClip = reportedDuration != null && reportedDuration < 120_000
         val failed = errorClip || (!completed && launched > 0 && elapsed < 15_000 && (position ?: 0) < 5_000)
         val retry = onPlayerFailed
         onPlayerFailed = null
@@ -160,6 +174,8 @@ class MainActivity : Activity() {
         } else if (watch != null) {
             History.record(this, watch, position, duration, completed)
             val finished = completed || History.isFinished(position ?: 0, duration ?: 0)
+            // Where it got to, so it's clear what was saved (and whether it counted as watched).
+            toast(if (finished) "Watched ✓" else "Stopped at " + History.clock(position ?: 0) + (duration?.let { " of " + History.clock(it) } ?: ""))
             if (finished && watch.nextVideoId != null && Settings.autoNext(this) && !Sleep.stopsNext()) {
                 push(Binge.upNext(this, watch))
                 return
