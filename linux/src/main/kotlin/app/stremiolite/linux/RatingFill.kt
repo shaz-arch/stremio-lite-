@@ -20,7 +20,9 @@ object RatingFill {
         queue.clear(); queue.addAll(todo)
         changed = onChange
         owner = screen
-        while (workers < 3) { workers++; next(key, Prefs.watchRegion) }
+        // Up to three at once. A fixed count, not "while fewer than three": a worker that finds the
+        // queue empty stops at once, so that loop never ended when fewer than three were missing.
+        repeat((minOf(3, queue.size) - workers).coerceAtLeast(0)) { workers++; next(key, Prefs.watchRegion) }
     }
 
     private fun next(key: String, region: String) {
