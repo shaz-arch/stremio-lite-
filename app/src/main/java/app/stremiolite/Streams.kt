@@ -1,8 +1,5 @@
 package app.stremiolite
 
-import org.json.JSONObject
-import java.net.URLEncoder
-
 /**
  * Streams for a title: asked of every stream add-on that handles it at once (about 10 seconds each).
  *
@@ -11,36 +8,13 @@ import java.net.URLEncoder
  *  - [playBest]: waits for the answers, scores every stream ([Best]) and plays the winner,
  *    showing what it picked so you can go back and choose another.
  *
- * Shown: streams with a web link (what debrid services return).
- * Hidden: plain torrents (no streaming server here) and links that need special
- * headers (an external player can't send them).
+ * The asking itself (AIOStreams first, fail-safes when needed) is shared with the Linux app: [StreamFetch].
  */
 object Streams {
-    private const val TIMEOUT_MS = 10_000
-
-    private fun bingePrefs(c: android.content.Context) = Profiles.prefsFor(c, "binge")
-
-    fun lastFor(c: android.content.Context, showId: String): Pref? {
-        val v = bingePrefs(c).getString(showId, null) ?: return null
-        val p = v.split('|')
-        return if (p.size >= 3) Pref(p[0], p[1], p[2]) else null
-    }
-
-    private fun remember(c: android.content.Context, showId: String, s: Stream) {
-        val prefs = bingePrefs(c)
-        val e = prefs.edit().putString(showId, "${s.group}|${s.quality}|${s.source}")
-        // Keep it small: the 40 most recent shows.
-        val all = prefs.all.keys.filter { it != showId }
-        if (all.size > 40) all.take(all.size - 40).forEach { e.remove(it) }
-        e.apply()
-    }
-
-    private fun enc(s: String) = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
-
     // ---- fetching early --------------------------------------------------------------------
 
     private const val FRESH_MS = 5 * 60_000L
-    private val early = LinkedHashMap<String, Fetch>()
+    private val early = LinkedHashMap<String, StreamFetch>()
 
     /** Starts asking for a title's streams (and subtitles) before you press play. */
     fun prefetch(app: MainActivity, type: String, id: String) {
@@ -48,7 +22,7 @@ object Streams {
         val have = early[key]
         if (have != null && System.currentTimeMillis() - have.started < FRESH_MS) return
         early.remove(key)
-        early[key] = Fetch(type, id)
+        early[key] = StreamFetch(type, id, Home.allAddons())
         while (early.size > 3) early.remove(early.keys.first())
         Subtitles.prefetch(app, type, id)
         if (type == "series" && ':' in id && Settings.skipIntros(app)) Net.async({ Skips.find(id) }) { }
@@ -58,101 +32,17 @@ object Streams {
      * A recent early fetch for this title if it can be trusted, or a fresh one: reused only if it's
      * under 90 seconds old and still running, or finished with every source answering and results.
      */
-    private fun fetchFor(type: String, id: String): Fetch {
+    private fun fetchFor(type: String, id: String): StreamFetch {
         val key = "$type/$id"
         early[key]?.let { f ->
             val young = System.currentTimeMillis() - f.started < REUSE_MS
             val healthy = !f.done || (f.notes.isEmpty() && f.found.isNotEmpty())
             if (young && healthy) return f
         }
-        return Fetch(type, id).also { early[key] = it }
+        return StreamFetch(type, id, Home.allAddons()).also { early[key] = it }
     }
 
     private const val REUSE_MS = 90_000L
-
-    /** One round of asking the stream add-ons; every listener runs on the main thread after each answer. */
-    class Fetch(type: String, id: String) {
-        val started = System.currentTimeMillis()
-        val listeners = mutableListOf<() -> Unit>()
-        private fun onChange() = listeners.toList().forEach { it() }
-
-        private val tiers = StreamParse.tiers(Home.allAddons().filter { it.supports("stream", type, id) })
-        /** The add-ons asked so far: AIOStreams, plus the fail-safes once they're needed. */
-        private val skipMain = tiers.second.isNotEmpty() && StreamParse.mainDown()
-        val addons = (if (skipMain) tiers.second else tiers.first).toMutableList()
-        val found = mutableListOf<Stream>()
-        val notes = mutableListOf<String>()
-        var answered = 0
-        var hiddenTorrent = 0
-        var hiddenHeaders = 0
-        /** AIOStreams gave nothing playable, so the fail-safes were asked. */
-        var usingFailsafe = skipMain
-        /** Web pages rather than videos ("open in browser", ratings pages): shown as links, never played. */
-        val links = mutableListOf<Pair<String, String>>()
-        val done: Boolean get() = answered >= addons.size
-        private var timed = false
-        private val type = type
-        private val id = id
-
-        private fun ask(list: List<Addon>) {
-            list.forEach { a ->
-                val url = a.base + "/stream/" + enc(type) + "/" + enc(id) + ".json"
-                Net.async({ JSONObject(Net.get(url, timeoutMs = TIMEOUT_MS)) }) { r ->
-                    answered++
-                    r.onSuccess { json ->
-                        val arr = json.optJSONArray("streams")
-                        if (arr != null) for (i in 0 until arr.length()) {
-                            val o = arr.optJSONObject(i) ?: continue
-                            val hints = o.optJSONObject("behaviorHints")
-                            val link = o.optString("url")
-                            val web = StreamParse.webLink(o, a)
-                            when {
-                                web != null -> if (links.none { it.second == web.second }) links += web
-                                // A YouTube video by its id: opened in the YouTube app.
-                                link.isBlank() && o.optString("ytId").isNotBlank() ->
-                                    StreamParse.addUnique(found, StreamParse.parse(o, YouTube.watch(o.optString("ytId")), shortName(a.name), found.size))
-                                link.isBlank() || !link.startsWith("http") ->
-                                    if (o.has("infoHash")) hiddenTorrent++
-                                else -> StreamParse.addUnique(found, StreamParse.parse(o, link, shortName(a.name), found.size))
-                            }
-                        }
-                    }.onFailure { e ->
-                        notes += "${shortName(a.name)}: ${Net.describe(e)}"
-                    }
-                    // AIOStreams has answered with nothing playable: ask the fail-safes now.
-                    if (done && !usingFailsafe && tiers.second.isNotEmpty()) StreamParse.noteMain(StreamParse.hasPlayable(found))
-                    if (done && !usingFailsafe && tiers.second.isNotEmpty() && !StreamParse.hasPlayable(found)) {
-                        usingFailsafe = true
-                        addons += tiers.second
-                        ask(tiers.second)
-                    }
-                    if (done && !timed) { timed = true; Timings.record("Finding streams", System.currentTimeMillis() - started) }
-                    onChange()
-                }
-            }
-        }
-
-        init {
-            ask(addons)
-            if (addons.isEmpty()) Net.later(0, Runnable { onChange() })
-        }
-
-        /** "AIOStreams gave nothing: showing your fail-safes (Torrentio)". */
-        fun failsafeLine(): String? = if (!usingFailsafe) null
-            else tiers.first.joinToString(", ") { shortName(it.name) } + (if (skipMain) " gave nothing a few minutes ago" else " gave nothing") + ": showing your fail-safes (" + tiers.second.joinToString(", ") { shortName(it.name) } + ")"
-
-        fun listen(l: () -> Unit): Fetch {
-            listeners += l
-            return this
-        }
-
-        fun hiddenLine(): String? {
-            val hidden = mutableListOf<String>()
-            if (hiddenTorrent > 0) hidden += "$hiddenTorrent torrent-only"
-            if (hiddenHeaders > 0) hidden += "$hiddenHeaders need special headers"
-            return if (hidden.isEmpty()) null else "Hidden: " + hidden.joinToString(", ")
-        }
-    }
 
     /** Subtitles for the title, picked automatically in the chosen language unless the user picks. */
     private class SubPick(app: MainActivity, type: String, id: String, onChange: () -> Unit) {
@@ -202,7 +92,7 @@ object Streams {
     fun screen(app: MainActivity, type: String, id: String, title: String, watch: History.Watch? = null, startAt: Long = 0): Screen {
         val summary = Row("")
         lateinit var screen: Screen
-        lateinit var fetch: Fetch
+        lateinit var fetch: StreamFetch
         lateinit var subs: SubPick
         lateinit var rebuild: () -> Unit
         val subRow = Row("Subtitles", opens = { subs.picker(app) { rebuild() } })
@@ -279,7 +169,7 @@ object Streams {
         val status = Row("")
         val pickRow = Row("")
         lateinit var screen: Screen
-        lateinit var fetch: Fetch
+        lateinit var fetch: StreamFetch
         lateinit var subs: SubPick
         var started = false
         var active = false
@@ -290,7 +180,7 @@ object Streams {
         val minutes = Best.minutes(runtime) ?: if (type == "movie") 110.0 else 45.0
         // Episodes: prefer the same release as the last episode played (steady quality, subtitles in sync).
         val showId = watch?.id?.takeIf { type == "series" }
-        val prefer = showId?.let { lastFor(app, it) }
+        val prefer = showId?.let { StreamMemory.lastFor(it) }
 
         fun rows(): List<Row> {
             val list = mutableListOf(status)
@@ -334,7 +224,7 @@ object Streams {
                         }
                         return@async
                     }
-                    showId?.let { remember(app, it, s) }
+                    showId?.let { StreamMemory.remember(it, s) }
                     app.onPlayerFailed = { retry() }
                     Player.play(app, s.url, title, listOfNotNull(subs.chosen), watch = watch, startAt = freshStart(app, watch, startAt))
                 }
@@ -433,7 +323,7 @@ object Streams {
         if (startAt > 0 && watch != null) History.resumeAt(app, watch.videoId).takeIf { it > 0 } ?: startAt else startAt
 
     /** Every stream Play best considered, best score first, and why any were left out. */
-    private fun why(fetch: Fetch, minutes: Double, picked: Stream?, tried: Set<Stream>): Screen {
+    private fun why(fetch: StreamFetch, minutes: Double, picked: Stream?, tried: Set<Stream>): Screen {
         val scored = fetch.found.map { s -> s to Best.score(s, minutes) }
         val rows = mutableListOf<Row>()
         rows += Row("${fetch.found.size} streams from ${fetch.addons.size} add-ons, in ${(System.currentTimeMillis() - fetch.started) / 1000} s")
@@ -455,9 +345,4 @@ object Streams {
         }
         return Screen("Why this stream?", rows)
     }
-
-    private fun shortName(name: String) = name.substringBefore('|').trim().ifEmpty { name }.take(16)
-
-
 }
-

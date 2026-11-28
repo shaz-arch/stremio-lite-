@@ -6,8 +6,11 @@ import app.stremiolite.Http
 import app.stremiolite.LibraryItems
 import app.stremiolite.Languages
 import app.stremiolite.Stream
+import app.stremiolite.StreamFetch
+import app.stremiolite.StreamMemory
 import app.stremiolite.StreamParse
 import app.stremiolite.Sub
+import app.stremiolite.YouTube
 import org.json.JSONObject
 import java.io.File
 import java.net.StandardProtocolFamily
@@ -18,63 +21,29 @@ import java.nio.channels.SocketChannel
 
 /** Asking add-ons for streams and subtitles, choosing one (the shared Play best rules), and playing it in mpv. */
 object Play {
-    /** One round of asking every stream add-on and subtitle add-on for a title. */
+    /**
+     * One round of asking every stream add-on (shared with the Android app: [StreamFetch]) and every
+     * subtitle add-on for a title.
+     */
     private class Fetch(type: String, id: String, val onChange: () -> Unit) {
-        private val tiers = StreamParse.tiers(Home.all().filter { it.supports("stream", type, id) })
-        /** The add-ons asked so far: AIOStreams, plus the fail-safes once they're needed. */
-        private val skipMain = tiers.second.isNotEmpty() && StreamParse.mainDown()
-        val streamAddons = (if (skipMain) tiers.second else tiers.first).toMutableList()
-        val subAddons = Home.all().filter { it.supports("subtitles", type, id) }
-        val found = mutableListOf<Stream>()
-        val subs = mutableListOf<Sub>()
-        val notes = mutableListOf<String>()
-        var answered = 0
-        var subsAnswered = 0
-        var usingFailsafe = skipMain
-        /** Web pages rather than videos ("open in browser", ratings pages): shown as links, never played. */
-        val links = mutableListOf<Pair<String, String>>()
-        val started = System.currentTimeMillis()
-        val done: Boolean get() = answered >= streamAddons.size
-        val subsDone: Boolean get() = subsAnswered >= subAddons.size
-        private val type = type
-        private val id = id
+        // mpv plays YouTube links itself (with yt-dlp); other players are left without them.
+        private val streams = StreamFetch(type, id, Home.all(), youTube = { yt -> if ("mpv" in Prefs.player) YouTube.watch(yt) else null })
+            .listen { onChange() }
+        val streamAddons: List<app.stremiolite.Addon> get() = streams.addons
+        val found: List<Stream> get() = streams.found
+        /** Why the fail-safes are being shown, add-ons that failed, and what was hidden. */
+        val notes: List<String> get() = listOfNotNull(streams.failsafeLine()) + streams.notes + listOfNotNull(streams.hiddenLine())
+        val links: List<Pair<String, String>> get() = streams.links
+        val answered: Int get() = streams.answered
+        val started: Long get() = streams.started
+        val done: Boolean get() = streams.done
 
-        private fun ask(list: List<app.stremiolite.Addon>) {
-            list.forEach { a ->
-                val url = a.base + "/stream/" + Net.enc(type) + "/" + Net.enc(id) + ".json"
-                App.async({ JSONObject(Http.get(url, timeoutMs = 10_000)) }) { r ->
-                    answered++
-                    r.onSuccess { json ->
-                        val arr = json.optJSONArray("streams")
-                        if (arr != null) for (i in 0 until arr.length()) {
-                            val o = arr.optJSONObject(i) ?: continue
-                            val link = o.optString("url")
-                            val web = StreamParse.webLink(o, a)
-                            if (web != null) { if (links.none { it.second == web.second }) links += web; continue }
-                            // A YouTube video by its id: mpv plays those itself (with yt-dlp).
-                            val yt = o.optString("ytId").takeIf { link.isBlank() && it.isNotBlank() && "mpv" in Prefs.player }
-                            val use = if (yt != null) "https://www.youtube.com/watch?v=$yt" else link
-                            if (use.startsWith("http")) {
-                                StreamParse.addUnique(found, StreamParse.parse(o, use, StreamParse.shortName(a.name), found.size))
-                            }
-                        }
-                    }.onFailure { e -> notes += "${StreamParse.shortName(a.name)}: ${Net.describe(e)}" }
-                    // AIOStreams has answered with nothing playable: ask the fail-safes now.
-                    if (done && !usingFailsafe && tiers.second.isNotEmpty()) StreamParse.noteMain(StreamParse.hasPlayable(found))
-                    if (done && !usingFailsafe && tiers.second.isNotEmpty() && !StreamParse.hasPlayable(found)) {
-                        usingFailsafe = true
-                        streamAddons += tiers.second
-                        notes += tiers.first.joinToString(", ") { StreamParse.shortName(it.name) } + " gave nothing: showing your fail-safes (" + tiers.second.joinToString(", ") { StreamParse.shortName(it.name) } + ")"
-                        ask(tiers.second)
-                    }
-                    onChange()
-                }
-            }
-        }
+        val subAddons = Home.all().filter { it.supports("subtitles", type, id) }
+        val subs = mutableListOf<Sub>()
+        var subsAnswered = 0
+        val subsDone: Boolean get() = subsAnswered >= subAddons.size
 
         init {
-            if (skipMain) notes += tiers.first.joinToString(", ") { StreamParse.shortName(it.name) } + " gave nothing a few minutes ago: showing your fail-safes (" + tiers.second.joinToString(", ") { StreamParse.shortName(it.name) } + ")"
-            ask(streamAddons)
             subAddons.forEach { a ->
                 val url = a.base + "/subtitles/" + Net.enc(type) + "/" + Net.enc(id) + ".json"
                 App.async({ JSONObject(Http.get(url, timeoutMs = 8_000)) }) { r ->
@@ -89,7 +58,6 @@ object Play {
                     onChange()
                 }
             }
-            if (streamAddons.isEmpty()) App.later(0) { onChange() }
         }
 
         /** The subtitle to use: the first in your chosen language (null if off or none). */
@@ -116,7 +84,7 @@ object Play {
         var started = false
         val tried = mutableSetOf<Stream>()
         val showId = w?.id?.takeIf { type == "series" }
-        val prefer = showId?.let { Binge.lastFor(it) }
+        val prefer = showId?.let { StreamMemory.lastFor(it) }
         val minutes = minutes(w, type)
 
         lateinit var go: (Stream) -> Unit
@@ -157,7 +125,7 @@ object Play {
         }
         launch = { st ->
             playing = true
-            showId?.let { Binge.remember(it, st) }
+            showId?.let { StreamMemory.remember(it, st) }
             status.label = "Playing in ${Prefs.player}… (this screen waits until it closes)"
             s.rows = rows()
             App.refresh()

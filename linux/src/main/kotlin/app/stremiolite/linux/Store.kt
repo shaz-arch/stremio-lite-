@@ -3,8 +3,6 @@ package app.stremiolite.linux
 import app.stremiolite.Language
 import app.stremiolite.LibraryItems
 import app.stremiolite.Languages
-import app.stremiolite.Pref
-import app.stremiolite.Stream
 import app.stremiolite.Sync
 import org.json.JSONArray
 import org.json.JSONObject
@@ -517,23 +515,6 @@ object Look {
     )
 
     fun clock(): Clock = clocks.getOrElse(Prefs.clock) { clocks[0] }
-}
-
-/** The release last played per show, so the next episode keeps the same look and timing. */
-object Binge {
-    fun lastFor(showId: String): Pref? {
-        val v = Store.readJson("binge.json").optString(showId).ifEmpty { return null }
-        val p = v.split('|')
-        return if (p.size >= 3) Pref(p[0], p[1], p[2]) else null
-    }
-
-    fun remember(showId: String, s: Stream) {
-        val o = Store.readJson("binge.json")
-        o.put(showId, "${s.group}|${s.quality}|${s.source}")
-        val keys = o.keys().asSequence().toList()
-        if (keys.size > 40) keys.take(keys.size - 40).forEach { o.remove(it) }
-        Store.writeJson("binge.json", o)
-    }
 }
 
 /** What is being played, so the result can be filed against it. */

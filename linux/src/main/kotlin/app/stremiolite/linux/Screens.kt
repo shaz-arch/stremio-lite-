@@ -18,25 +18,10 @@ import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
 import org.json.JSONArray
 import org.json.JSONObject
-import java.net.SocketTimeoutException
 import java.net.URLEncoder
-import java.net.UnknownHostException
 
 object Net {
-    fun describe(e: Throwable): String {
-        var t: Throwable? = e
-        while (t != null) {
-            when (t) {
-                is SocketTimeoutException -> return "timed out"
-                is UnknownHostException -> return "address not found (offline?)"
-                is Http.HttpError -> return "server said ${t.code}"
-                is java.net.ConnectException -> return "connection refused"
-                is org.json.JSONException -> return "unexpected reply"
-            }
-            t = t.cause
-        }
-        return e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName
-    }
+    fun describe(e: Throwable): String = Http.describe(e)
 
     fun enc(s: String): String = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
 }

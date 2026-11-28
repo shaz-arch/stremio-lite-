@@ -2,6 +2,7 @@ name: Android 5 check
 
 # On any branch other than main (main's build runs the same checks): fails if code uses
 # Java or Android that the 2016 Fire Stick (Android 5.1) doesn't have.
+# Also compiles the Linux app, since shared code changes can break it too.
 on:
   push:
     branches-ignore: [main]
@@ -19,4 +20,4 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - run: |
           chmod +x gradlew
-          ./gradlew :core:animalsnifferMain :app:lintDebug --no-daemon
+          ./gradlew :core:animalsnifferMain :app:lintDebug :linux:compileKotlin --no-daemon

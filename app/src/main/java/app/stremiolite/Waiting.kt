@@ -304,6 +304,8 @@ object Waiting {
 
     class Job : JobService() {
         override fun onStartJob(params: JobParameters): Boolean {
+            // The app may not be open: the shared code still needs its storage and threads.
+            AndroidPlatform.install(applicationContext)
             Thread {
                 val ready = runCatching { checkNow(applicationContext) }.getOrDefault(emptyList())
                 notify(applicationContext, ready)
