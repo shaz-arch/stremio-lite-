@@ -8,15 +8,17 @@ private fun enc(s: String): String = URLEncoder.encode(s, "UTF-8").replace("+", 
 /** A small most-recently-used cache, safe to use from background threads. */
 private class Recent<V>(private val max: Int, private val keepMs: Long) {
     private class Kept<V>(val time: Long, val value: V)
-    private val map = object : LinkedHashMap<String, Kept<V>>(max * 2, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Kept<V>>?) = size > max
-    }
+    // Kept in use order (not a LinkedHashMap subclass: Kotlin would add Java 8 methods the 2016 stick lacks).
+    private val map = LinkedHashMap<String, Kept<V>>(max * 2, 0.75f, true)
 
     fun get(key: String): V? = synchronized(map) {
         map[key]?.takeIf { System.currentTimeMillis() - it.time < keepMs }?.value
     }
 
-    fun put(key: String, value: V) = synchronized(map) { map[key] = Kept(System.currentTimeMillis(), value) }
+    fun put(key: String, value: V) = synchronized(map) {
+        map[key] = Kept(System.currentTimeMillis(), value)
+        while (map.size > max) map.remove(map.keys.first())
+    }
 }
 
 /** A title's full details, shared by every front-end. Kept for a day (the last dozen titles). */
