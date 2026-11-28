@@ -4,6 +4,7 @@ import app.stremiolite.AccountLibrary
 import app.stremiolite.Language
 import app.stremiolite.LibraryItems
 import app.stremiolite.Languages
+import app.stremiolite.SharedSettings
 import app.stremiolite.Sync
 import org.json.JSONArray
 import org.json.JSONObject
@@ -270,7 +271,7 @@ object Prefs {
         set(v) { data().put("comingFromShows", v); save() }
 
     /** Your TMDB key, for Where to watch (synced, never shared). */
-    /** TorBox and MDBList keys, remembered on this computer for the next setup (not in SHARED: never synced). */
+    /** TorBox and MDBList keys, remembered on this computer for the next setup (not in SharedSettings.KEYS: never synced). */
     /** Debrid keys in your order (a TorBox key from an earlier build counts too). */
     var debridKeys: List<Pair<String, String>>
         get() {
@@ -297,7 +298,7 @@ object Prefs {
         get() = data().optString("watchRegion", "GB")
         set(v) { data().put("watchRegion", v); save() }
 
-    /** Game scores (this profile, this computer: not in SHARED, so never synced). */
+    /** Game scores (this profile, this computer: not in SharedSettings.KEYS, so never synced). */
     var games: String?
         get() = data().optString("games").ifEmpty { null }
         set(v) { data().put("games", v); save() }
@@ -317,7 +318,7 @@ object Prefs {
         get() = data().optLong("readySeen", 0)
         set(v) { data().put("readySeen", v); save() }
 
-    /** Channels played lately (this computer only: not in SHARED, so never synced). */
+    /** Channels played lately (this computer only: not in SharedSettings.KEYS, so never synced). */
     var recent: List<app.stremiolite.LiveTv.Channel>
         get() = app.stremiolite.LiveTv.favourites(data().optString("liveRecent", ""))
         set(v) { data().put("liveRecent", app.stremiolite.LiveTv.favouritesJson(v)); save() }
@@ -345,88 +346,53 @@ object Prefs {
 
     fun reload() { cache = null }
 
-    /** The shared settings, as "Share my setup" sends them (same shape as the Android app's). */
-    fun exportShared(): JSONObject {
-        val d = data()
-        val o = JSONObject()
-        SHARED.forEach { k -> if (d.has(k) && k !in NOT_SHARED) o.put(k, d.opt(k)) }
-        return o.put("hiddenRows", JSONArray(hiddenRows.toList()))
-    }
-
-    /** Takes someone's shared settings, plus their hidden rows and [alsoHide]. */
-    fun importShared(o: JSONObject, alsoHide: Set<String>) {
-        val d = data()
-        SHARED.forEach { k -> if (o.has(k) && k !in NOT_SHARED) d.put(k, o.opt(k)) }
-        val theirs = o.optJSONArray("hiddenRows")?.let { a -> (0 until a.length()).map { a.optString(it) }.toSet() } ?: emptySet()
-        d.put("hiddenRows", JSONArray((hiddenRows + theirs + alsoHide).toList()))
-        save()
-        syncOut()
-    }
-
     // ---- shared with the other devices (the "stremiolite:settings" record) ------------------
-
-    private const val SYNC_ID = "stremiolite:settings"
-
-    /** Shared settings this build knows; one this computer has never had is always taken from the account. */
-    private val SHARED = listOf("theme", "subLang", "autoNext", "clock", "hideWatched", "layout", "autoFollow", "liveTv", "playlists", "liveFavs", "liveGuide", "liveFreeHide", "newsOn", "comingOn", "sleepOnHome", "homeHidden", "ratingsOrder", "ratingsVotes", "ratingsPercent", "newsFeeds", "newsHide", "tmdbKey", "watchRegion", "geminiKey", "rice", "customTheme")
-    /** Synced with your own devices, but never sent to someone else with "Share my setup". */
-    private val NOT_SHARED = setOf("playlists", "liveFavs", "liveGuide", "tmdbKey", "geminiKey")
-    /** The look: shared by default, or kept to this computer ("lookLocal", which itself never syncs). */
-    private val LOOK = setOf("theme", "clock", "rice", "customTheme")
+    // Which settings follow the account, and how, is decided with the Android app ([SharedSettings]).
 
     var lookLocal: Boolean
         get() = data().optBoolean("lookLocal", false)
         set(v) { data().put("lookLocal", v); save() }
 
-    private fun shares(k: String) = k !in LOOK || !lookLocal
+    /** This profile's settings, as the shared code sees them. */
+    private val host = object : SharedSettings.Host {
+        override fun has(key: String) = data().has(key)
+        override fun get(key: String, kind: SharedSettings.Kind): Any? {
+            val d = data()
+            if (!d.has(key)) return null
+            return when (kind) {
+                SharedSettings.Kind.INT -> d.optInt(key)
+                SharedSettings.Kind.BOOL -> d.optBoolean(key)
+                SharedSettings.Kind.LONG -> d.optLong(key)
+                SharedSettings.Kind.TEXT -> d.optString(key)
+                SharedSettings.Kind.LIST -> d.optJSONArray(key)?.let { a -> (0 until a.length()).map { a.optString(it) }.toSet() }
+            }
+        }
+        override fun edit(changes: Map<String, Any?>) {
+            val d = data()
+            for ((k, v) in changes) when (v) {
+                null -> d.remove(k)
+                is Set<*> -> d.put(k, JSONArray(v.toList()))
+                else -> d.put(k, v)
+            }
+            save()
+        }
+        override fun profileName(): String? = Profiles.current()?.name
+        override fun takeName(name: String) = Profiles.takeName(name)
+        override fun record(): String? = Lib.raw(SharedSettings.ID)?.toString()
+        override fun putRecord(item: JSONObject) = Lib.put(item)
+    }
+
+    /** The shared settings, as "Share my setup" sends them (same shape as the Android app's). */
+    fun exportShared(): JSONObject = SharedSettings.exportShared(host)
+
+    /** Takes someone's shared settings, plus their hidden rows and [alsoHide]. */
+    fun importShared(o: JSONObject, alsoHide: Set<String>) = SharedSettings.importShared(host, o, alsoHide)
 
     /** Takes the account's shared settings if they're newer than this computer's. */
-    fun syncIn(): Boolean {
-        // Copied into this profile while another was in use: send it to the account first.
-        if (data().optBoolean("pendingSync")) {
-            data().remove("pendingSync"); save()
-            syncOut()
-            return false
-        }
-        val raw = Lib.raw(SYNC_ID) ?: return false
-        val o = runCatching { JSONObject(raw.optString("name")) }.getOrNull() ?: return false
-        val updated = o.optLong("updated")
-        val d = data()
-        val newer = updated > syncedAt
-        var changed = false
-        for (k in SHARED) {
-            if (!shares(k) || !o.has(k) || (!newer && d.has(k))) continue
-            if (d.opt(k) != o.opt(k)) { d.put(k, o.opt(k)); changed = true }
-        }
-        // The Gemini key, if this computer doesn't have one.
-        if (d.optString("geminiKey").isBlank() && o.optString("geminiKey").isNotBlank()) { d.put("geminiKey", o.optString("geminiKey")); changed = true }
-        if (newer) o.optJSONArray("hiddenRows")?.let { d.put("hiddenRows", it); changed = true }
-        val accName = o.optString("profileName")
-        // Take the account's name when it's newer, or always if this computer named the profile itself ("Profile 1").
-        if (!app.stremiolite.ProfileName.isAuto(accName) && (newer || app.stremiolite.ProfileName.isAuto(Profiles.current()?.name ?: ""))) Profiles.takeName(accName)
-        if (newer) d.put("syncedAt", updated)
-        save()
-        // Set up before names were synced: a computer that's synced before sends its profile name once.
-        if (!newer && !o.has("profileName") && syncedAt > 0) syncOut()
-        return changed
-    }
+    fun syncIn(): Boolean = SharedSettings.syncIn(host)
 
-    /** Sends theme, clock, subtitle language, auto-next, watched-films choice and hidden rows, keeping anything else the record holds. */
-    fun syncOut() {
-        val now = System.currentTimeMillis()
-        val raw = Lib.raw(SYNC_ID)
-        val o = raw?.let { runCatching { JSONObject(it.optString("name")) }.getOrNull() } ?: JSONObject()
-        // Only settings chosen on this computer (or already taken from the account): never a default.
-        val d = data()
-        SHARED.forEach { k -> if (d.has(k) && shares(k) && !(k == "geminiKey" && d.optString(k).isBlank())) o.put(k, d.opt(k)) }
-        // The profile's name, so every device signed in to this account shows the same one.
-        Profiles.current()?.name?.takeIf { !app.stremiolite.ProfileName.isAuto(it) }?.let { o.put("profileName", it) }
-        o.put("hiddenRows", JSONArray(hiddenRows.toList())).put("updated", now)
-        syncedAt = now
-        val item = raw ?: Sync.newItem(SYNC_ID, "other", "{}")
-        item.put("name", o.toString()).put("removed", true).put("temp", false).put("_mtime", Sync.iso(now))
-        Lib.put(item)
-    }
+    /** Sends this computer's shared settings, keeping anything else the record holds. */
+    fun syncOut() = SharedSettings.syncOut(host)
 }
 
 object Look {
