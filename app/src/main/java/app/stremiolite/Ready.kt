@@ -16,7 +16,7 @@ object Ready {
     private fun gone(c: Context) = ReadyGone.parse(History.rawRemote(c, ReadyGone.ID)) + ReadyNotice.readSeen(prefs(c).getString("readyGone", null))
     private fun dismiss(c: Context, id: String) = History.putRemote(c, ReadyGone.add(History.rawRemote(c, ReadyGone.ID), id))
 
-    fun films(c: Context): List<Waiting.Entry> {
+    fun films(c: Context): List<WaitingList.Entry> {
         val next = NextList.ids(c)
         return Waiting.current(c).filter { it.ready > 0 && it.id !in next }.sortedByDescending { it.ready }
     }

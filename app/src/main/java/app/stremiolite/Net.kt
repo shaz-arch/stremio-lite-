@@ -5,11 +5,6 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Base64
 import java.io.ByteArrayInputStream
-import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.SocketTimeoutException
-import java.net.URL
-import java.net.UnknownHostException
 import java.security.KeyStore
 import java.security.cert.CertificateException
 import java.security.cert.CertificateFactory
@@ -17,7 +12,6 @@ import java.security.cert.X509Certificate
 import java.util.concurrent.Executors
 import javax.net.ssl.HttpsURLConnection
 import javax.net.ssl.SSLContext
-import javax.net.ssl.SSLException
 import javax.net.ssl.TrustManagerFactory
 import javax.net.ssl.X509TrustManager
 
@@ -29,6 +23,7 @@ object Net {
     fun init(context: Context) {
         HttpsURLConnection.setDefaultSSLSocketFactory(Trust.socketFactory(context.applicationContext))
         Http.userAgent = "Stremonino/${BuildConfigLite.VERSION} (Android TV)"
+        AndroidPlatform.install(context)
     }
 
     /** Run [work] in the background, then [done] on the main thread. */
@@ -53,25 +48,7 @@ object Net {
     fun getBytes(url: String): ByteArray = Http.getBytes(url)
 
     /** A short, plain-English reason for a failed request. */
-    fun describe(e: Throwable): String {
-        var t: Throwable? = e
-        while (t != null) {
-            when (t) {
-                is CertificateException -> return "certificate not trusted"
-                is SocketTimeoutException -> return "timed out"
-                is UnknownHostException -> return "address not found"
-                is Http.HttpError -> return "server said ${t.code}"
-                is java.net.ConnectException -> return "connection refused"
-                is org.json.JSONException -> return "unexpected reply"
-            }
-            t = t.cause
-        }
-        return when (e) {
-            is SSLException -> "secure connection failed"
-            // Our own errors (e.g. Stremio's reply) carry a readable message; class names are scrambled in release builds.
-            else -> e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName
-        }
-    }
+    fun describe(e: Throwable): String = Http.describe(e)
 }
 
 /**

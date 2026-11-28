@@ -11,6 +11,27 @@ import java.net.URL
 object Http {
     class HttpError(val code: Int) : IOException("HTTP $code")
 
+    /** A short, plain-English reason for a failed request (shown next to the add-on's name). */
+    fun describe(e: Throwable): String {
+        var t: Throwable? = e
+        while (t != null) {
+            when (t) {
+                is java.security.cert.CertificateException -> return "certificate not trusted"
+                is java.net.SocketTimeoutException -> return "timed out"
+                is java.net.UnknownHostException -> return "address not found (offline?)"
+                is HttpError -> return "server said ${t.code}"
+                is java.net.ConnectException -> return "connection refused"
+                is org.json.JSONException -> return "unexpected reply"
+            }
+            t = t.cause
+        }
+        return when (e) {
+            is javax.net.ssl.SSLException -> "secure connection failed"
+            // Our own errors (e.g. Stremio's reply) carry a readable message; class names are scrambled in release builds.
+            else -> e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName
+        }
+    }
+
     /** Set by each app, e.g. "Stremonino/1.14 (Android TV)". */
     @Volatile
     var userAgent = "Stremonino"

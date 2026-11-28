@@ -67,7 +67,7 @@ object Ready {
     private fun gone() = app.stremiolite.ReadyGone.parse(Lib.raw(app.stremiolite.ReadyGone.ID)?.toString()) + ReadyNotice.readSeen(Prefs.readyGone)
     private fun dismiss(id: String) { Lib.put(app.stremiolite.ReadyGone.add(Lib.raw(app.stremiolite.ReadyGone.ID)?.toString(), id)) }
 
-    fun films(): List<Waiting.Entry> {
+    fun films(): List<app.stremiolite.WaitingList.Entry> {
         val next = NextList.ids()
         return Waiting.current().filter { it.ready > 0 && it.id !in next }.sortedByDescending { it.ready }
     }

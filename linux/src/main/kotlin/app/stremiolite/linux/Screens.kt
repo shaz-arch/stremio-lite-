@@ -13,30 +13,16 @@ import app.stremiolite.MetaParse
 import app.stremiolite.SearchRank
 import app.stremiolite.Stremio
 import app.stremiolite.Video
+import app.stremiolite.WaitingList.Entry
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
 import org.json.JSONArray
 import org.json.JSONObject
-import java.net.SocketTimeoutException
 import java.net.URLEncoder
-import java.net.UnknownHostException
 
 object Net {
-    fun describe(e: Throwable): String {
-        var t: Throwable? = e
-        while (t != null) {
-            when (t) {
-                is SocketTimeoutException -> return "timed out"
-                is UnknownHostException -> return "address not found (offline?)"
-                is Http.HttpError -> return "server said ${t.code}"
-                is java.net.ConnectException -> return "connection refused"
-                is org.json.JSONException -> return "unexpected reply"
-            }
-            t = t.cause
-        }
-        return e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName
-    }
+    fun describe(e: Throwable): String = Http.describe(e)
 
     fun enc(s: String): String = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
 }
@@ -463,9 +449,6 @@ object Index {
 object Catalogs {
     private const val LOAD_AHEAD = 15
 
-    private fun pageUrl(a: Addon, c: Addon.Catalog, skip: Int) =
-        a.base + "/catalog/" + Net.enc(c.type) + "/" + Net.enc(c.id) + (if (skip > 0) "/skip=$skip" else "") + ".json"
-
     fun detail(m: Meta): String {
         val kind = when (m.type) { "movie" -> "Movie"; "series" -> "Series"; else -> m.type }
         val rating = if (m.rating.isNotBlank()) "★ ${m.rating}" else ""
@@ -536,8 +519,8 @@ object Catalogs {
             if (!loading && !ended) {
                 loading = true
                 rebuild()
-                val url = pageUrl(a, c, fetched)
-                App.async({ MetaParse.parse(Http.get(url)) }) { r ->
+                val skip = fetched
+                App.async({ app.stremiolite.CataloguePages.page(a, c, skip) }) { r ->
                     loading = false
                     r.onSuccess { page ->
                         fetched += page.size
@@ -654,7 +637,7 @@ object Search {
         if (sources.isEmpty()) s.rows = listOf(Row("None of your add-ons can search."))
         Live.search(q) { channels = it; build() }
         sources.forEach { (a, c) ->
-            val url = a.base + "/catalog/" + Net.enc(c.type) + "/" + Net.enc(c.id) + "/search=" + Net.enc(q) + ".json"
+            val url = app.stremiolite.CataloguePages.searchUrl(a, c, q)
             App.async({ MetaParse.parse(Http.get(url)) }) { r ->
                 answered++
                 r.getOrNull()?.forEach { m ->
@@ -673,26 +656,11 @@ object Search {
 // ============================================================================================
 
 object Details {
-    private val cache = HashMap<String, Full>()
-
     /** A title's full details (cached), for screens outside Details. */
     fun load(type: String, id: String): Full = fetch(null, type, id)
 
-    private fun fetch(from: Addon?, type: String, id: String): Full {
-        cache["$type/$id"]?.let { return it }
-        val candidates = (listOfNotNull(from) + Home.all()).distinct().filter { it.supports("meta", type, id) }
-        if (candidates.isEmpty()) throw IllegalStateException("none of your add-ons can describe this title")
-        var last: Throwable? = null
-        for (a in candidates) {
-            try {
-                val m = JSONObject(Http.get(a.base + "/meta/" + Net.enc(type) + "/" + Net.enc(id) + ".json")).optJSONObject("meta") ?: continue
-                val full = MetaParse.full(m, a.name)
-                cache["$type/$id"] = full
-                return full
-            } catch (e: Exception) { last = e }
-        }
-        throw last ?: IllegalStateException("no details found")
-    }
+    /** The add-on the title came from first, then any other that can ([app.stremiolite.TitleDetails], shared with Android). */
+    private fun fetch(from: Addon?, type: String, id: String): Full = app.stremiolite.TitleDetails.load(Home.all(), from, type, id)
 
     fun screenFor(id: String, type: String, name: String, autoPlay: Boolean = false): Screen =
         screen(null, Meta(id, type, name, "", "", "", emptyList(), ""), autoPlay)
@@ -1186,24 +1154,11 @@ object Settings {
 // ============================================================================================
 
 object Waiting {
-    private const val ID = "stremiolite:waiting"
+    private const val ID = app.stremiolite.WaitingList.ID
+    private val W = app.stremiolite.WaitingList
 
-    /** Same shape as the phone's: [better] entries wait for a release better than [have] (score [bar]). */
-    class Entry(
-        val id: String, val type: String, val name: String, val year: String, val ready: Long,
-        val better: Boolean = false, val bar: Double = 0.0, val have: String = "", val found: String = "",
-    )
-
-    fun list(): List<Entry> {
-        val name = Lib.raw(ID)?.optString("name") ?: return emptyList()
-        val arr = runCatching { JSONArray(name) }.getOrNull() ?: return emptyList()
-        return (0 until arr.length()).mapNotNull { i ->
-            arr.optJSONObject(i)?.let {
-                Entry(it.optString("id"), it.optString("type"), it.optString("name"), it.optString("year"), it.optLong("ready"),
-                    it.optBoolean("better"), it.optDouble("bar", 0.0), it.optString("have"), it.optString("found"))
-            }
-        }.filter { it.id.isNotEmpty() }
-    }
+    /** The list and its checks are shared with the Android app ([app.stremiolite.WaitingList]). */
+    fun list(): List<Entry> = W.parse(Lib.raw(ID)?.toString())
 
     /** The list without films that are done with ([app.stremiolite.WaitRules]); saved back if any left. */
     fun current(): List<Entry> {
@@ -1222,56 +1177,36 @@ object Waiting {
 
     /** Notes what Play best would pick now, then watches for something clearly better (the phone checks). */
     fun addBetter(id: String, type: String, name: String, year: String, done: (String) -> Unit) {
-        App.async({ app.stremiolite.StreamParse.bestPlayable(Home.all(), type, id) }) { r ->
-            val now = r.getOrNull()
-            val have = now?.first?.summary?.replace(Regex("\\s+"), " ")?.trim() ?: "nothing playable yet"
-            save(list().filter { it.id != id } + Entry(id, type, name, year, 0, true, now?.second ?: 0.0, have, ""))
-            done(have)
+        val addons = Home.all()
+        App.async({ W.better(addons, id, type, name, year) }) { r ->
+            val e = r.getOrNull() ?: return@async
+            save(W.with(list(), e))
+            done(e.have)
         }
     }
 
-    private fun save(list: List<Entry>) {
-        val item = Lib.raw(ID) ?: app.stremiolite.Sync.newItem(ID, "other", "[]")
-        val arr = JSONArray()
-        list.forEach {
-            val o = JSONObject().put("id", it.id).put("type", it.type).put("name", it.name).put("year", it.year).put("ready", it.ready)
-            if (it.better) o.put("better", true).put("bar", it.bar).put("have", it.have).put("found", it.found)
-            arr.put(o)
-        }
-        item.put("name", arr.toString()).put("removed", true).put("temp", false).put("_mtime", app.stremiolite.Sync.iso(System.currentTimeMillis()))
-        Lib.put(item)
-    }
+    private fun save(list: List<Entry>) = Lib.put(W.record(Lib.raw(ID)?.toString(), list))
 
     /** Play best found nothing that plays for a Next watch film: back into Waiting, not ready. */
     fun unplayable(id: String, name: String) {
-        val have = list()
-        val e = have.firstOrNull { it.id == id }
-        save(if (e == null) have + Entry(id, "movie", name, "", 0)
-             else have.map { if (it.id == id) Entry(it.id, it.type, it.name, it.year, 0, it.better, it.bar, it.have, "") else it })
-        app.stremiolite.NextStatus.forget(id)
+        save(W.unplayable(list(), id, name))
     }
 
     /** Followed films now out to stream move here (the phone then checks them); the rest get a fresh note. */
     fun checkFollowedFilms(done: () -> Unit) {
-        val films = Follow.films()
-        if (films.isEmpty()) return
-        val addons = Home.all(); val key = Prefs.tmdbKey; val region = Prefs.watchRegion
-        App.async({ films.take(20).mapNotNull { f -> runCatching { f to app.stremiolite.FilmOut.check(addons, key, region, f.id) }.getOrNull() } }) { r ->
-            val res = r.getOrNull() ?: return@async
-            val out = res.filter { it.second.first }.map { it.first }
-            val notes = res.filter { !it.second.first && it.second.second != it.first.note }.map { (f, n) -> app.stremiolite.Following.Film(f.id, f.name, f.year, n.second) }
-            if (out.isEmpty() && notes.isEmpty()) return@async
-            Follow.followFilms(notes)
-            Follow.unfollowFilms(out.map { it.id })
-            val have = list()
-            val add = out.filter { o -> have.none { it.id == o.id && !it.better } }
-            if (add.isNotEmpty()) save(have + add.map { Entry(it.id, "movie", it.name, it.year, 0) })
+        if (Follow.films().isEmpty()) return
+        val fol = Follow.raw(); val wait = list(); val addons = Home.all(); val key = Prefs.tmdbKey; val region = Prefs.watchRegion
+        App.async({ W.outCheck(addons, key, region, fol, wait, System.currentTimeMillis()) }) { r ->
+            val (rec, changed) = r.getOrNull() ?: return@async
+            if (rec == null && changed == null) return@async
+            rec?.let { Lib.put(it) }
+            changed?.let { save(it) }
             done()
         }
     }
 
     fun add(id: String, type: String, name: String, year: String) {
-        save(list().filter { it.id != id } + Entry(id, type, name, year, 0))
+        save(W.with(list(), Entry(id, type, name, year, 0)))
         App.toast("Added to Waiting (your phone checks it)")
     }
 
@@ -1397,127 +1332,46 @@ object Waiting {
 
 object NewEpisodes {
     private class Found(val show: Full, val ep: Video)
+    private val S = app.stremiolite.FollowedShows
 
-    private var fulls: List<Full> = emptyList()
-    private var fullsAt = 0L
-    private var followed = 0
-    private var checked = 0
-    private var loading = false
-    private val waiting = mutableListOf<() -> Unit>()
-    private var progress: (() -> Unit)? = null
+    /** What the shared code ([app.stremiolite.FollowedShows]) needs from this app; set at start-up. */
+    val host = object : app.stremiolite.FollowedShows.Host {
+        override fun addons() = Home.all()
+        override fun followed(lists: List<Pair<String, String>>) = Follow.shows(lists)
+        override fun continuing() = Lib.continueWatching().filter { it.type == "series" }.map { it.id to it.name }
+        override fun fetchShow(id: String) = MetaParse.fetch(Home.all(), "series", id)
+        override fun readSaved(): String? = Store.file("shows.json").takeIf { it.exists() }?.readText()
+        override fun writeSaved(o: JSONObject) = Store.writeJson("shows.json", o)
+        override fun calendarFilms() = NewEpisodes.calendarFilms()
+        override fun tmdbKey() = Prefs.tmdbKey
+        override fun region() = Prefs.watchRegion
+    }
 
-    fun fresh(): Boolean { if (!cacheRead) readCache(); return System.currentTimeMillis() - fullsAt < 60 * 60_000L }
+    fun fresh(): Boolean { S.readSavedNow(); return S.fresh() }
 
     /** Drops the episode lists (after switching profile). */
-    fun forget() { fulls = emptyList(); fullsAt = 0; followed = 0; checked = 0; lastFollowed = emptyList(); cacheRead = false }
-
-    // ---- kept in the profile's folder (shows.json), so a fresh start doesn't refetch every show ----
-    private var cacheRead = false
-
-    private fun readCache() {
-        cacheRead = true
-        val o = Store.readJson("shows.json")
-        val arr = o.optJSONArray("shows") ?: return
-        if (fulls.isNotEmpty()) return
-        fulls = (0 until arr.length()).mapNotNull { i -> arr.optJSONObject(i)?.let { MetaParse.full(it, it.optString("source")) } }
-        fullsAt = o.optLong("at")
-        lastFollowed = o.optJSONArray("followed")?.let { a -> (0 until a.length()).mapNotNull { i -> a.optJSONArray(i)?.let { it.optString(0) to it.optString(1) } } } ?: emptyList()
-        followed = lastFollowed.size
-    }
-
-    private fun writeCache() {
-        val shows = fulls; val at = fullsAt; val fol = lastFollowed
-        App.async({
-            val arr = JSONArray(); shows.forEach { arr.put(MetaParse.compact(it)) }
-            val fa = JSONArray(); fol.forEach { fa.put(JSONArray().put(it.first).put(it.second)) }
-            Store.writeJson("shows.json", JSONObject().put("at", at).put("shows", arr).put("followed", fa))
-        }) { }
-    }
+    fun forget() = S.forget()
 
     /** Fetches the followed shows' episode lists (at most once an hour), then runs [done]. */
     fun load(force: Boolean = false, onProgress: (() -> Unit)? = null, done: () -> Unit) {
-        if (!cacheRead) readCache()
-        if (!force && fresh()) { done(); return }
-        waiting += done
-        if (onProgress != null) progress = onProgress
-        if (loading) return
-        loading = true
-        checked = 0
-        val mine = Follow.shows()
-        val cont = Lib.continueWatching().filter { it.type == "series" }.map { it.id to it.name }
-        App.async({ Follow.shows(app.stremiolite.Releases.fromPersonalRows(Home.all())).take(60) }) { r ->
-            val mineNow = r.getOrDefault(mine)
-            if (r.isSuccess) lastFollowed = mineNow
-            followed = mineNow.size
-            // Shows in Continue watching are checked too: their new episodes come to Ready.
-            val shows = (mineNow + cont).distinctBy { it.first }
-            val got = mutableListOf<Full>()
-            fun finish() {
-                fulls = got.toList(); fullsAt = System.currentTimeMillis(); loading = false; failed.clear()
-                writeCache()
-                refreshFilms()
-                val l = waiting.toList(); waiting.clear(); l.forEach { it() }
-            }
-            if (shows.isEmpty()) { finish(); return@async }
-            shows.forEach { (id, _) ->
-                App.async({ MetaParse.fetch(Home.all(), "series", id) }) { rr ->
-                    checked++
-                    rr.getOrNull()?.let { got += it }
-                    progress?.invoke()
-                    if (checked >= shows.size) finish()
-                }
-            }
-        }
+        S.readSavedNow()
+        S.load(force, onProgress, done)
     }
 
-    fun shows(): List<Full> = fulls
-    fun isLoading() = loading
-
-    @Volatile private var lastFollowed: List<Pair<String, String>> = emptyList()
+    fun shows(): List<Full> = S.shows()
+    fun isLoading() = S.isLoading()
 
     /** Started and chosen shows (read now) plus list-row shows from the last check, minus stopped ones. */
     fun followedNow(): List<Pair<String, String>> {
         val stopped = Follow.stopped()
-        return (Follow.shows() + lastFollowed).distinctBy { it.first }.filter { it.first !in stopped }
+        return (Follow.shows() + S.lastFollowed()).distinctBy { it.first }.filter { it.first !in stopped }
     }
-
-    private val fetching = HashSet<String>()
-    private val failed = HashSet<String>()
 
     /** Adds shows followed since the last check without waiting for the hourly refresh; returns those still coming. */
-    fun ensure(shows: List<Pair<String, String>>, done: () -> Unit): Set<String> {
-        if (loading) return emptySet()
-        val have = fulls.map { it.id }.toSet()
-        shows.filter { it.first !in have && it.first !in fetching && it.first !in failed }.forEach { (id, _) ->
-            fetching += id
-            App.async({ MetaParse.fetch(Home.all(), "series", id) }) { r ->
-                fetching -= id
-                val f = r.getOrNull()
-                if (f == null) failed += id else if (fulls.none { it.id == f.id }) { fulls = fulls + f; writeCache() }
-                done()
-            }
-        }
-        return fetching.toSet()
-    }
+    fun ensure(shows: List<Pair<String, String>>, done: () -> Unit): Set<String> = S.ensure(shows, done)
 
-    fun recentCount(): Int? = if (fullsAt == 0L) null else fulls.sumOf { app.stremiolite.Releases.recent(it).size }
-    fun weekCount(): Int? = if (fullsAt == 0L) null else fulls.sumOf { app.stremiolite.Releases.upcoming(it, 7).size } +
-        filmEvents.orEmpty().count { it.day <= app.stremiolite.Releases.day(-7) }
-
-    private var filmEvents: List<app.stremiolite.FilmDates.Event>? = null
-    private var filmsAt = 0L
-    private var filmsLoading = false
-
-    private fun refreshFilms(force: Boolean = false, done: () -> Unit = {}) {
-        if (filmsLoading || (!force && System.currentTimeMillis() - filmsAt < 3_600_000L)) { done(); return }
-        filmsLoading = true
-        val want = calendarFilms(); val addons = Home.all(); val key = Prefs.tmdbKey; val region = Prefs.watchRegion
-        App.async({ app.stremiolite.FilmDates.events(addons, key, region, want) }) { r ->
-            filmsLoading = false
-            r.getOrNull()?.let { filmEvents = it; filmsAt = System.currentTimeMillis() }
-            done()
-        }
-    }
+    fun recentCount(): Int? = S.recentCount()
+    fun weekCount(): Int? = S.weekCount()
 
     private fun epRow(f: Found, detail: String) = Row(
         f.show.name,
@@ -1549,21 +1403,21 @@ object NewEpisodes {
     private fun unseen(): List<Found> {
         val seen = app.stremiolite.ReadyNotice.readSeen(Prefs.episodesSeen)
         val news = isNews()
-        return fulls.flatMap { sh ->
+        return S.shows().flatMap { sh ->
             val done = Lib.watchedEpisodes(sh.id, MetaParse.stremioOrder(sh))
             app.stremiolite.Releases.recent(sh).filter { it.id !in seen && it.id !in done && news(sh, it) }.map { Found(sh, it) }
         }.sortedWith(compareByDescending<Found> { it.ep.released }.thenBy { it.show.name }.thenBy { it.ep.episode })
     }
 
     fun markSeen() {
-        val now = fulls.flatMap { sh -> app.stremiolite.Releases.recent(sh).map { it.id } }
+        val now = S.shows().flatMap { sh -> app.stremiolite.Releases.recent(sh).map { it.id } }
         if (now.isEmpty()) return
         Prefs.episodesSeen = app.stremiolite.ReadyNotice.writeSeen(app.stremiolite.ReadyNotice.readSeen(Prefs.episodesSeen), now)
     }
 
     /** The "New episode" line at the top of Home, or null. */
     fun homeRow(): Row? {
-        if (!cacheRead) readCache()
+        S.readSavedNow()
         val new = unseen()
         val label = app.stremiolite.ReadyNotice.episodesLabel(new.map { it.show.name to MetaParse.epLabel(it.ep) }) ?: return null
         return Row(label, "►", action = {
@@ -1572,7 +1426,7 @@ object NewEpisodes {
         })
     }
 
-    private fun calendarFilms(): List<app.stremiolite.FilmDates.Film> {
+    fun calendarFilms(): List<app.stremiolite.FilmDates.Film> {
         return (Waiting.list().filter { it.type == "movie" }.map { app.stremiolite.FilmDates.Film(it.id, it.name, it.year) } +
             Follow.films().map { app.stremiolite.FilmDates.Film(it.id, it.name, it.year) } +
             NextList.all().filter { it.type == "movie" }.map { app.stremiolite.FilmDates.Film(it.id, it.name, it.year) } +
@@ -1584,16 +1438,16 @@ object NewEpisodes {
         val status = Row("Finding the shows you follow…")
         lateinit var s: Screen
         fun build() {
-            val films = filmEvents
+            val films = S.filmEvents()
             val R = app.stremiolite.Releases
-            val eps = fulls.flatMap { sh -> R.upcoming(sh).map { Found(sh, it) } }
+            val eps = S.shows().flatMap { sh -> R.upcoming(sh).map { Found(sh, it) } }
             val days = (eps.map { it.ep.released } + films.orEmpty().map { it.day }).distinct().sorted()
             val n = eps.size + films.orEmpty().size
             status.label = when {
-                loading -> "Checking $followed shows… $checked done"
+                S.isLoading() -> "Checking ${S.followedTotal()} shows… ${S.checkedSoFar()} done"
                 n == 0 && films == null -> "Finding film dates…"
                 n == 0 -> "Nothing dated in the next 30 days. Shows you follow and films you're waiting on, lining up or have in the basket show here."
-                else -> "Next 30 days · $followed shows followed" + (films?.map { it.film.id }?.distinct()?.size?.takeIf { it > 0 }?.let { " · $it films" } ?: "")
+                else -> "Next 30 days · ${S.followedTotal()} shows followed" + (films?.map { it.film.id }?.distinct()?.size?.takeIf { it > 0 }?.let { " · $it films" } ?: "")
             }
             val rows = mutableListOf(status)
             if (n > 0) rows += Row("Save these dates as a calendar file (.ics)", "►", action = {
@@ -1618,7 +1472,7 @@ object NewEpisodes {
             if (!started) {
                 started = true
                 load(onProgress = { if (App.isTop(s)) build() }) { build() }
-                refreshFilms(force = true) { if (filmEvents == null) filmEvents = emptyList(); if (App.isTop(s)) build() }
+                S.refreshFilms(force = true) { S.filmsTried(); if (App.isTop(s)) build() }
             }
             build()
         }

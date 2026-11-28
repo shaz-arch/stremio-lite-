@@ -54,51 +54,53 @@ object Settings {
     // ---- Home rows hidden on this device ----
 
     // ---- settings that follow the account ------------------------------------------------
-    // Kept as one hidden record on the Stremio account (like the waiting list), so the phone and the
-    // stick share them. The player and text size stay per device: a phone and a TV want different ones.
-
-    private const val SYNC_ID = "stremiolite:settings"
-    private val INT_KEYS = listOf("subLang", "theme", "clock", "textSize")
-    private val BOOL_KEYS = listOf("autoNext", "hideWatched", "autoFollow", "liveTv", "newsOn", "comingOn", "sleepOnHome", "ratingsVotes", "ratingsPercent")
-    /** The look: shared by default, or kept to this device ("lookLocal", which itself never syncs). */
-    private val LOOK_KEYS = setOf("theme", "clock", "textSize", "rice", "customTheme")
-    /** Ricing and your own colours: text settings that go with the look. */
-    private val LOOK_TEXT = listOf("rice", "customTheme")
+    // Kept as one hidden record on the Stremio account (like the waiting list), so the phone, the
+    // stick and the computer share them; which ones is decided with the Linux app ([SharedSettings]).
+    // The player stays per device: a phone and a TV want different ones.
 
     fun lookLocal(c: Context) = prefs(c).getBoolean("lookLocal", false)
 
-    private fun shares(c: Context, k: String) = k !in LOOK_KEYS || !lookLocal(c)
-
-    /** The shared settings as JSON (also what "Share my setup" sends). */
-    fun exportShared(c: Context): JSONObject {
-        val p = prefs(c)
-        val o = JSONObject()
-        INT_KEYS.forEach { k -> if (p.contains(k) && shares(c, k)) o.put(k, p.getInt(k, 0)) }
-        BOOL_KEYS.forEach { k -> if (p.contains(k)) o.put(k, p.getBoolean(k, false)) }
-        o.put("hiddenRows", JSONArray(hiddenRows(c).toList()))
-        // Your Home layout (Show on Home) is the same on every device.
-        o.put("homeHidden", JSONArray(hiddenOnHome(c).toList()))
-        p.getString("layout", null)?.let { o.put("layout", it) }
-        p.getString("ratingsOrder", null)?.let { o.put("ratingsOrder", it) }
-        LOOK_TEXT.forEach { k -> if (shares(c, k)) p.getString(k, null)?.let { o.put(k, it) } }
-        return o
+    /** This profile's settings, as the shared code sees them. */
+    private class Host(val c: Context) : SharedSettings.Host {
+        private val p get() = prefs(c)
+        override fun has(key: String) = p.contains(key)
+        override fun get(key: String, kind: SharedSettings.Kind): Any? {
+            if (!p.contains(key)) return null
+            // A value saved as another type by an older build reads as missing.
+            return runCatching {
+                when (kind) {
+                    SharedSettings.Kind.INT -> p.getInt(key, 0)
+                    SharedSettings.Kind.BOOL -> p.getBoolean(key, false)
+                    SharedSettings.Kind.LONG -> p.getLong(key, 0L)
+                    SharedSettings.Kind.TEXT -> p.getString(key, null)
+                    SharedSettings.Kind.LIST -> p.getStringSet(key, null)?.toSet()
+                }
+            }.getOrNull()
+        }
+        override fun edit(changes: Map<String, Any?>) {
+            val e = p.edit()
+            for ((k, v) in changes) when (v) {
+                null -> e.remove(k)
+                is Int -> e.putInt(k, v)
+                is Boolean -> e.putBoolean(k, v)
+                is Long -> e.putLong(k, v)
+                is String -> e.putString(k, v)
+                is Set<*> -> e.putStringSet(k, v.filterIsInstance<String>().toSet())
+            }
+            e.apply()
+        }
+        override fun profileName(): String? = Profiles.current(c)?.name
+        override fun takeName(name: String) = Profiles.takeName(c, name)
+        override fun record(): String? = History.rawRemote(c, SharedSettings.ID)
+        override fun putRecord(item: JSONObject) = History.putRemote(c, item)
     }
+
+    /** The shared settings as JSON (what "Share my setup" sends). */
+    fun exportShared(c: Context): JSONObject = SharedSettings.exportShared(Host(c))
 
     /** Takes shared settings from someone's setup: their options, plus their hidden rows and [alsoHide]. */
-    fun importShared(c: Context, o: JSONObject, alsoHide: Set<String>) {
-        val e = prefs(c).edit()
-        INT_KEYS.forEach { k -> if (o.has(k)) e.putInt(k, o.optInt(k)) }
-        BOOL_KEYS.forEach { k -> if (o.has(k)) e.putBoolean(k, o.optBoolean(k)) }
-        val theirs = o.optJSONArray("hiddenRows")?.let { a -> (0 until a.length()).map { a.optString(it) }.toSet() } ?: emptySet()
-        e.putStringSet("hiddenRows", hiddenRows(c) + theirs + alsoHide)
-        if (o.has("layout")) e.putString("layout", o.optString("layout"))
-        if (o.has("ratingsOrder")) e.putString("ratingsOrder", o.optString("ratingsOrder"))
-        LOOK_TEXT.forEach { k -> if (o.has(k)) e.putString(k, o.optString(k)) }
-        e.apply()
-        syncOut(c)
-    }
+    fun importShared(c: Context, o: JSONObject, alsoHide: Set<String>) = SharedSettings.importShared(Host(c), o, alsoHide)
 
-    /** Sends this device's shared settings to the account. */
     /** Flips an on/off setting and syncs it (for Set up Stremonino's switches). */
     fun flip(c: Context, key: String, default: Boolean) {
         prefs(c).edit().putBoolean(key, !prefs(c).getBoolean(key, default)).apply()
@@ -109,88 +111,11 @@ object Settings {
     fun setupDone(c: Context): Set<String> = prefs(c).getStringSet("setupDone", emptySet()) ?: emptySet()
     fun markSetup(c: Context, step: String) { prefs(c).edit().putStringSet("setupDone", setupDone(c) + step).apply() }
 
-    fun syncOut(c: Context) {
-        val p = prefs(c)
-        val now = System.currentTimeMillis()
-        val item = History.rawRemote(c, SYNC_ID)?.let { runCatching { JSONObject(it) }.getOrNull() } ?: Sync.newItem(SYNC_ID, "other", "{}")
-        // Start from what's on the account, so settings this device keeps to itself (or doesn't have)
-        // stay as the other devices left them.
-        val o = runCatching { JSONObject(item.optString("name")) }.getOrNull() ?: JSONObject()
-        val mine = exportShared(c)
-        mine.keys().forEach { k -> o.put(k, mine.get(k)) }
-        // Your playlists follow the account, but never go out with "Share my setup".
-        p.getString("playlists", null)?.let { o.put("playlists", it) }
-        p.getString("liveFavs", null)?.let { o.put("liveFavs", it) }
-        // Your TMDB and Gemini keys follow your account (never "Share my setup").
-        p.getString("tmdbKey", null)?.let { o.put("tmdbKey", it) }
-        p.getString("geminiKey", null)?.takeIf { it.isNotBlank() }?.let { o.put("geminiKey", it) }
-        p.getString("watchRegion", null)?.let { o.put("watchRegion", it) }
-        p.getString("liveGuide", null)?.let { o.put("liveGuide", it) }
-        p.getString("liveFreeHide", null)?.let { o.put("liveFreeHide", it) }
-        p.getString("newsFeeds", null)?.let { o.put("newsFeeds", it) }
-        p.getString("newsHide", null)?.let { o.put("newsHide", it) }
-        // The profile's name, so every device signed in to this account shows the same one.
-        Profiles.current(c)?.name?.takeIf { !ProfileName.isAuto(it) }?.let { o.put("profileName", it) }
-        o.put("updated", now)
-        p.edit().putLong("syncedAt", now).apply()
-        item.put("name", o.toString()).put("removed", true).put("temp", false).put("_mtime", Sync.iso(now))
-        History.putRemote(c, item)
-    }
+    /** Sends this device's shared settings to the account. */
+    fun syncOut(c: Context) = SharedSettings.syncOut(Host(c))
 
     /** Takes the account's settings if they're newer than this device's. Returns true if anything changed. */
-    fun syncIn(c: Context): Boolean {
-        val p = prefs(c)
-        // Copied into this profile while another was in use: send it to the account first.
-        if (p.getBoolean("pendingSync", false)) {
-            p.edit().remove("pendingSync").apply()
-            syncOut(c)
-            return false
-        }
-        val raw = History.rawRemote(c, SYNC_ID)
-        if (raw == null) {
-            // Nothing on the account yet: this device's settings become the shared ones.
-            if (p.getLong("syncedAt", 0) == 0L) syncOut(c)
-            return false
-        }
-        val o = runCatching { JSONObject(JSONObject(raw).optString("name")) }.getOrNull() ?: return false
-        val updated = o.optLong("updated")
-        // A device that named the profile itself ("Profile 1") always takes the account's name.
-        val cur = Profiles.current(c)?.name ?: ""
-        val accName = o.optString("profileName")
-        if (ProfileName.isAuto(cur) && !ProfileName.isAuto(accName)) Profiles.takeName(c, accName)
-        // The Gemini key, if this device doesn't have one.
-        if (o.optString("geminiKey").isNotBlank() && geminiKey(c).isBlank()) p.edit().putString("geminiKey", o.optString("geminiKey")).apply()
-        if (updated <= p.getLong("syncedAt", 0)) {
-            // Set up before names were synced: a device that's synced before sends its profile name once.
-            if (!o.has("profileName") && p.getLong("syncedAt", 0) > 0) syncOut(c)
-            return false
-        }
-        // The first time a device joins, keep the rows it had hidden as well as the account's.
-        val first = p.getLong("syncedAt", 0) == 0L
-        val remoteHidden = o.optJSONArray("hiddenRows")?.let { a -> (0 until a.length()).map { a.optString(it) }.toSet() } ?: emptySet()
-        val hidden = if (first) remoteHidden + hiddenRows(c) else remoteHidden
-        val e = p.edit()
-        INT_KEYS.forEach { k -> if (o.has(k) && shares(c, k)) e.putInt(k, o.optInt(k)) }
-        BOOL_KEYS.forEach { k -> if (o.has(k)) e.putBoolean(k, o.optBoolean(k)) }
-        if (o.has("ratingsOrder")) e.putString("ratingsOrder", o.optString("ratingsOrder"))
-        LOOK_TEXT.forEach { k -> if (o.has(k) && shares(c, k)) e.putString(k, o.optString(k)) }
-        if (o.has("layout")) e.putString("layout", o.optString("layout"))
-        o.optJSONArray("homeHidden")?.let { a -> e.putStringSet("homeHidden", (0 until a.length()).map { a.optString(it) }.toSet()) }
-        if (o.has("playlists")) e.putString("playlists", o.optString("playlists"))
-        if (o.has("liveFavs")) e.putString("liveFavs", o.optString("liveFavs"))
-        if (o.has("tmdbKey")) e.putString("tmdbKey", o.optString("tmdbKey"))
-        if (o.optString("geminiKey").isNotBlank()) e.putString("geminiKey", o.optString("geminiKey"))
-        if (o.has("watchRegion")) e.putString("watchRegion", o.optString("watchRegion"))
-        if (o.has("liveGuide")) e.putString("liveGuide", o.optString("liveGuide"))
-        if (o.has("liveFreeHide")) e.putString("liveFreeHide", o.optString("liveFreeHide"))
-        if (o.has("newsFeeds")) e.putString("newsFeeds", o.optString("newsFeeds"))
-        if (o.has("newsHide")) e.putString("newsHide", o.optString("newsHide"))
-        if (!ProfileName.isAuto(accName)) Profiles.takeName(c, accName)
-        e.putStringSet("hiddenRows", hidden)
-        e.putLong("syncedAt", updated).apply()
-        if (hidden != remoteHidden) syncOut(c)
-        return true
-    }
+    fun syncIn(c: Context): Boolean = SharedSettings.syncIn(Host(c))
 
     /** Lists show watched films with a ✓, or leave them out. */
     fun hideWatched(c: Context) = prefs(c).getBoolean("hideWatched", false)

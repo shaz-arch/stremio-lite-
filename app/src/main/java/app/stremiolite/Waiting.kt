@@ -12,59 +12,23 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import org.json.JSONArray
-import org.json.JSONObject
+import app.stremiolite.WaitingList.Entry
 
 /**
  * "Waiting": films that are out but have no good stream yet, or that you want a better version of.
  * Films not out to stream yet, and shows, are in Following (screen below, list in [Follow]).
  *
- * The list lives on the Stremio account as one hidden record (removed, so Stremio's own apps never
- * show it), so the phone and the stick share it. The phone checks every few hours in the background
- * and sends a notification; either device also checks when the app is opened, if a check is due.
+ * The list, and checking it, are shared with the Linux app ([WaitingList]). The phone checks every
+ * few hours in the background and sends a notification; either device also checks when the app is
+ * opened, if a check is due.
  */
 object Waiting {
-    private const val ID = "stremiolite:waiting"
+    private const val ID = WaitingList.ID
     private const val EVERY_MS = 6 * 60 * 60_000L
-    private const val MAX_CHECKS = 20
     private const val JOB_ID = 4201
     private const val CHANNEL = "waiting"
 
-    /**
-     * [ready]: when a stream was first found (0 = still waiting).
-     * [better]: waiting for a better version than [have] (a stream scoring [bar]); [found] is what turned up.
-     */
-    class Entry(
-        val id: String, val type: String, val name: String, val year: String, val ready: Long,
-        val better: Boolean = false, val bar: Double = 0.0, val have: String = "", val found: String = "",
-    ) {
-        fun toJson(): JSONObject = JSONObject().put("id", id).put("type", type).put("name", name).put("year", year).put("ready", ready)
-            .apply { if (better) put("better", true).put("bar", bar).put("have", have).put("found", found) }
-
-        fun readyWith(now: Long, what: String) = Entry(id, type, name, year, now, better, bar, have, what)
-    }
-
-    private fun parse(raw: String?): List<Entry> {
-        val name = raw?.let { runCatching { JSONObject(it).optString("name") }.getOrNull() } ?: return emptyList()
-        val arr = runCatching { JSONArray(name) }.getOrNull() ?: return emptyList()
-        return (0 until arr.length()).mapNotNull { i ->
-            arr.optJSONObject(i)?.let {
-                Entry(
-                    it.optString("id"), it.optString("type"), it.optString("name"), it.optString("year"), it.optLong("ready"),
-                    it.optBoolean("better"), it.optDouble("bar", 0.0), it.optString("have"), it.optString("found"),
-                )
-            }
-        }.filter { it.id.isNotEmpty() }
-    }
-
-    private fun record(base: String?, list: List<Entry>): JSONObject {
-        val item = base?.let { runCatching { JSONObject(it) }.getOrNull() } ?: Sync.newItem(ID, "other", "[]")
-        return item.put("name", JSONArray().apply { list.forEach { put(it.toJson()) } }.toString())
-            .put("removed", true).put("temp", false)
-            .put("_mtime", Sync.iso(System.currentTimeMillis()))
-    }
-
-    fun list(c: Context): List<Entry> = Pass.memo("waiting") { parse(History.rawRemote(c, ID)) }
+    fun list(c: Context): List<Entry> = Pass.memo("waiting") { WaitingList.parse(History.rawRemote(c, ID)) }
 
     /** The list without films that are done with ([WaitRules]); saved back if any left. */
     fun current(c: Context): List<Entry> {
@@ -87,19 +51,19 @@ object Waiting {
      * knows what to beat), then adds the title to the list.
      */
     fun addBetter(app: MainActivity, id: String, type: String, name: String, year: String, done: (String) -> Unit) {
-        Net.async({ StreamParse.bestPlayable(Home.allAddons(), type, id) }) { r ->
-            val now = r.getOrNull()
-            val have = now?.first?.summary?.replace(Regex("\\s+"), " ")?.trim() ?: "nothing playable yet"
-            save(app, list(app).filter { it.id != id } + Entry(id, type, name, year, 0, true, now?.second ?: 0.0, have, ""))
+        val addons = Home.allAddons()
+        Net.async({ WaitingList.better(addons, id, type, name, year) }) { r ->
+            val e = r.getOrNull() ?: return@async
+            save(app, WaitingList.with(list(app), e))
             askToNotify(app)
-            done(have)
+            done(e.have)
         }
     }
 
-    private fun save(c: Context, list: List<Entry>) = History.putRemote(c, record(History.rawRemote(c, ID), list))
+    private fun save(c: Context, list: List<Entry>) = History.putRemote(c, WaitingList.record(History.rawRemote(c, ID), list))
 
     fun add(app: MainActivity, e: Entry) {
-        save(app, list(app).filter { it.id != e.id } + e)
+        save(app, WaitingList.with(list(app), e))
         askToNotify(app)
         checkSoon(app, force = true)
     }
@@ -158,66 +122,9 @@ object Waiting {
      */
     fun checkNow(c: Context): List<Entry> {
         val key = Account.authKey(c) ?: return emptyList()
-        val arr = Sync.pullIds(key, listOf(ID, Following.ID))
-        val objs = (0 until arr.length()).mapNotNull { arr.optJSONObject(it) }
-        val raw = objs.firstOrNull { it.optString("_id") == ID }?.toString()
-        val fol = objs.firstOrNull { it.optString("_id") == Following.ID }
-        var all = parse(raw)
         prefs(c).edit().putLong("waitingChecked", System.currentTimeMillis()).apply()
-        val now = System.currentTimeMillis()
         val addons = runCatching { Stremio.parseAddons(Account.addonCache(c).readText()) }.getOrNull() ?: return emptyList()
-        // Followed films now out to stream move here, to be checked for a good stream.
-        var moved = false
-        var folNow = fol
-        if (Following.films(fol).isNotEmpty()) {
-            val (newFol, newAll) = outCheck(c, addons, fol, all, now)
-            if (newFol != null) { Sync.push(key, listOf(newFol)); folNow = newFol }
-            if (newAll != null) { all = newAll; moved = true }
-        }
-        val notOut = mutableListOf<Following.Film>()
-        val pending = all.filter { it.ready == 0L }.take(MAX_CHECKS)
-        val got = HashMap<String, String>()
-        val tmdb = Settings.tmdbKey(c)
-        val today = ComingSoon.today(now)
-        pending.forEach { e ->
-            // Only in cinemas, digital later: anything found now is a fake or a cam, not "ready".
-            if (tmdb.isNotBlank() && e.type == "movie" &&
-                runCatching { WhereToWatch.load(tmdb, "movie", e.id, "", Settings.watchRegion(c)) }.getOrNull()?.takeIf { it.notOutYet(today) }?.let { w ->
-                    // Not out to stream yet: it moves to Following (a "better version" wait stays here).
-                    if (!e.better) notOut += Following.Film(e.id, e.name, e.year, w.notOutLabel(today))
-                    true
-                } == true) return@forEach
-            if (e.better) runCatching { StreamParse.betterThan(addons, e.type, e.id, e.bar) }.getOrNull()?.let { got[e.id] = it.first.summary.replace(Regex("\\s+"), " ").trim() }
-            else if (runCatching { StreamParse.availableNow(addons, e.type, e.id) }.getOrDefault(false)) got[e.id] = ""
-        }
-        if (notOut.isNotEmpty()) {
-            Sync.push(key, listOf(Following.followFilms(folNow, notOut)))
-            val ids = notOut.map { it.id }.toSet()
-            all = all.filter { it.better || it.id !in ids }; moved = true
-        }
-        val found = got.keys
-        if (found.isEmpty()) { if (moved) Sync.push(key, listOf(record(raw, all))); return emptyList() }
-        val updated = all.map { if (it.id in found) it.readyWith(now, got.getValue(it.id)) else it }
-        Sync.push(key, listOf(record(raw, updated)))
-        return updated.filter { it.id in found }
-    }
-
-    /**
-     * Followed films (blocking): ones now out to stream come off Following and join [wait];
-     * the rest get a fresh "when and where". Returns the changed record and list (null = unchanged).
-     */
-    private fun outCheck(c: Context, addons: List<Addon>, fol: JSONObject?, wait: List<Entry>, now: Long): Pair<JSONObject?, List<Entry>?> {
-        val tmdb = Settings.tmdbKey(c); val region = Settings.watchRegion(c)
-        val out = mutableListOf<Following.Film>(); val notes = mutableListOf<Following.Film>()
-        Following.films(fol).take(MAX_CHECKS).forEach { f ->
-            val (isOut, note) = runCatching { FilmOut.check(addons, tmdb, region, f.id, now) }.getOrNull() ?: return@forEach
-            if (isOut) out += f else if (note != f.note) notes += Following.Film(f.id, f.name, f.year, note)
-        }
-        var rec = fol
-        if (notes.isNotEmpty()) rec = Following.followFilms(rec, notes)
-        if (out.isNotEmpty()) rec = Following.unfollowFilms(rec, out.map { it.id })
-        val add = out.filter { o -> wait.none { it.id == o.id && !it.better } }.map { Entry(it.id, "movie", it.name, it.year, 0) }
-        return (if (rec !== fol) rec else null) to (if (add.isNotEmpty()) wait + add else null)
+        return WaitingList.check(key, addons, Settings.tmdbKey(c), Settings.watchRegion(c))
     }
 
     /**
@@ -225,19 +132,15 @@ object Waiting {
      * ready, so Next watch stops calling it ready until a stream that plays turns up.
      */
     fun unplayable(app: MainActivity, id: String, name: String) {
-        val have = list(app)
-        val e = have.firstOrNull { it.id == id }
-        val updated = if (e == null) have + Entry(id, "movie", name, "", 0)
-        else have.map { if (it.id == id) Entry(it.id, it.type, it.name, it.year, 0, it.better, it.bar, it.have, "") else it }
-        save(app, updated)
-        NextStatus.forget(id)
+        save(app, WaitingList.unplayable(list(app), id, name))
     }
 
     /** In the app: re-checks the followed films now (when Following opens), then [done]. */
     fun checkFollowedFilms(app: MainActivity, done: () -> Unit) {
         if (Follow.films(app).isEmpty()) return
         val fol = Follow.raw(app); val wait = list(app); val addons = Home.allAddons()
-        Net.async({ outCheck(app, addons, fol, wait, System.currentTimeMillis()) }) { r ->
+        val tmdb = Settings.tmdbKey(app); val region = Settings.watchRegion(app)
+        Net.async({ WaitingList.outCheck(addons, tmdb, region, fol, wait, System.currentTimeMillis()) }) { r ->
             val (rec, list) = r.getOrNull() ?: return@async
             if (rec == null && list == null) return@async
             rec?.let { History.putRemote(app, it) }
@@ -304,6 +207,8 @@ object Waiting {
 
     class Job : JobService() {
         override fun onStartJob(params: JobParameters): Boolean {
+            // The app may not be open: the shared code still needs its storage and threads.
+            AndroidPlatform.install(applicationContext)
             Thread {
                 val ready = runCatching { checkNow(applicationContext) }.getOrDefault(emptyList())
                 notify(applicationContext, ready)

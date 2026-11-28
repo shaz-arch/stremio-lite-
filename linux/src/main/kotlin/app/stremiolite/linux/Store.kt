@@ -1,10 +1,10 @@
 package app.stremiolite.linux
 
+import app.stremiolite.AccountLibrary
 import app.stremiolite.Language
 import app.stremiolite.LibraryItems
 import app.stremiolite.Languages
-import app.stremiolite.Pref
-import app.stremiolite.Stream
+import app.stremiolite.SharedSettings
 import app.stremiolite.Sync
 import org.json.JSONArray
 import org.json.JSONObject
@@ -271,7 +271,7 @@ object Prefs {
         set(v) { data().put("comingFromShows", v); save() }
 
     /** Your TMDB key, for Where to watch (synced, never shared). */
-    /** TorBox and MDBList keys, remembered on this computer for the next setup (not in SHARED: never synced). */
+    /** TorBox and MDBList keys, remembered on this computer for the next setup (not in SharedSettings.KEYS: never synced). */
     /** Debrid keys in your order (a TorBox key from an earlier build counts too). */
     var debridKeys: List<Pair<String, String>>
         get() {
@@ -298,7 +298,7 @@ object Prefs {
         get() = data().optString("watchRegion", "GB")
         set(v) { data().put("watchRegion", v); save() }
 
-    /** Game scores (this profile, this computer: not in SHARED, so never synced). */
+    /** Game scores (this profile, this computer: not in SharedSettings.KEYS, so never synced). */
     var games: String?
         get() = data().optString("games").ifEmpty { null }
         set(v) { data().put("games", v); save() }
@@ -318,7 +318,7 @@ object Prefs {
         get() = data().optLong("readySeen", 0)
         set(v) { data().put("readySeen", v); save() }
 
-    /** Channels played lately (this computer only: not in SHARED, so never synced). */
+    /** Channels played lately (this computer only: not in SharedSettings.KEYS, so never synced). */
     var recent: List<app.stremiolite.LiveTv.Channel>
         get() = app.stremiolite.LiveTv.favourites(data().optString("liveRecent", ""))
         set(v) { data().put("liveRecent", app.stremiolite.LiveTv.favouritesJson(v)); save() }
@@ -346,88 +346,53 @@ object Prefs {
 
     fun reload() { cache = null }
 
-    /** The shared settings, as "Share my setup" sends them (same shape as the Android app's). */
-    fun exportShared(): JSONObject {
-        val d = data()
-        val o = JSONObject()
-        SHARED.forEach { k -> if (d.has(k) && k !in NOT_SHARED) o.put(k, d.opt(k)) }
-        return o.put("hiddenRows", JSONArray(hiddenRows.toList()))
-    }
-
-    /** Takes someone's shared settings, plus their hidden rows and [alsoHide]. */
-    fun importShared(o: JSONObject, alsoHide: Set<String>) {
-        val d = data()
-        SHARED.forEach { k -> if (o.has(k) && k !in NOT_SHARED) d.put(k, o.opt(k)) }
-        val theirs = o.optJSONArray("hiddenRows")?.let { a -> (0 until a.length()).map { a.optString(it) }.toSet() } ?: emptySet()
-        d.put("hiddenRows", JSONArray((hiddenRows + theirs + alsoHide).toList()))
-        save()
-        syncOut()
-    }
-
     // ---- shared with the other devices (the "stremiolite:settings" record) ------------------
-
-    private const val SYNC_ID = "stremiolite:settings"
-
-    /** Shared settings this build knows; one this computer has never had is always taken from the account. */
-    private val SHARED = listOf("theme", "subLang", "autoNext", "clock", "hideWatched", "layout", "autoFollow", "liveTv", "playlists", "liveFavs", "liveGuide", "liveFreeHide", "newsOn", "comingOn", "sleepOnHome", "homeHidden", "ratingsOrder", "ratingsVotes", "ratingsPercent", "newsFeeds", "newsHide", "tmdbKey", "watchRegion", "geminiKey", "rice", "customTheme")
-    /** Synced with your own devices, but never sent to someone else with "Share my setup". */
-    private val NOT_SHARED = setOf("playlists", "liveFavs", "liveGuide", "tmdbKey", "geminiKey")
-    /** The look: shared by default, or kept to this computer ("lookLocal", which itself never syncs). */
-    private val LOOK = setOf("theme", "clock", "rice", "customTheme")
+    // Which settings follow the account, and how, is decided with the Android app ([SharedSettings]).
 
     var lookLocal: Boolean
         get() = data().optBoolean("lookLocal", false)
         set(v) { data().put("lookLocal", v); save() }
 
-    private fun shares(k: String) = k !in LOOK || !lookLocal
+    /** This profile's settings, as the shared code sees them. */
+    private val host = object : SharedSettings.Host {
+        override fun has(key: String) = data().has(key)
+        override fun get(key: String, kind: SharedSettings.Kind): Any? {
+            val d = data()
+            if (!d.has(key)) return null
+            return when (kind) {
+                SharedSettings.Kind.INT -> d.optInt(key)
+                SharedSettings.Kind.BOOL -> d.optBoolean(key)
+                SharedSettings.Kind.LONG -> d.optLong(key)
+                SharedSettings.Kind.TEXT -> d.optString(key)
+                SharedSettings.Kind.LIST -> d.optJSONArray(key)?.let { a -> (0 until a.length()).map { a.optString(it) }.toSet() }
+            }
+        }
+        override fun edit(changes: Map<String, Any?>) {
+            val d = data()
+            for ((k, v) in changes) when (v) {
+                null -> d.remove(k)
+                is Set<*> -> d.put(k, JSONArray(v.toList()))
+                else -> d.put(k, v)
+            }
+            save()
+        }
+        override fun profileName(): String? = Profiles.current()?.name
+        override fun takeName(name: String) = Profiles.takeName(name)
+        override fun record(): String? = Lib.raw(SharedSettings.ID)?.toString()
+        override fun putRecord(item: JSONObject) = Lib.put(item)
+    }
+
+    /** The shared settings, as "Share my setup" sends them (same shape as the Android app's). */
+    fun exportShared(): JSONObject = SharedSettings.exportShared(host)
+
+    /** Takes someone's shared settings, plus their hidden rows and [alsoHide]. */
+    fun importShared(o: JSONObject, alsoHide: Set<String>) = SharedSettings.importShared(host, o, alsoHide)
 
     /** Takes the account's shared settings if they're newer than this computer's. */
-    fun syncIn(): Boolean {
-        // Copied into this profile while another was in use: send it to the account first.
-        if (data().optBoolean("pendingSync")) {
-            data().remove("pendingSync"); save()
-            syncOut()
-            return false
-        }
-        val raw = Lib.raw(SYNC_ID) ?: return false
-        val o = runCatching { JSONObject(raw.optString("name")) }.getOrNull() ?: return false
-        val updated = o.optLong("updated")
-        val d = data()
-        val newer = updated > syncedAt
-        var changed = false
-        for (k in SHARED) {
-            if (!shares(k) || !o.has(k) || (!newer && d.has(k))) continue
-            if (d.opt(k) != o.opt(k)) { d.put(k, o.opt(k)); changed = true }
-        }
-        // The Gemini key, if this computer doesn't have one.
-        if (d.optString("geminiKey").isBlank() && o.optString("geminiKey").isNotBlank()) { d.put("geminiKey", o.optString("geminiKey")); changed = true }
-        if (newer) o.optJSONArray("hiddenRows")?.let { d.put("hiddenRows", it); changed = true }
-        val accName = o.optString("profileName")
-        // Take the account's name when it's newer, or always if this computer named the profile itself ("Profile 1").
-        if (!app.stremiolite.ProfileName.isAuto(accName) && (newer || app.stremiolite.ProfileName.isAuto(Profiles.current()?.name ?: ""))) Profiles.takeName(accName)
-        if (newer) d.put("syncedAt", updated)
-        save()
-        // Set up before names were synced: a computer that's synced before sends its profile name once.
-        if (!newer && !o.has("profileName") && syncedAt > 0) syncOut()
-        return changed
-    }
+    fun syncIn(): Boolean = SharedSettings.syncIn(host)
 
-    /** Sends theme, clock, subtitle language, auto-next, watched-films choice and hidden rows, keeping anything else the record holds. */
-    fun syncOut() {
-        val now = System.currentTimeMillis()
-        val raw = Lib.raw(SYNC_ID)
-        val o = raw?.let { runCatching { JSONObject(it.optString("name")) }.getOrNull() } ?: JSONObject()
-        // Only settings chosen on this computer (or already taken from the account): never a default.
-        val d = data()
-        SHARED.forEach { k -> if (d.has(k) && shares(k) && !(k == "geminiKey" && d.optString(k).isBlank())) o.put(k, d.opt(k)) }
-        // The profile's name, so every device signed in to this account shows the same one.
-        Profiles.current()?.name?.takeIf { !app.stremiolite.ProfileName.isAuto(it) }?.let { o.put("profileName", it) }
-        o.put("hiddenRows", JSONArray(hiddenRows.toList())).put("updated", now)
-        syncedAt = now
-        val item = raw ?: Sync.newItem(SYNC_ID, "other", "{}")
-        item.put("name", o.toString()).put("removed", true).put("temp", false).put("_mtime", Sync.iso(now))
-        Lib.put(item)
-    }
+    /** Sends this computer's shared settings, keeping anything else the record holds. */
+    fun syncOut() = SharedSettings.syncOut(host)
 }
 
 object Look {
@@ -519,23 +484,6 @@ object Look {
     fun clock(): Clock = clocks.getOrElse(Prefs.clock) { clocks[0] }
 }
 
-/** The release last played per show, so the next episode keeps the same look and timing. */
-object Binge {
-    fun lastFor(showId: String): Pref? {
-        val v = Store.readJson("binge.json").optString(showId).ifEmpty { return null }
-        val p = v.split('|')
-        return if (p.size >= 3) Pref(p[0], p[1], p[2]) else null
-    }
-
-    fun remember(showId: String, s: Stream) {
-        val o = Store.readJson("binge.json")
-        o.put(showId, "${s.group}|${s.quality}|${s.source}")
-        val keys = o.keys().asSequence().toList()
-        if (keys.size > 40) keys.take(keys.size - 40).forEach { o.remove(it) }
-        Store.writeJson("binge.json", o)
-    }
-}
-
 /** What is being played, so the result can be filed against it. */
 class Watch(
     val id: String,
@@ -551,56 +499,70 @@ class Watch(
 
 /**
  * The account's library records: Continue watching, Library, watched marks and resume points,
- * plus the hidden records (shared settings, waiting list). Cached on disk, synced with the account.
+ * plus the hidden records (shared settings, waiting list). The records and syncing them are shared
+ * with the Android app ([AccountLibrary]); this keeps them in the profile's library.json.
  */
 object Lib {
-    private val records = LinkedHashMap<String, JSONObject>()
-    private val unsent = LinkedHashSet<String>()
+    private val account = AccountLibrary
     private var loaded = false
-    private var pulling = false
-    var lastPull = 0L
-        private set
+
+    val lastPull: Long get() = account.lastPull
 
     private fun ensure() {
         if (loaded) return
         loaded = true
+        account.onChanged = { save() }
         val o = Store.readJson("library.json")
-        o.optJSONArray("records")?.let { a -> for (i in 0 until a.length()) a.optJSONObject(i)?.let { records[it.optString("_id")] = it } }
+        val records = LinkedHashMap<String, String>()
+        o.optJSONArray("records")?.let { a -> for (i in 0 until a.length()) a.optJSONObject(i)?.let { records[it.optString("_id")] = it.toString() } }
+        val unsent = mutableListOf<String>()
         o.optJSONArray("unsent")?.let { a -> for (i in 0 until a.length()) unsent += a.optString(i) }
+        account.load(records, unsent)
     }
 
     private fun save() {
-        val o = JSONObject().put("records", JSONArray(records.values.toList())).put("unsent", JSONArray(unsent.toList()))
+        val records = JSONArray()
+        account.all().forEach { (_, raw) -> runCatching { records.put(JSONObject(raw)) } }
+        val o = JSONObject().put("records", records).put("unsent", JSONArray(account.unsentIds()))
         runCatching { Store.writeJson("library.json", o) }
     }
 
+    /** Signed out: nothing in memory, and nothing to read back from the file. */
     fun reset() {
-        records.clear(); unsent.clear(); loaded = true; lastPull = 0; fullDone = false
+        account.forget()
+        account.onChanged = { save() }
+        loaded = true
     }
 
     /** Forgets what's in memory so the next use reads the (new) profile's file. */
     fun unload() {
-        records.clear(); unsent.clear(); loaded = false; lastPull = 0; fullDone = false
+        account.forget()
+        loaded = false
     }
 
-    fun raw(id: String): JSONObject? { ensure(); return records[id] }
+    /** One record, as a copy: change it and [put] it back. */
+    fun raw(id: String): JSONObject? { ensure(); return account.get(id) }
 
-    fun put(item: JSONObject) {
+    fun put(item: JSONObject) { ensure(); account.put(Account.authKey, item) }
+
+    /** Stores several changed records and sends them in one go. */
+    fun putAll(items: List<JSONObject>) { ensure(); account.put(Account.authKey, items) }
+
+    // Read once per change: lists are built from these many times a screen.
+    private var infosAt = -1
+    private var infosNow: List<LibraryItems.Info> = emptyList()
+
+    fun infos(): List<LibraryItems.Info> {
         ensure()
-        val id = item.optString("_id")
-        records[id] = item
-        unsent += id
-        save()
-        send()
+        if (infosAt != account.version) { infosNow = account.infos(); infosAt = account.version }
+        return infosNow
     }
-
-    fun infos(): List<LibraryItems.Info> { ensure(); return records.values.map { LibraryItems.read(it) } }
 
     fun continueWatching() = infos().filter { it.continuing }.sortedByDescending { it.updated }
     fun library() = infos().filter { it.inLibrary }.sortedByDescending { it.updated }
     fun watchedFilms() = infos().filter { it.filmWatched }.sortedByDescending { it.updated }
 
-    fun info(id: String) = raw(id)?.let { LibraryItems.read(it) }
+    fun info(id: String): LibraryItems.Info? { ensure(); return account.raw(id)?.let { runCatching { LibraryItems.read(JSONObject(it)) }.getOrNull() } }
 
     fun inLibrary(id: String) = info(id)?.inLibrary == true
 
@@ -620,131 +582,44 @@ object Lib {
     fun record(w: Watch, pos: Long, dur: Long, positionKnown: Boolean, done: Boolean) {
         ensure()
         if (done) Watched.add(w)
-        val item = LibraryItems.update(
-            existing = records[w.id], id = w.id, type = w.type, name = w.name, videoId = w.videoId,
+        account.recordPlay(
+            Account.authKey, id = w.id, type = w.type, name = w.name, videoId = w.videoId,
             pos = pos, dur = dur, done = done, positionKnown = positionKnown,
             videoIds = w.videoIds, alsoDone = emptySet(), nextVideoId = w.nextVideoId,
         )
-        put(item)
     }
 
     /** Takes a film or episode off the watched list ([videoIds]: the show's episodes in Stremio's order). */
     fun unwatch(id: String, type: String, videoId: String, videoIds: List<String>) {
         ensure()
-        val item = records[id] ?: return
-        put(LibraryItems.unwatch(item, videoId, if (type == "movie") emptyList() else videoIds))
+        account.unwatch(Account.authKey, id, type, videoId, videoIds)
     }
 
     fun toggleLibrary(id: String, type: String, name: String): Boolean {
         ensure()
         val had = inLibrary(id)
-        val item = records[id] ?: Sync.newItem(id, type, name)
-        item.put("removed", had).put("temp", false).put("_mtime", Sync.iso(System.currentTimeMillis()))
-        put(item)
+        account.setInLibrary(Account.authKey, listOf(AccountLibrary.Title(id, type, name)), inLibrary = !had)
         return !had
     }
 
-    /** Stores several changed records and sends them in one go. */
-    fun putAll(items: List<JSONObject>) {
-        ensure()
-        items.forEach { val id = it.optString("_id"); records[id] = it; unsent += id }
-        save()
-        send()
-    }
-
     /** Empties Continue watching (resume points); watched marks stay. */
-    fun clearContinue() {
-        val now = Sync.iso(System.currentTimeMillis())
-        putAll(continueWatching().mapNotNull { i -> records[i.id]?.also { it.optJSONObject("state")?.put("timeOffset", 0); it.put("_mtime", now) } })
-    }
+    fun clearContinue() { ensure(); account.removeFromContinue(Account.authKey, continueWatching().map { it.id }) }
 
     /** Empties the Library; history and watched marks stay. */
-    fun clearLibrary() {
-        val now = Sync.iso(System.currentTimeMillis())
-        putAll(library().mapNotNull { i -> records[i.id]?.also { it.put("removed", true).put("temp", false).put("_mtime", now) } })
-    }
+    fun clearLibrary() { ensure(); account.setInLibrary(Account.authKey, library().map { AccountLibrary.Title(it.id, it.type, it.name) }, inLibrary = false) }
 
-    fun removeFromContinue(id: String) {
-        ensure()
-        val item = records[id] ?: return
-        item.optJSONObject("state")?.put("timeOffset", 0)
-        item.put("_mtime", Sync.iso(System.currentTimeMillis()))
-        put(item)
-    }
-
-    private fun send() {
-        val key = Account.authKey ?: return
-        val ids = unsent.toList()
-        if (ids.isEmpty()) return
-        val items = ids.mapNotNull { records[it] }.map { JSONObject(it.toString()) }
-        App.async({ Sync.push(key, items) }) { r ->
-            if (r.isSuccess) {
-                unsent.removeAll(ids.toSet())
-                save()
-            }
-        }
-    }
-
-    /** Fetches the account's library; [done] runs on the main loop afterwards. */
-    /** False until a full pull has happened since the app started (or the profile changed). */
-    private var fullDone = false
+    fun removeFromContinue(id: String) { ensure(); account.removeFromContinue(Account.authKey, listOf(id)) }
 
     /**
-     * Brings in changes from the account. Normally only records that changed are fetched (the
-     * account lists ids and change times first); the first pull, and [full] ones (Reload), fetch everything.
+     * Brings in changes from the account ([AccountLibrary.pull]: normally only the records that
+     * changed); [done] runs on the main loop afterwards.
      */
     fun pull(force: Boolean = false, full: Boolean = false, done: (() -> Unit)? = null) {
         ensure()
-        val key = Account.authKey ?: return
-        if (pulling || (!force && !full && System.currentTimeMillis() - lastPull < 60_000)) return
-        pulling = true
-        send()
-        val whole = full || !fullDone
-        val keep = unsent.toSet()
-        val known = if (whole) emptyMap() else records.mapValues { Sync.parseTime(it.value.optString("_mtime")) }
-        App.async({
-            if (whole) Sync.pull(key) to true
-            else {
-                // Any trouble with the change list: just do a full pull, as before.
-                val meta = runCatching { Sync.meta(key) }.getOrNull()
-                if (meta == null) Sync.pull(key) to true
-                else {
-                    val want = Sync.changed(meta, known, keep)
-                    when {
-                        want.isEmpty() -> null
-                        want.size > 150 -> Sync.pull(key) to true
-                        else -> Sync.pullIds(key, want) to false   // only changed records; nothing is dropped
-                    }
-                }
-            }
-        }) { r ->
-            pulling = false
+        account.pull(Account.authKey, force, full, prepare = { }) { r ->
             r.onSuccess { got ->
-                lastPull = System.currentTimeMillis()
-                if (whole) fullDone = true
-                if (got == null) { done?.invoke(); return@onSuccess }
-                val (arr, everything) = got
-                if (everything) {
-                    val fresh = LinkedHashMap<String, JSONObject>()
-                    for (i in 0 until arr.length()) {
-                        val o = arr.optJSONObject(i) ?: continue
-                        val id = o.optString("_id")
-                        if (id.isEmpty()) continue
-                        fresh[id] = if (id in keep) records[id] ?: o else o
-                    }
-                    keep.forEach { id -> records[id]?.let { fresh.putIfAbsent(id, it) } }
-                    records.clear()
-                    records.putAll(fresh)
-                } else {
-                    for (i in 0 until arr.length()) {
-                        val o = arr.optJSONObject(i) ?: continue
-                        val id = o.optString("_id")
-                        if (id.isEmpty() || id in unsent) continue
-                        records[id] = o
-                    }
-                }
-                save()
-                if (Prefs.syncIn()) App.refresh()
+                // Settings changed on another device come in with the records (only when something changed).
+                if (got != null && Prefs.syncIn()) App.refresh()
                 done?.invoke()
             }.onFailure { e -> App.toast("Couldn't sync your history: ${Net.describe(e)}") }
         }

@@ -8,6 +8,7 @@ fun main(args: Array<String>) {
         return
     }
     Http.userAgent = "Stremonino/${Updates.current} (Linux)"
+    LinuxPlatform.install()
     Profiles.start()
     app.stremiolite.Guide.dir = java.io.File(Store.dir, "guides")
     app.stremiolite.AgeRatings.dir = Store.root
