@@ -187,9 +187,20 @@ object Streams {
             if (picked != null) list += pickRow
             if (fetch.done) list += Row("Why this stream?", "►", opens = { why(fetch, minutes, picked, tried) })
             list += Row("────────────────────")
-            if (picked != null) list += Row("Play it again", action = {
-                picked?.let { Player.play(app, it.url, title, listOfNotNull(subs.chosen), watch = watch, startAt = freshStart(app, watch, startAt)) }
+            // Back from the player part-way: carry on from there. "Play it again" only once it's finished.
+            val resume = if (played && watch != null) History.resumeAt(app, watch.videoId).takeIf { it > 0 } else null
+            if (picked != null && resume != null) list += Row("Resume from ${History.clock(resume)}", "►", action = {
+                picked?.let { Player.play(app, it.url, title, listOfNotNull(subs.chosen), watch = watch, startAt = resume) }
             })
+            if (picked != null) list += Row(if (resume != null) "Play from the start" else "Play it again", action = {
+                picked?.let { Player.play(app, it.url, title, listOfNotNull(subs.chosen), watch = watch, startAt = if (resume != null) 0 else freshStart(app, watch, startAt)) }
+            })
+            // The next episode straight from here, without going back to the episode list.
+            if (played && watch != null) Binge.nextWatch(watch)?.let { nw ->
+                list += Row("Play next episode: ${watch.nextLabel ?: nw.label}", "►", opens = {
+                    Streams.playBest(app, nw.type, nw.videoId, "${nw.name} ${nw.label.substringBefore(' ')}", nw.runtime, nw, 0)
+                })
+            }
             list += Row("Choose a different stream", opens = { screen(app, type, id, title, watch, startAt) })
             return list
         }
@@ -305,7 +316,14 @@ object Streams {
                 askedAt = minOf(askedAt, fetch.started)
                 update()
             } else if (played) {
-                status.label = "Played. Press OK below to play again or choose another."
+                val p = watch?.let { History.progress(app, it.videoId) }
+                status.label = when {
+                    p == null -> "Played. Press OK below to play again or choose another."
+                    p.done -> "Watched ✓"
+                    else -> "Stopped at ${History.clock(p.position)}" + (if (p.duration > 0) " of ${History.clock(p.duration)}" else "")
+                }
+                screen.rows = rows()
+                screen.moveTo = 0
                 app.refresh(screen)
             }
         }
