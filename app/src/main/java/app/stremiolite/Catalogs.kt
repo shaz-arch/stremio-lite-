@@ -1,38 +1,16 @@
 package app.stremiolite
 
 import org.json.JSONObject
-import java.net.URLEncoder
 
 /**
  * A catalogue row opened as a text list. Titles load a page at a time
  * (most add-ons send about 100) and the next page loads as you near the bottom.
  */
 object Catalogs {
-    private const val CACHE_MS = 60 * 60_000L
     private const val LOAD_AHEAD = 15
 
 
-    /** First pages of recently opened rows, kept for an hour so Back-then-reopen is instant. */
-    private class Cached(val time: Long, val metas: List<Meta>)
-    private val cache = object : LinkedHashMap<String, Cached>(8, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Cached>?) = size > 6
-    }
-
     fun typeLabel(type: String) = MetaParse.typeLabel(type)
-
-    private fun enc(s: String) = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
-
-    private fun pageUrl(a: Addon, c: Addon.Catalog, skip: Int) =
-        a.base + "/catalog/" + enc(c.type) + "/" + enc(c.id) + (if (skip > 0) "/skip=$skip" else "") + ".json"
-
-    private fun fetch(url: String, useCache: Boolean): List<Meta> {
-        if (useCache) synchronized(cache) {
-            cache[url]?.let { if (System.currentTimeMillis() - it.time < CACHE_MS) return it.metas }
-        }
-        val metas = parse(Net.get(url))
-        if (useCache) synchronized(cache) { cache[url] = Cached(System.currentTimeMillis(), metas) }
-        return metas
-    }
 
     fun parse(json: String): List<Meta> = MetaParse.parse(json)
 
@@ -96,11 +74,8 @@ object Catalogs {
             if (!loading && !ended) {
                 loading = true
                 rebuild()
-                // Personal lists (MDBList, Trakt, Letterboxd…) change as you add to them: always fetch fresh.
-                val personal = listOf("mdblist.", "trakt.", "letterboxd.", "simkl.").any { c.id.startsWith(it) }
-                val first = fetched == 0 && !personal
-                val url = pageUrl(a, c, fetched)
-                Net.async({ fetch(url, useCache = first) }) { r ->
+                val skip = fetched
+                Net.async({ CataloguePages.page(a, c, skip) }) { r ->
                     loading = false
                     r.onSuccess { page ->
                         fetched += page.size
